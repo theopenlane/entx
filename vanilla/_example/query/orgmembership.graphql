@@ -1,0 +1,83 @@
+
+mutation CreateBulkCSVOrgMembership($input: Upload!) {
+  createBulkCSVOrgMembership(input: $input) {
+    orgMemberships {
+      id
+      organizationID
+      role
+      userID
+    }
+  }
+}
+
+mutation CreateBulkOrgMembership($input: [CreateOrgMembershipInput!]) {
+  createBulkOrgMembership(input: $input) {
+    orgMemberships {
+      id
+      organizationID
+      role
+      userID
+    }
+  }
+}
+
+mutation CreateOrgMembership($input: CreateOrgMembershipInput!) {
+  createOrgMembership(input: $input) {
+    orgMembership {
+      id
+      organizationID
+      role
+      userID
+    }
+  }
+}
+
+mutation DeleteOrgMembership($deleteOrgMembershipId: ID!) {
+  deleteOrgMembership(id: $deleteOrgMembershipId) {
+    deletedID
+  }
+}
+
+query GetAllOrgMemberships {
+  orgMemberships {
+    edges {
+      node {
+        id
+        organizationID
+        role
+        userID
+      }
+    }
+  }
+}
+query GetOrgMembershipByID($orgMembershipId: ID!) {
+  orgMembership(id: $orgMembershipId) {
+    id
+    organizationID
+    role
+    userID
+  }
+}
+
+query GetOrgMemberships($where: OrgMembershipWhereInput) {
+  orgMemberships(where: $where) {
+    edges {
+      node {
+        id
+        organizationID
+        role
+        userID
+      }
+    }
+  }
+}
+mutation UpdateOrgMembership($updateOrgMembershipId: ID!, $input: UpdateOrgMembershipInput!) {
+  updateOrgMembership(id: $updateOrgMembershipId, input: $input) {
+    orgMembership {
+      id
+      organizationID
+      role
+      userID
+    }
+  }
+}

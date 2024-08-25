@@ -1,0 +1,19 @@
+schema:
+  - schema/*.graphql
+
+exec:
+  filename: graphapi/gen_server.go
+  package: graphapi
+
+model:
+  filename: graphapi/gen_models.go
+  package: graphapi
+
+
+autobind:
+  - "github.com/theopenlane/entx/vanilla/_example/ent"
+
+models:
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.String

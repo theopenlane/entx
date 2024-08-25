@@ -1,0 +1,104 @@
+
+mutation CreateBulkCSVOrganization($input: Upload!) {
+  createBulkCSVOrganization(input: $input) {
+    organizations {
+      createdAt
+      createdBy
+      description
+      id
+      name
+      updatedAt
+      updatedBy
+    }
+  }
+}
+
+mutation CreateBulkOrganization($input: [CreateOrganizationInput!]) {
+  createBulkOrganization(input: $input) {
+    organizations {
+      createdAt
+      createdBy
+      description
+      id
+      name
+      updatedAt
+      updatedBy
+    }
+  }
+}
+
+mutation CreateOrganization($input: CreateOrganizationInput!) {
+  createOrganization(input: $input) {
+    organization {
+      createdAt
+      createdBy
+      description
+      id
+      name
+      updatedAt
+      updatedBy
+    }
+  }
+}
+
+mutation DeleteOrganization($deleteOrganizationId: ID!) {
+  deleteOrganization(id: $deleteOrganizationId) {
+    deletedID
+  }
+}
+
+query GetAllOrganizations {
+  organizations {
+    edges {
+      node {
+        createdAt
+        createdBy
+        description
+        id
+        name
+        updatedAt
+        updatedBy
+      }
+    }
+  }
+}
+query GetOrganizationByID($organizationId: ID!) {
+  organization(id: $organizationId) {
+    createdAt
+    createdBy
+    description
+    id
+    name
+    updatedAt
+    updatedBy
+  }
+}
+
+query GetOrganizations($where: OrganizationWhereInput) {
+  organizations(where: $where) {
+    edges {
+      node {
+        createdAt
+        createdBy
+        description
+        id
+        name
+        updatedAt
+        updatedBy
+      }
+    }
+  }
+}
+mutation UpdateOrganization($updateOrganizationId: ID!, $input: UpdateOrganizationInput!) {
+  updateOrganization(id: $updateOrganizationId, input: $input) {
+    organization {
+      createdAt
+      createdBy
+      description
+      id
+      name
+      updatedAt
+      updatedBy
+    }
+  }
+}
