@@ -11,7 +11,7 @@ import (
 func MarshalRawMessage(t json.RawMessage) graphql.Marshaler {
 	return graphql.WriterFunc(func(w io.Writer) {
 		s, _ := t.MarshalJSON()
-		_, _ = io.Writer.Write(w, s)
+		_, _ = io.WriteString(w, string(s))
 	})
 }
 
