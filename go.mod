@@ -8,14 +8,17 @@ require (
 	github.com/99designs/gqlgen v0.17.49
 	github.com/XSAM/otelsql v0.32.0
 	github.com/brianvoe/gofakeit/v7 v7.0.4
-	github.com/datumforge/datum v0.7.10
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/stoewer/go-strcase v1.3.0
 	github.com/stretchr/testify v1.9.0
+	github.com/theopenlane/core v0.1.1
+	github.com/theopenlane/iam v0.1.0
+	github.com/theopenlane/utils v0.1.0
 	github.com/tursodatabase/libsql-client-go v0.0.0-20240812094001-348a4e45b535
 	github.com/vektah/gqlparser/v2 v2.5.16
 	go.opentelemetry.io/otel v1.28.0
 	go.uber.org/zap v1.27.0
+	golang.org/x/tools v0.24.0
 	modernc.org/sqlite v1.32.0
 )
 
@@ -27,7 +30,6 @@ require (
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coder/websocket v1.8.12 // indirect
-	github.com/theopenlane/echox v0.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
@@ -60,7 +62,7 @@ require (
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/sosodev/duration v1.3.1 // indirect
-	github.com/theopenlane/entx v0.0.0-20240825045527-66954cf56feb // indirect
+	github.com/theopenlane/echox v0.1.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
@@ -77,7 +79,6 @@ require (
 	golang.org/x/sys v0.23.0 // indirect
 	golang.org/x/text v0.17.0 // indirect
 	golang.org/x/time v0.6.0 // indirect
-	golang.org/x/tools v0.24.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/gc/v3 v3.0.0-20240304020402-f0dba7c97c2b // indirect
