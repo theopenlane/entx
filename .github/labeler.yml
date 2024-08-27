@@ -15,3 +15,10 @@ mixin:
   - changed-files:
       - any-glob-to-any-file: mixin/*
 
+history:
+  - changed-files:
+      - any-glob-to-any-file: history/*
+
+genhooks:
+  - changed-files:
+      - any-glob-to-any-file: genhooks/*

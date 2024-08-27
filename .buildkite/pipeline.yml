@@ -11,6 +11,7 @@ steps:
         plugins:
           - docker#v5.11.0:
               image: "registry.hub.docker.com/golangci/golangci-lint:latest-alpine"
+              cancel_on_build_failing: true
               command: ["golangci-lint", "run", "-v"]
               always-pull: true
               environment:
