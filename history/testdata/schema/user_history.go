@@ -5,8 +5,7 @@ import (
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
-
-	enthistory "github.com/theopenlane/entx/history"
+	"github.com/theopenlane/entx/history"
 )
 
 type UserHistory struct {
@@ -33,7 +32,7 @@ func (UserHistory) Indexes() []ent.Index {
 
 func (UserHistory) Annotations() []schema.Annotation {
 	return []schema.Annotation{
-		enthistory.Annotations{
+		history.Annotations{
 			IsHistory: true,
 		},
 	}

@@ -5,7 +5,7 @@ import (
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 
-	enthistory "github.com/theopenlane/entx/history"
+	"github.com/theopenlane/entx/history"
 	"github.com/theopenlane/iam/entfga"
 )
 
@@ -26,7 +26,7 @@ func (Todo) Indexes() []ent.Index {
 
 func (Todo) Annotations() []schema.Annotation {
 	return []schema.Annotation{
-		enthistory.Annotations{
+		history.Annotations{
 			Exclude: true,
 		},
 		entfga.Annotations{
