@@ -10,7 +10,7 @@ steps:
         key: "lint"
         plugins:
           - docker#v5.11.0:
-              image: "registry.hub.docker.com/golangci/golangci-lint:latest-alpine"
+              image: "golangci/golangci-lint:latest-alpine"
               cancel_on_build_failing: true
               command: ["golangci-lint", "run", "-v"]
               always-pull: true
@@ -31,7 +31,7 @@ steps:
         key: "gosec"
         plugins:
           - docker#v5.11.0:
-              image: "registry.hub.docker.com/securego/gosec:2.20.0"
+              image: "securego/gosec:2.20.0"
               command: ["-no-fail", "-exclude-generated", "-fmt sonarqube", "-out", "results.txt", "./..."]
               environment:
                 - "GOTOOLCHAIN=auto"
@@ -47,7 +47,7 @@ steps:
               download: "coverage.out"
               step: "go_test"
           - docker#v5.11.0:
-              image: "sonarsource/sonar-scanner-cli:5"
+              image: "sonarsource/sonar-scanner-cli:11.0"
               environment:
                 - "SONAR_TOKEN"
                 - "SONAR_HOST_URL=$SONAR_HOST"
@@ -63,7 +63,7 @@ steps:
               download: coverage.out
               step: "go_test"
           - docker#v5.11.0:
-              image: "sonarsource/sonar-scanner-cli:5"
+              image: "sonarsource/sonar-scanner-cli:11.0"
               environment:
                 - "SONAR_TOKEN"
                 - "SONAR_HOST_URL=$SONAR_HOST"
