@@ -1,6 +1,6 @@
-# enthistory
+# history
 
-enthistory is a powerful extension for generating history tables using ent - the plugin will add-on to your existing `entc` usage and enumerate over your current schemas to create new "history" schemas containing an inventory of the changes related to the existing tables.
+history is a powerful extension for generating history tables using ent - the plugin will add-on to your existing `entc` usage and enumerate over your current schemas to create new "history" schemas containing an inventory of the changes related to the existing tables.
 
 Credit to [flume/enthistory](https://github.com/flume/enthistory) for the inspiration - we chose to create our own for a number of reasons, some being:
 
@@ -13,14 +13,14 @@ Credit to [flume/enthistory](https://github.com/flume/enthistory) for the inspir
 
 ## Installation
 
-You can install enthistory by running the following command:
+You can install history by running the following command:
 
 ```shell
 go get github.com/theopenlane/entx/history@latest
 ```
 
-In addition to installing enthistory, you need to already have, or create two files (`entc.go` and `generate.go`) - this can be within your `ent` directory, but full instructions can be found in the upstream [godoc](https://pkg.go.dev/entgo.io/ent/entc) documentation.
-The `entc.go` file should reference the ent history plugin via `enthistory.New`, and the options you include for the plugin depend on your desired implementation (see the Configuration section below) but you can use the following example for reference:
+In addition to installing history, you need to already have, or create two files (`entc.go` and `generate.go`) - this can be within your `ent` directory, but full instructions can be found in the upstream [godoc](https://pkg.go.dev/entgo.io/ent/entc) documentation.
+The `entc.go` file should reference the ent history plugin via `history.New`, and the options you include for the plugin depend on your desired implementation (see the Configuration section below) but you can use the following example for reference:
 
 ```go
 //go:build ignore
@@ -35,8 +35,8 @@ import (
 
 func main() {
 	// create new extension with options
-	historyExt := enthistory.New(
-		enthistory.WithAuditing(),
+	historyExt := history.New(
+		history.WithAuditing(),
 	)
 
 	// generate the history schemas
@@ -76,7 +76,7 @@ generated code automatically creates history tables for every table in your sche
 You can query the history tables directly, just like any other ent table. You can also retrieve the history of a
 specific row using the `History()` method.
 
-enthistory tracks the user who updates a row if you provide a key during initialization. You can store a user's ID,
+history tracks the user who updates a row if you provide a key during initialization. You can store a user's ID,
 email, IP address, etc., in the context with the key you provide to track it in the history.
 
 Here's an example that demonstrates these features:
@@ -102,7 +102,7 @@ fmt.Println(len(characterHistory)) // 3
 ```
 
 In addition to regular queries, you can perform common history queries such as retrieving the earliest history, the
-latest history, and the history of a row at a specific point in time. enthistory provides functions for these queries:
+latest history, and the history of a row at a specific point in time. history provides functions for these queries:
 
 ```go
 character, _ := client.Character.Query().First(ctx)
@@ -162,7 +162,7 @@ fmt.Println(len(simonHistory)) // 3
 
 ### Auditing
 
-enthistory includes tools for "auditing" history tables by providing a means of exporting the data inside of them. You can enable auditing by using the `enthistory.WithAuditing()`
+history includes tools for "auditing" history tables by providing a means of exporting the data inside of them. You can enable auditing by using the `history.WithAuditing()`
 option when initializing the extension. The main tool for auditing is the `Audit()` method, which builds an audit log of
 the history tables that you can export as a file, upload to S3, or inspect.
 
@@ -185,72 +185,72 @@ the older history, the newer history, and the changes to fields when comparing t
 
 ## Configuration Options
 
-enthistory provides several configuration options to customize its behavior.
+history provides several configuration options to customize its behavior.
 
 ### Setting All Tracked Fields as Nillable and/or Immutable
 
-By default, enthistory does not modify the columns in the history tables that are being tracked from your original
+By default, history does not modify the columns in the history tables that are being tracked from your original
 tables; it simply copies their state from ent when loading them.
 
 However, you may want to set all tracked fields in the history tables as either `Nillable` or `Immutable` for various
-reasons. You can use the `enthistory.WithNillableFields()` option to set them all as `Nillable`,
-or `enthistory.WithImmutableFields()` to set them all as `Immutable`.
+reasons. You can use the `history.WithNillableFields()` option to set them all as `Nillable`,
+or `history.WithImmutableFields()` to set them all as `Immutable`.
 
-**Note:** Setting `enthistory.WithNillableFields()` will remove the ability to call the `Restore()` function on a
+**Note:** Setting `history.WithNillableFields()` will remove the ability to call the `Restore()` function on a
 history object. Setting all fields to `Nillable` causes the history tables to diverge from the original tables, and the
 unpredictability of that means the `Restore()` function cannot be generated.
 
 ### History Time Indexing
 
 By default, an index is not placed on the `history_time` field. If you want to enable indexing on the `history_time`
-field, you can use the `enthistory.WithHistoryTimeIndex()` configuration option. This option gives you more control over
+field, you can use the `history.WithHistoryTimeIndex()` configuration option. This option gives you more control over
 indexing based on your specific needs.
 
 ### Updated By
 
-To track which users are making changes to your tables, you can use the `enthistory.WithUpdatedBy()` option when
+To track which users are making changes to your tables, you can use the `history.WithUpdatedBy()` option when
 initializing the extension. You need to provide a key name (string) and specify the type of
-value (`enthistory.ValueTypeInt` for integers or `enthistory.ValueTypeString` for strings). The value corresponding to
+value (`history.ValueTypeInt` for integers or `history.ValueTypeString` for strings). The value corresponding to
 the key should be stored in the context using `context.WithValue()`. If you don't plan to use this feature, you can omit - you may also already have an existing `audit mixin` or similar which tracks the user performing the action, in which case, these fields would already be contained within the created history tables.
 
 ```go
 // Example for tracking user ID
-enthistory.WithUpdatedBy("userId", enthistory.ValueTypeInt)
+history.WithUpdatedBy("userId", history.ValueTypeInt)
 
 // Example for tracking user email
-enthistory.WithUpdatedBy("userEmail", enthistory.ValueTypeString)
+history.WithUpdatedBy("userEmail", history.ValueTypeString)
 ```
 
 ### Deleted By
 
-To track which users are making changes to your tables, you can use the `enthistory.WithDeletedBy()` option when
+To track which users are making changes to your tables, you can use the `history.WithDeletedBy()` option when
 initializing the extension. You need to provide a key name (string) and specify the type of
-value (`enthistory.ValueTypeInt` for integers or `enthistory.ValueTypeString` for strings). The value corresponding to
+value (`history.ValueTypeInt` for integers or `history.ValueTypeString` for strings). The value corresponding to
 the key should be stored in the context using `context.WithValue()`. If you don't plan to use this feature, you can omit
 it.
 
 ```go
 // Example for tracking user ID
-enthistory.WithDeletedBy("userId", enthistory.ValueTypeInt)
+history.WithDeletedBy("userId", history.ValueTypeInt)
 
 // Example for tracking user email
-enthistory.WithDeletedBy("userEmail", enthistory.ValueTypeString)
+history.WithDeletedBy("userEmail", history.ValueTypeString)
 ```
 
 ### Auditing
 
-As mentioned earlier, you can enable auditing by using the `enthistory.WithAuditing()` configuration option when
+As mentioned earlier, you can enable auditing by using the `history.WithAuditing()` configuration option when
 initializing the extension.
 
 ### Excluding History on a Schema
 
-enthistory is designed to always track history, but in cases where you don't want to generate history tables for a
+history is designed to always track history, but in cases where you don't want to generate history tables for a
 particular schema, you can apply annotations to the schema to exclude it. Here's an example:
 
 ```go
 func (Character) Annotations() []schema.Annotation {
     return []schema.Annotation{
-        enthistory.Annotations{
+        history.Annotations{
             // Exclude history tables for this schema
             Exclude: true,
         },
@@ -260,7 +260,7 @@ func (Character) Annotations() []schema.Annotation {
 
 ### Setting a Schema Path
 
-If you want to set an alternative schema location other than `ent/schema`, you can use the `enthistory.WithSchemaPath()`
+If you want to set an alternative schema location other than `ent/schema`, you can use the `history.WithSchemaPath()`
 configuration option. The schema path should be the same as the one set in the `entc.Generate` function. If you don't
 plan to set an alternative schema location, you can omit this option.
 
@@ -269,8 +269,8 @@ func main() {
     entc.Generate("./schema2",
         &gen.Config{},
         entc.Extensions(
-            enthistory.NewHistoryExtension(
-                enthistory.WithSchemaPath("./schema2")
+            history.NewHistoryExtension(
+                history.WithSchemaPath("./schema2")
             ),
         ),
     )
@@ -282,13 +282,13 @@ example.
 
 ### Setting a Schema Name
 
-If you want to set the schema name for `entsql`, you can use the `enthistory.WithSchemaName()` configuration option. This can be used in conjunction with
+If you want to set the schema name for `entsql`, you can use the `history.WithSchemaName()` configuration option. This can be used in conjunction with
 ent [Multiple Schema Migrations](https://entgo.io/docs/multischema-migrations/) and the [Schema Config](https://entgo.io/docs/feature-flags/#schema-config)
 features.
 
 ### Adding GQL Query
 
-If you are using [gqlgen](https://github.com/99designs/gqlgen/) and want to generate the query resolvers for the history schemas, you can use the `enthistory.WithGQLQuery()`
+If you are using [gqlgen](https://github.com/99designs/gqlgen/) and want to generate the query resolvers for the history schemas, you can use the `history.WithGQLQuery()`
 configuration option. With this enabled, `ent.resolvers` with be created, such as:
 
 ```go
@@ -300,7 +300,7 @@ func (r *queryResolver) TodoHistories(ctx context.Context, after *entgql.Cursor[
 
 ## Adding a Skipper Function
 
-If you want to conditionally skip saving history data, you can use the `enthistory.WithSkipper()` configuration option. This
+If you want to conditionally skip saving history data, you can use the `history.WithSkipper()` configuration option. This
 should be the string representation that returns `true` or `false`. The function has access to the `mutation` object and the `context`. For example:
 
 ```go
@@ -310,18 +310,18 @@ should be the string representation that returns `true` or `false`. The function
         return !hasFeature
     `
 
-	historyExt := enthistory.NewHistoryExtension(
-        enthistory.WithSkipper(skipper),
+	historyExt := history.NewHistoryExtension(
+        history.WithSkipper(skipper),
     )
 ```
 
 ## Caveats
 
-Here are a few caveats to keep in mind when using enthistory:
+Here are a few caveats to keep in mind when using history:
 
 ### Edges
 
-To track edges with history, you need to manage your own through tables. enthistory does not hook into the ent-generated
+To track edges with history, you need to manage your own through tables. history does not hook into the ent-generated
 through tables automatically, but managing through tables manually is straightforward. Note that if you use the setters
 for edges on the main schema tables, the history on the through tables won't be tracked. To track history on through
 tables, you must update the through tables directly with the required information.

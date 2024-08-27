@@ -1,4 +1,4 @@
-package enthistory
+package history
 
 import (
 	"entgo.io/ent/entc"
