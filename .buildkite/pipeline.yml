@@ -67,3 +67,4 @@ steps:
               environment:
                 - "SONAR_TOKEN"
                 - "SONAR_HOST_URL=$SONAR_HOST"
+                - "GODEBUG=gotypesalias=0"
