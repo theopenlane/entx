@@ -2,8 +2,6 @@ module github.com/theopenlane/entx
 
 go 1.23.0
 
-godebug default=go1.22
-
 require (
 	entgo.io/contrib v0.6.0
 	entgo.io/ent v0.14.1
