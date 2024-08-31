@@ -12,7 +12,7 @@ require (
 	github.com/stoewer/go-strcase v1.3.0
 	github.com/stretchr/testify v1.9.0
 	github.com/theopenlane/iam v0.1.6
-	github.com/theopenlane/utils v0.1.3
+	github.com/theopenlane/utils v0.1.5
 	github.com/tursodatabase/libsql-client-go v0.0.0-20240812094001-348a4e45b535
 	github.com/vektah/gqlparser/v2 v2.5.16
 	go.opentelemetry.io/otel v1.29.0
