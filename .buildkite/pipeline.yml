@@ -31,7 +31,8 @@ steps:
         key: "gosec"
         plugins:
           - docker#v5.11.0:
-              image: "securego/gosec:2.20.0"
+              image: "securego/gosec:latest"
+              always-pull: true
               command: ["-no-fail", "-exclude-generated", "-fmt sonarqube", "-out", "results.txt", "./..."]
               environment:
                 - "GOTOOLCHAIN=auto"
