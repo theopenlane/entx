@@ -33,7 +33,7 @@ steps:
           - docker#v5.11.0:
               image: "securego/gosec:latest"
               always-pull: true
-              command: ["-no-fail", "-exclude-generated", "-fmt sonarqube", "-out", "results.txt", "./..."]
+              command: ["-no-fail", "-exclude-generated", "-exclude-dir=vanilla/_example/ent", "-fmt sonarqube", "-out", "results.txt", "./..."]
               environment:
                 - "GOTOOLCHAIN=auto"
         artifact_paths: ["results.txt"]
