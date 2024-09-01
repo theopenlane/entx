@@ -1,31 +1,17 @@
-union GlobalSearchResult =
-  {{- range $object := $.Objects }}
-  | {{ $object.Name | toUpperCamel }}SearchResult
-  {{- end }}
-
-
-{{- range $object := $.Objects }}
-type  {{ $object.Name }}SearchResult {
-   {{ $object.Name | toLowerCamel | toPlural }}: [ {{ $object.Name | toUpperCamel}}!]
-}
-
-{{- end }}
-
-type GlobalSearchResultConnection {
-  page: PageInfo!
-
-  nodes: [GlobalSearchResult!]!
-}
-
-
 extend type Query{
+    {{- range $object := $.Objects }}
     """
-    Search across objects
+    Search across {{ $object.Name }} objects
     """
-    search(
+    {{- if eq $.Name "Global" }}
+    {{ $object.Name | toLowerCamel }}Search(
+    {{- else }}
+    {{ $.Name | toLowerCamel }}{{ $object.Name | toUpperCamel }}Search(
+    {{- end }}
         """
         Search query
         """
         query: String!
-    ): GlobalSearchResultConnection
+    ): {{ $object.Name }}SearchResult
+    {{- end }}
 }
