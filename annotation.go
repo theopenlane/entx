@@ -34,12 +34,12 @@ type ThroughCleanup struct {
 }
 
 // SchemaGenAnnotation is an annotation used to indicate that schema generation should be skipped for this type
-// Searchable will be ignored if Skip is set to true
-// Searchable and SkipSearch allow for schemas to be be opt in or opt out
+// When Skip is true, the search schema generation is always skipped
+// SkipSearch allow for schemas to be be opt out of search schema generation
 type SchemaGenAnnotation struct {
 	// Skip indicates that the schema generation should be skipped for this type
 	Skip bool
-	// SkipSearch indicates that the schema should not be searchable, this is ignored if Skip is set to true
+	// SkipSearch indicates that the schema should not be searchable
 	// Schemas are also not searchable if not fields are marked as searchable
 	SkipSearch bool
 }
@@ -53,6 +53,8 @@ type QueryGenAnnotation struct {
 type SearchFieldAnnotation struct {
 	// Searchable indicates that the field should be searchable
 	Searchable bool
+	// ExcludeAdmin indicates that the field will be excluded from the admin search which includes all fields by default
+	ExcludeAdmin bool
 }
 
 // Name returns the name of the CascadeAnnotation
@@ -119,6 +121,13 @@ func QueryGenSkip(skip bool) *QueryGenAnnotation {
 func FieldSearchable() *SearchFieldAnnotation {
 	return &SearchFieldAnnotation{
 		Searchable: true,
+	}
+}
+
+// FieldAdminSearchable returns a new SearchFieldAnnotation with the exclude admin searchable flag set
+func FieldAdminSearchable(s bool) *SearchFieldAnnotation {
+	return &SearchFieldAnnotation{
+		ExcludeAdmin: !s,
 	}
 }
 
