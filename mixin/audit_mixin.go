@@ -9,6 +9,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/mixin"
 
+	"github.com/theopenlane/entx"
 	"github.com/theopenlane/iam/auth"
 )
 
@@ -28,6 +29,7 @@ func (AuditMixin) Fields() []ent.Field {
 				entgql.Skip(
 					entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput,
 				),
+				entx.FieldAdminSearchable(false),
 			),
 		field.Time("updated_at").
 			Default(time.Now).
@@ -37,6 +39,7 @@ func (AuditMixin) Fields() []ent.Field {
 				entgql.Skip(
 					entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput,
 				),
+				entx.FieldAdminSearchable(false),
 			),
 		field.String("created_by").
 			Immutable().
@@ -45,6 +48,7 @@ func (AuditMixin) Fields() []ent.Field {
 				entgql.Skip(
 					entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput,
 				),
+				entx.FieldAdminSearchable(false),
 			),
 		field.String("updated_by").
 			Optional().
@@ -52,6 +56,7 @@ func (AuditMixin) Fields() []ent.Field {
 				entgql.Skip(
 					entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput,
 				),
+				entx.FieldAdminSearchable(false),
 			),
 	}
 }

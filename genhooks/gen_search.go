@@ -2,7 +2,6 @@ package genhooks
 
 import (
 	"cmp"
-	"fmt"
 	"html/template"
 	"log"
 	"os"
@@ -262,7 +261,6 @@ func GetSearchableFields(schemaName string, graph *gen.Graph) (fields []string, 
 
 			fieldName := strcase.UpperCamelCase(field.Name)
 			// capitalize ID field
-			fmt.Println(fieldName)
 			fieldName = strings.Replace(fieldName, "Id", "ID", 1)
 
 			fields = append(fields, fieldName)

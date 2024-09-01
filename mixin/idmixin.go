@@ -6,9 +6,8 @@ import (
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/mixin"
 
-	"github.com/theopenlane/utils/ulids"
-
 	"github.com/theopenlane/entx"
+	"github.com/theopenlane/utils/ulids"
 )
 
 // IDMixin holds the schema definition for the ID
