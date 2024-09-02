@@ -6,11 +6,11 @@ query {{ $.Name }}Search($query: String!) {
         {{ $object.Name| toLower | toPlural }} {
           {{- if eq $.Name "Admin" }}
           {{- range $field := $object.AdminFields }}
-          {{ $field | toLower }}
+          {{ $field.Name | toLower }}
           {{- end }}
           {{- else }}
           {{- range $field := $object.Fields }}
-          {{ $field | toLower }}
+          {{ $field.Name  | toLower }}
           {{- end }}
           {{- end }}
         }

@@ -22,18 +22,26 @@ import (
 type search struct {
 	// Name of the search (e.g. Global, Admin)
 	Name string
-	// Objects is a list of objects to generate bulk resolvers for
+	// Objects is a list of objects to generate search resolvers for
 	Objects []Object
 }
 
-// Object is a struct to hold the object name for the bulk resolver
+// Object is a struct to hold the object name for the search resolver
 type Object struct {
 	// Name of the object
 	Name string
 	// Fields that are searchable for object
-	Fields []string
+	Fields []Field
 	// AdminFields are fields that are only searchable by admin
-	AdminFields []string
+	AdminFields []Field
+}
+
+// Field is a struct to hold the field name and type
+type Field struct {
+	// Name of the field
+	Name string
+	// Type of the field (string, json, etc)
+	Type string
 }
 
 // GenSchema generates graphql schemas when specified to be searchable
@@ -198,7 +206,7 @@ func includeSchemaForSearch(node *gen.Type) bool {
 // GetSearchableFields returns a list of searchable fields for a schema based on the search annotation
 // all fields will be included in the admin search
 // whereas only fields with the search annotation will be included in the global search
-func GetSearchableFields(schemaName string, graph *gen.Graph) (fields []string, adminFields []string) {
+func GetSearchableFields(schemaName string, graph *gen.Graph) (fields []Field, adminFields []Field) {
 	// add the object name that is being searched
 	schema := getEntSchema(graph, schemaName)
 
@@ -213,22 +221,28 @@ func GetSearchableFields(schemaName string, graph *gen.Graph) (fields []string, 
 
 		fieldName := templates.ToGo(field.Name)
 
+		f := Field{
+			Name: fieldName,
+			Type: field.Info.Type.String(),
+		}
+
 		if isFieldSearchable(field) {
-			fields = append(fields, fieldName)
-			adminFields = append(adminFields, fieldName)
+			fields = append(fields, f)
+			adminFields = append(adminFields, f)
 		} else if isAdminFieldSearchable(field) {
-			adminFields = append(adminFields, fieldName)
+			adminFields = append(adminFields, f)
 		}
 	}
 
 	// sort fields so we have consistent output
-	slices.Sort(fields)
+	slices.SortFunc(fields, func(a, b Field) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 
 	return
 }
 
 // isFieldSearchable checks if the field has the SearchField annotation
-// it also checks for the SkipWhereInput annotation to exclude the field from the search schema
 func isFieldSearchable(field *load.Field) bool {
 	searchAnt := &entx.SearchFieldAnnotation{}
 	if ant, ok := field.Annotations[searchAnt.Name()]; ok {
@@ -243,6 +257,7 @@ func isFieldSearchable(field *load.Field) bool {
 }
 
 // isAdminFieldSearchable checks if the field has the admin SearchField annotation
+// it also checks for the SkipWhereInput annotation to exclude the field from the search schema
 func isAdminFieldSearchable(field *load.Field) bool {
 	searchAnt := &entx.SearchFieldAnnotation{}
 
@@ -301,11 +316,11 @@ func entSkip(field *load.Field) bool {
 
 // isFieldTypeExcluded checks if the field type should be excluded from being searchable
 func isFieldTypeExcluded(field *load.Field) bool {
+	// exclude the following field types from being searchable
 	excludedTypes := []entfield.Type{
-		entfield.TypeBool, // bool should never be searchable
-		entfield.TypeEnum, // enums are generally not searchable
-		entfield.TypeTime, // time fields should never be searchable
-		entfield.TypeJSON, // JSON fields should be searchable, fix this later
+		entfield.TypeBool,
+		entfield.TypeEnum,
+		entfield.TypeTime,
 	}
 
 	return slices.Contains(excludedTypes, field.Info.Type)

@@ -61,7 +61,7 @@ func TestIsFieldTypeExcluded(t *testing.T) {
 					Type: field.TypeJSON,
 				},
 			},
-			expected: true,
+			expected: false,
 		},
 	}
 
