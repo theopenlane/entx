@@ -287,9 +287,10 @@ func entSkip(field *load.Field) bool {
 	entAnt := &entgql.Annotation{}
 	if ant, ok := field.Annotations[entAnt.Name()]; ok {
 		if err := entAnt.Decode(ant); err == nil {
-			if entAnt.Skip.Is(entgql.SkipAll) ||
-				entAnt.Skip.Is(entgql.SkipType) ||
-				entAnt.Skip.Is(entgql.SkipWhereInput) {
+			switch {
+			case entAnt.Skip.Is(entgql.SkipType):
+				return true
+			case entAnt.Skip.Is(entgql.SkipWhereInput):
 				return true
 			}
 		}
@@ -298,26 +299,14 @@ func entSkip(field *load.Field) bool {
 	return false
 }
 
+// isFieldTypeExcluded checks if the field type should be excluded from being searchable
 func isFieldTypeExcluded(field *load.Field) bool {
-	// exclude bool fields from search
-	if field.Info.Type == entfield.TypeBool {
-		return true
+	excludedTypes := []entfield.Type{
+		entfield.TypeBool, // bool should never be searchable
+		entfield.TypeEnum, // enums are generally not searchable
+		entfield.TypeTime, // time fields should never be searchable
+		entfield.TypeJSON, // JSON fields should be searchable, fix this later
 	}
 
-	// skip enums for now
-	if field.Info.Type == entfield.TypeEnum {
-		return true
-	}
-
-	// skip time fields for now
-	if field.Info.Type == entfield.TypeTime {
-		return true
-	}
-
-	// skip json fields for now - need to figure out how to search these
-	if field.Info.Type == entfield.TypeJSON {
-		return true
-	}
-
-	return false
+	return slices.Contains(excludedTypes, field.Info.Type)
 }

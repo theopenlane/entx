@@ -6,8 +6,8 @@ import (
 	"os"
 
 	"entgo.io/ent/entc/gen"
+	"github.com/99designs/gqlgen/codegen/templates"
 	"github.com/gertd/go-pluralize"
-	"github.com/stoewer/go-strcase"
 
 	"github.com/theopenlane/entx"
 )
@@ -77,7 +77,7 @@ func checkSchemaGenSkip(node *gen.Type) bool {
 func createTemplate() *template.Template {
 	// function map for template
 	fm := template.FuncMap{
-		"ToLowerCamel": strcase.LowerCamelCase,
+		"ToLowerCamel": templates.ToGoPrivate,
 		"ToPlural":     pluralize.NewClient().Plural,
 	}
 

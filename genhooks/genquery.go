@@ -9,8 +9,8 @@ import (
 
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
+	"github.com/99designs/gqlgen/codegen/templates"
 	"github.com/gertd/go-pluralize"
-	"github.com/stoewer/go-strcase"
 
 	"github.com/theopenlane/entx"
 )
@@ -97,7 +97,7 @@ func getFieldNames(fields []*gen.Field) []string {
 			continue
 		}
 
-		fieldNames = append(fieldNames, toFirstLower(f.StructField()))
+		fieldNames = append(fieldNames, templates.ToGoPrivate(f.StructField()))
 	}
 
 	// sort field names
@@ -167,7 +167,7 @@ func isHistorySchema(node *gen.Type) bool {
 func createQuery() *template.Template {
 	// function map for template
 	fm := template.FuncMap{
-		"ToLowerCamel": strcase.LowerCamelCase,
+		"ToLowerCamel": templates.ToGoPrivate,
 		"ToPlural":     pluralize.NewClient().Plural,
 	}
 

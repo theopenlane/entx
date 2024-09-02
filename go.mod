@@ -18,6 +18,7 @@ require (
 	go.opentelemetry.io/otel v1.29.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/tools v0.24.0
+	gotest.tools v2.2.0+incompatible
 	modernc.org/sqlite v1.32.0
 )
 
