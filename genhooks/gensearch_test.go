@@ -7,8 +7,7 @@ import (
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/entc/load"
 	"entgo.io/ent/schema/field"
-	"gotest.tools/assert"
-
+	"github.com/stretchr/testify/assert"
 	"github.com/theopenlane/entx"
 )
 
