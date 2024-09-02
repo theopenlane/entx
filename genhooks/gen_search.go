@@ -6,19 +6,16 @@ import (
 	"log"
 	"os"
 	"slices"
-	"strings"
 
+	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/entc/load"
 	entfield "entgo.io/ent/schema/field"
+	"github.com/99designs/gqlgen/codegen/templates"
 	"github.com/gertd/go-pluralize"
 	"github.com/stoewer/go-strcase"
 
 	"github.com/theopenlane/entx"
-)
-
-var (
-	searchFilename = "search"
 )
 
 // schema data for template
@@ -46,9 +43,6 @@ func GenSearchSchema(graphSchemaDir, graphQueryDir string) gen.Hook {
 			// create schema template
 			schemaTmpl := createSearchTemplate()
 
-			// create schema template
-			typeTmpl := createSearchTypesTemplate()
-
 			// create query template
 			queryTmpl := createSearchQueryTemplate()
 
@@ -59,9 +53,6 @@ func GenSearchSchema(graphSchemaDir, graphQueryDir string) gen.Hook {
 			slices.SortFunc(inputData.Objects, func(a, b Object) int {
 				return cmp.Compare(a.Name, b.Name)
 			})
-
-			// create search type schema file
-			genSearchTypeTemplate(graphSchemaDir, typeTmpl, inputData)
 
 			// create search schema file for global and admin
 			genSearchSchemaTemplate(graphSchemaDir, schemaTmpl, inputData, false)
@@ -109,14 +100,15 @@ func getInputData(g *gen.Graph) search {
 
 // genSearchSchemaTemplate generates the search schema file
 func genSearchSchemaTemplate(graphSchemaDir string, tmpl *template.Template, inputData search, isAdmin bool) {
+	fileName := getSearchFileName(isAdmin)
+
 	inputData.Name = "Global"
 	if isAdmin {
 		inputData.Name = "Admin"
-		searchFilename = "admin" + searchFilename
 	}
 
 	// create search schema file
-	filePath := getFileName(graphSchemaDir, searchFilename)
+	filePath := getFileName(graphSchemaDir, fileName)
 
 	file, err := os.Create(filePath)
 	if err != nil {
@@ -131,30 +123,15 @@ func genSearchSchemaTemplate(graphSchemaDir string, tmpl *template.Template, inp
 
 // genSearchQueryTemplate generates the search query file
 func genSearchQueryTemplate(graphQueryDir string, tmpl *template.Template, inputData search, isAdmin bool) {
+	fileName := getSearchFileName(isAdmin)
+
 	inputData.Name = "Global"
 	if isAdmin {
 		inputData.Name = "Admin"
-		searchFilename = "admin" + searchFilename
 	}
 
 	// create search query file
-	filePath := getFileName(graphQueryDir, searchFilename)
-
-	file, err := os.Create(filePath)
-	if err != nil {
-		log.Fatalf("Unable to create file: %v", err)
-	}
-
-	// execute query template and write to file
-	if err = tmpl.Execute(file, inputData); err != nil {
-		log.Fatalf("Unable to execute query template: %v", err)
-	}
-}
-
-// genSearchTypeTemplate generates the search type schema file
-func genSearchTypeTemplate(graphSchemaDir string, tmpl *template.Template, inputData search) {
-	// create search query file
-	filePath := getFileName(graphSchemaDir, "searchtypes")
+	filePath := getFileName(graphQueryDir, fileName)
 
 	file, err := os.Create(filePath)
 	if err != nil {
@@ -172,7 +149,7 @@ func createSearchTemplate() *template.Template {
 	// function map for template
 	fm := template.FuncMap{
 		"toPlural":     pluralize.NewClient().Plural,
-		"toLowerCamel": strcase.LowerCamelCase,
+		"toLower":      templates.ToGoPrivate,
 		"toUpperCamel": strcase.UpperCamelCase,
 	}
 
@@ -185,30 +162,12 @@ func createSearchTemplate() *template.Template {
 	return tmpl
 }
 
-// createSearchTypesTemplate creates a new template for generating the search types graphql schema
-func createSearchTypesTemplate() *template.Template {
-	// function map for template
-	fm := template.FuncMap{
-		"toPlural":     pluralize.NewClient().Plural,
-		"toLowerCamel": strcase.LowerCamelCase,
-		"toUpperCamel": strcase.UpperCamelCase,
-	}
-
-	// create schema template
-	tmpl, err := template.New("types.tpl").Funcs(fm).ParseFS(_templates, "templates/search/types.tpl")
-	if err != nil {
-		log.Fatalf("Unable to parse template: %v", err)
-	}
-
-	return tmpl
-}
-
 // createSearchQueryTemplate creates a new template for generating the search query
 func createSearchQueryTemplate() *template.Template {
 	// function map for template
 	fm := template.FuncMap{
 		"toPlural":     pluralize.NewClient().Plural,
-		"toLowerCamel": strcase.LowerCamelCase,
+		"toLower":      templates.ToGoPrivate,
 		"toUpperCamel": strcase.UpperCamelCase,
 	}
 
@@ -248,26 +207,16 @@ func GetSearchableFields(schemaName string, graph *gen.Graph) (fields []string, 
 	}
 
 	for _, field := range schema.Fields {
+		if isFieldTypeExcluded(field) {
+			continue
+		}
+
+		fieldName := templates.ToGo(field.Name)
+
 		if isFieldSearchable(field) {
-			// exclude bool fields from search
-			if field.Info.Type == entfield.TypeBool {
-				continue
-			}
-
-			// skip enums for now
-			if field.Info.Type == entfield.TypeEnum {
-				continue
-			}
-
-			fieldName := strcase.UpperCamelCase(field.Name)
-			// capitalize ID field
-			fieldName = strings.Replace(fieldName, "Id", "ID", 1)
-
 			fields = append(fields, fieldName)
 			adminFields = append(adminFields, fieldName)
 		} else if isAdminFieldSearchable(field) {
-			fieldName := strcase.UpperCamelCase(field.Name)
-
 			adminFields = append(adminFields, fieldName)
 		}
 	}
@@ -279,9 +228,9 @@ func GetSearchableFields(schemaName string, graph *gen.Graph) (fields []string, 
 }
 
 // isFieldSearchable checks if the field has the SearchField annotation
+// it also checks for the SkipWhereInput annotation to exclude the field from the search schema
 func isFieldSearchable(field *load.Field) bool {
 	searchAnt := &entx.SearchFieldAnnotation{}
-
 	if ant, ok := field.Annotations[searchAnt.Name()]; ok {
 		if err := searchAnt.Decode(ant); err != nil {
 			return false
@@ -296,6 +245,10 @@ func isFieldSearchable(field *load.Field) bool {
 // isAdminFieldSearchable checks if the field has the admin SearchField annotation
 func isAdminFieldSearchable(field *load.Field) bool {
 	searchAnt := &entx.SearchFieldAnnotation{}
+
+	if entSkip(field) {
+		return false
+	}
 
 	if ant, ok := field.Annotations[searchAnt.Name()]; ok {
 		if err := searchAnt.Decode(ant); err != nil {
@@ -317,4 +270,54 @@ func getEntSchema(graph *gen.Graph, name string) *load.Schema {
 	}
 
 	return nil
+}
+
+// getFileName returns the file path for the search schema file
+func getSearchFileName(isAdmin bool) string {
+	fileName := "search"
+	if isAdmin {
+		fileName = "admin" + fileName
+	}
+
+	return fileName
+}
+
+// entSkip checks if the field has the entgql.Skip annotation that would exclude the field from being searchable
+func entSkip(field *load.Field) bool {
+	entAnt := &entgql.Annotation{}
+	if ant, ok := field.Annotations[entAnt.Name()]; ok {
+		if err := entAnt.Decode(ant); err == nil {
+			if entAnt.Skip.Is(entgql.SkipAll) ||
+				entAnt.Skip.Is(entgql.SkipType) ||
+				entAnt.Skip.Is(entgql.SkipWhereInput) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func isFieldTypeExcluded(field *load.Field) bool {
+	// exclude bool fields from search
+	if field.Info.Type == entfield.TypeBool {
+		return true
+	}
+
+	// skip enums for now
+	if field.Info.Type == entfield.TypeEnum {
+		return true
+	}
+
+	// skip time fields for now
+	if field.Info.Type == entfield.TypeTime {
+		return true
+	}
+
+	// skip json fields for now - need to figure out how to search these
+	if field.Info.Type == entfield.TypeJSON {
+		return true
+	}
+
+	return false
 }

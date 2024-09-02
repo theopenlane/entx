@@ -3,14 +3,14 @@ query {{ $.Name }}Search($query: String!) {
     nodes {
     {{- range $object := $.Objects }}
       ... on {{ $object.Name | toUpperCamel }}SearchResult {
-        {{ $object.Name| toLowerCamel | toPlural }} {
+        {{ $object.Name| toLower | toPlural }} {
           {{- if eq $.Name "Admin" }}
           {{- range $field := $object.AdminFields }}
-          {{ $field | toLowerCamel }}
+          {{ $field | toLower }}
           {{- end }}
           {{- else }}
           {{- range $field := $object.Fields }}
-          {{ $field | toLowerCamel }}
+          {{ $field | toLower }}
           {{- end }}
           {{- end }}
         }
