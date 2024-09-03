@@ -27,13 +27,3 @@ func isSoftDeleteField(f *gen.Field) bool {
 func getFileName(dir, name string) string {
 	return filepath.Clean(dir + strings.ToLower(name) + ".graphql")
 }
-
-// toFirstLower converts the first character of a string to lowercase
-// except if the entire string is uppercase, e.g TTL, should remain as TTL
-func toFirstLower(s string) string {
-	if strings.ToUpper(s) == s {
-		return s
-	}
-
-	return strings.ToLower(s[:1]) + s[1:]
-}

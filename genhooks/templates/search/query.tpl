@@ -1,11 +1,17 @@
-query Search($query: String!) {
+query {{ $.Name }}Search($query: String!) {
   search(query: $query) {
     nodes {
     {{- range $object := $.Objects }}
       ... on {{ $object.Name | toUpperCamel }}SearchResult {
-        {{ $object.Name| toLowerCamel | toPlural }} {
+        {{ $object.Name| toLower | toPlural }} {
+          {{- if eq $.Name "Admin" }}
+          {{- range $field := $object.AdminFields }}
+          {{ $field.Name | toLower }}
+          {{- end }}
+          {{- else }}
           {{- range $field := $object.Fields }}
-          {{ $field | toLowerCamel }}
+          {{ $field.Name  | toLower }}
+          {{- end }}
           {{- end }}
         }
       }

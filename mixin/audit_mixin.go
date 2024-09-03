@@ -10,6 +10,8 @@ import (
 	"entgo.io/ent/schema/mixin"
 
 	"github.com/theopenlane/iam/auth"
+
+	"github.com/theopenlane/entx"
 )
 
 // AuditMixin provides auditing for all records where enabled. The created_at, created_by, updated_at, and updated_by records are automatically populated when this mixin is enabled.
@@ -28,6 +30,7 @@ func (AuditMixin) Fields() []ent.Field {
 				entgql.Skip(
 					entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput,
 				),
+				entx.FieldAdminSearchable(false),
 			),
 		field.Time("updated_at").
 			Default(time.Now).
@@ -37,6 +40,7 @@ func (AuditMixin) Fields() []ent.Field {
 				entgql.Skip(
 					entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput,
 				),
+				entx.FieldAdminSearchable(false),
 			),
 		field.String("created_by").
 			Immutable().
@@ -45,6 +49,7 @@ func (AuditMixin) Fields() []ent.Field {
 				entgql.Skip(
 					entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput,
 				),
+				entx.FieldAdminSearchable(false),
 			),
 		field.String("updated_by").
 			Optional().
@@ -52,6 +57,7 @@ func (AuditMixin) Fields() []ent.Field {
 				entgql.Skip(
 					entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput,
 				),
+				entx.FieldAdminSearchable(false),
 			),
 	}
 }
