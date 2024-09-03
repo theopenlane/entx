@@ -13,7 +13,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/theopenlane/iam v0.1.6
 	github.com/theopenlane/utils v0.1.5
-	github.com/tursodatabase/libsql-client-go v0.0.0-20240812094001-348a4e45b535
+	github.com/tursodatabase/libsql-client-go v0.0.0-20240902231107-85af5b9d094d
 	github.com/vektah/gqlparser/v2 v2.5.16
 	go.opentelemetry.io/otel v1.29.0
 	go.uber.org/zap v1.27.0
