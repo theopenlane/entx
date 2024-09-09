@@ -38,6 +38,15 @@ extend type Query{
         """
         query: String!
     ): SearchResultConnection
+    """
+    Admin search across all objects
+    """
+    adminSearch(
+        """
+        Search query
+        """
+        query: String!
+    ): SearchResultConnection
 }
 {{ range $object := $.Objects }}
 type  {{ $object.Name }}SearchResult {
