@@ -13,7 +13,6 @@ import (
 	entfield "entgo.io/ent/schema/field"
 	"github.com/99designs/gqlgen/codegen/templates"
 	"github.com/gertd/go-pluralize"
-	"github.com/stoewer/go-strcase"
 
 	"github.com/theopenlane/entx"
 )
@@ -42,6 +41,10 @@ type Field struct {
 	Name string
 	// Type of the field (string, json, etc)
 	Type string
+	// Path for JSON fields
+	Path string
+	// DotPath for JSON fields
+	DotPath string
 }
 
 // GenSchema generates graphql schemas when specified to be searchable
@@ -158,7 +161,7 @@ func createSearchTemplate() *template.Template {
 	fm := template.FuncMap{
 		"toPlural":     pluralize.NewClient().Plural,
 		"toLower":      templates.ToGoPrivate,
-		"toUpperCamel": strcase.UpperCamelCase,
+		"toUpperCamel": templates.ToGo,
 	}
 
 	// create schema template
@@ -176,7 +179,7 @@ func createSearchQueryTemplate() *template.Template {
 	fm := template.FuncMap{
 		"toPlural":     pluralize.NewClient().Plural,
 		"toLower":      templates.ToGoPrivate,
-		"toUpperCamel": strcase.UpperCamelCase,
+		"toUpperCamel": templates.ToGo,
 	}
 
 	// create schema template
@@ -222,8 +225,10 @@ func GetSearchableFields(schemaName string, graph *gen.Graph) (fields []Field, a
 		fieldName := templates.ToGo(field.Name)
 
 		f := Field{
-			Name: fieldName,
-			Type: field.Info.Type.String(),
+			Name:    fieldName,
+			Type:    field.Info.Type.String(),
+			Path:    getPathAnnotation(field),
+			DotPath: getDotPathAnnotation(field),
 		}
 
 		if isFieldSearchable(field) {
@@ -242,38 +247,66 @@ func GetSearchableFields(schemaName string, graph *gen.Graph) (fields []Field, a
 	return
 }
 
-// isFieldSearchable checks if the field has the SearchField annotation
-func isFieldSearchable(field *load.Field) bool {
+func getSearchAnnotation(field *load.Field) *entx.SearchFieldAnnotation {
 	searchAnt := &entx.SearchFieldAnnotation{}
 	if ant, ok := field.Annotations[searchAnt.Name()]; ok {
 		if err := searchAnt.Decode(ant); err != nil {
-			return false
+			return nil
 		}
 
-		return searchAnt.Searchable
+		return searchAnt
 	}
 
-	return false
+	return nil
+}
+
+// isFieldSearchable checks if the field has the SearchField annotation
+func isFieldSearchable(field *load.Field) bool {
+	searchAnt := getSearchAnnotation(field)
+
+	if searchAnt == nil {
+		return false
+	}
+
+	return searchAnt.Searchable
 }
 
 // isAdminFieldSearchable checks if the field has the admin SearchField annotation
 // it also checks for the SkipWhereInput annotation to exclude the field from the search schema
 func isAdminFieldSearchable(field *load.Field) bool {
-	searchAnt := &entx.SearchFieldAnnotation{}
-
 	if entSkip(field) {
 		return false
 	}
 
-	if ant, ok := field.Annotations[searchAnt.Name()]; ok {
-		if err := searchAnt.Decode(ant); err != nil {
-			return false
-		}
+	searchAnt := getSearchAnnotation(field)
 
-		return !searchAnt.ExcludeAdmin
+	if searchAnt == nil {
+		return true
 	}
 
-	return true
+	return !searchAnt.ExcludeAdmin
+}
+
+// getPathAnnotation checks if the field has the JSONPath field set on the SearchField annotation
+func getPathAnnotation(field *load.Field) string {
+	searchAnt := getSearchAnnotation(field)
+
+	if searchAnt == nil {
+		return ""
+	}
+
+	return searchAnt.JSONPath
+}
+
+// getDotPathAnnotation checks if the field has the JSONDotPath field set on the SearchField annotation
+func getDotPathAnnotation(field *load.Field) string {
+	searchAnt := getSearchAnnotation(field)
+
+	if searchAnt == nil {
+		return ""
+	}
+
+	return searchAnt.JSONDotPath
 }
 
 // getEntSchema returns the schema for a given name
@@ -299,6 +332,11 @@ func getSearchFileName(isAdmin bool) string {
 
 // entSkip checks if the field has the entgql.Skip annotation that would exclude the field from being searchable
 func entSkip(field *load.Field) bool {
+	// never include sensitive fields
+	if field.Sensitive {
+		return true
+	}
+
 	entAnt := &entgql.Annotation{}
 	if ant, ok := field.Annotations[entAnt.Name()]; ok {
 		if err := entAnt.Decode(ant); err == nil {
@@ -307,6 +345,7 @@ func entSkip(field *load.Field) bool {
 				return true
 			case entAnt.Skip.Is(entgql.SkipWhereInput):
 				return true
+
 			}
 		}
 	}
@@ -316,12 +355,12 @@ func entSkip(field *load.Field) bool {
 
 // isFieldTypeExcluded checks if the field type should be excluded from being searchable
 func isFieldTypeExcluded(field *load.Field) bool {
-	// exclude the following field types from being searchable
-	excludedTypes := []entfield.Type{
-		entfield.TypeBool,
-		entfield.TypeEnum,
-		entfield.TypeTime,
+	// include the following field types to be searchable
+	includedTypes := []entfield.Type{
+		entfield.TypeString,
+		entfield.TypeJSON,
+		entfield.TypeOther,
 	}
 
-	return slices.Contains(excludedTypes, field.Info.Type)
+	return !slices.Contains(includedTypes, field.Info.Type)
 }

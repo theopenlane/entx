@@ -8,6 +8,7 @@ import (
 	"entgo.io/ent/entc/load"
 	"entgo.io/ent/schema/field"
 	"github.com/stretchr/testify/assert"
+
 	"github.com/theopenlane/entx"
 )
 
