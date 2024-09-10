@@ -345,7 +345,6 @@ func entSkip(field *load.Field) bool {
 				return true
 			case entAnt.Skip.Is(entgql.SkipWhereInput):
 				return true
-
 			}
 		}
 	}
