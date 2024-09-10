@@ -130,6 +130,20 @@ func TestEntSkip(t *testing.T) {
 			},
 			expected: true,
 		},
+		{
+			name: "sensitive skipped",
+			input: &load.Field{
+				Sensitive: true,
+			},
+			expected: true,
+		},
+		{
+			name: "not sensitive, not skipped",
+			input: &load.Field{
+				Sensitive: false,
+			},
+			expected: false,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -333,6 +347,98 @@ func TestIsAdminFieldSearchable(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := isAdminFieldSearchable(tc.input)
+
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestGetPathAnnotation(t *testing.T) {
+	searchAnt := &entx.SearchFieldAnnotation{}
+
+	testCases := []struct {
+		name     string
+		input    *load.Field
+		expected string
+	}{
+		{
+			name: "has path",
+			input: &load.Field{
+				Annotations: map[string]interface{}{
+					searchAnt.Name(): &entx.SearchFieldAnnotation{
+						JSONPath: "path",
+					},
+				},
+			},
+			expected: "path",
+		},
+		{
+			name: "no path",
+			input: &load.Field{
+				Annotations: map[string]interface{}{
+					searchAnt.Name(): &entx.SearchFieldAnnotation{},
+				},
+			},
+			expected: "",
+		},
+		{
+			name: "no annotation",
+			input: &load.Field{
+				Annotations: map[string]interface{}{},
+			},
+			expected: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := getPathAnnotation(tc.input)
+
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestGetDotPathAnnotation(t *testing.T) {
+	searchAnt := &entx.SearchFieldAnnotation{}
+
+	testCases := []struct {
+		name     string
+		input    *load.Field
+		expected string
+	}{
+		{
+			name: "has path",
+			input: &load.Field{
+				Annotations: map[string]interface{}{
+					searchAnt.Name(): &entx.SearchFieldAnnotation{
+						JSONDotPath: "path",
+					},
+				},
+			},
+			expected: "path",
+		},
+		{
+			name: "no path",
+			input: &load.Field{
+				Annotations: map[string]interface{}{
+					searchAnt.Name(): &entx.SearchFieldAnnotation{},
+				},
+			},
+			expected: "",
+		},
+		{
+			name: "no annotation",
+			input: &load.Field{
+				Annotations: map[string]interface{}{},
+			},
+			expected: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := getDotPathAnnotation(tc.input)
 
 			assert.Equal(t, tc.expected, result)
 		})
