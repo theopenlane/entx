@@ -1,5 +1,9 @@
 query {{ $.Name }}Search($query: String!) {
+  {{- if eq $.Name "Admin" }}
+  adminSearch(query: $query) {
+  {{- else }}
   search(query: $query) {
+  {{- end }}
     nodes {
     {{- range $object := $.Objects }}
       ... on {{ $object.Name | toUpperCamel }}SearchResult {
