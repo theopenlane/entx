@@ -4,6 +4,8 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/mixin"
+
+	"github.com/theopenlane/entx"
 )
 
 // TagMixin holds the schema definition for the tags
@@ -17,6 +19,9 @@ func (t TagMixin) Fields() []ent.Field {
 		field.Strings("tags").
 			Comment("tags associated with the object").
 			Default([]string{}).
+			Annotations(
+				entx.FieldSearchable(),
+			).
 			Optional(),
 	}
 }

@@ -55,6 +55,10 @@ type SearchFieldAnnotation struct {
 	Searchable bool
 	// ExcludeAdmin indicates that the field will be excluded from the admin search which includes all fields by default
 	ExcludeAdmin bool
+	// JSONPath is the path to the field in the JSON object
+	JSONPath string
+	// JSONDotPath is the path to the field in the JSON object using dot notation
+	JSONDotPath string
 }
 
 // Name returns the name of the CascadeAnnotation
@@ -114,6 +118,22 @@ func SchemaSearchable(s bool) *SchemaGenAnnotation {
 func QueryGenSkip(skip bool) *QueryGenAnnotation {
 	return &QueryGenAnnotation{
 		Skip: skip,
+	}
+}
+
+// FieldJSONPathSearchable returns a new SearchFieldAnnotation with the searchable flag set and the JSONPath set
+func FieldJSONPathSearchable(path string) *SearchFieldAnnotation {
+	return &SearchFieldAnnotation{
+		JSONPath:   path,
+		Searchable: true,
+	}
+}
+
+// FieldJSONDotPathSearchable returns a new SearchFieldAnnotation with the searchable flag set and the JSONDotPath set
+func FieldJSONDotPathSearchable(path string) *SearchFieldAnnotation {
+	return &SearchFieldAnnotation{
+		JSONDotPath: path,
+		Searchable:  true,
 	}
 }
 
