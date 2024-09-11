@@ -10,9 +10,8 @@ import (
 	"github.com/XSAM/otelsql"
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
 
+	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
-
-	"go.uber.org/zap"
 )
 
 const (
@@ -51,8 +50,8 @@ type EntClientConfig struct {
 	primaryDB *entsql.Driver
 	// secondaryDB contains the secondary db connection, if set
 	secondaryDB *entsql.Driver
-	// logger contains the zap logger
-	logger *zap.SugaredLogger
+	// logger contains the logger
+	logger zerolog.Logger
 }
 
 // DBOption allows users to optionally supply configuration to the ent connection
@@ -62,7 +61,7 @@ type DBOption func(opts *EntClientConfig)
 func NewDBConfig(c Config, opts ...DBOption) (*EntClientConfig, error) {
 	ec := &EntClientConfig{
 		config: c,
-		logger: zap.NewNop().Sugar(), // set a no-op logger by default
+		logger: zerolog.New(nil), // set a no-op logger by default
 	}
 
 	// setup primary db connection
@@ -75,7 +74,7 @@ func NewDBConfig(c Config, opts ...DBOption) (*EntClientConfig, error) {
 
 	ec.primaryDB, err = ec.NewEntDB(c.PrimaryDBSource)
 	if err != nil {
-		ec.logger.Errorw("failed to create primary db connection", "error", err)
+		ec.logger.Error().Err(err).Msg("failed to create primary db connection")
 
 		return nil, err
 	}
@@ -94,7 +93,7 @@ func (c *EntClientConfig) GetSecondaryDB() *entsql.Driver {
 }
 
 // WithLogger sets the logger for the ent client
-func WithLogger(l *zap.SugaredLogger) DBOption {
+func WithLogger(l zerolog.Logger) DBOption {
 	return func(c *EntClientConfig) {
 		c.logger = l
 	}
@@ -104,14 +103,14 @@ func WithLogger(l *zap.SugaredLogger) DBOption {
 func WithSecondaryDB() DBOption {
 	return func(c *EntClientConfig) {
 		if !CheckMultiwriteSupport(c.config.DriverName) {
-			c.logger.Fatalw("unsupported multiwrite driver", "driver", c.config.DriverName)
+			c.logger.Fatal().Str("driver", c.config.DriverName).Msg("unsupported multiwrite driver")
 		}
 
 		var err error
 
 		c.secondaryDB, err = c.NewEntDB(c.config.SecondaryDBSource)
 		if err != nil {
-			c.logger.Fatalw("failed to create primary db connection", "error", err)
+			c.logger.Fatal().Err(err).Msg("failed to create primary db connection")
 		}
 	}
 }
