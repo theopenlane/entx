@@ -8,9 +8,8 @@ import (
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/XSAM/otelsql"
+	"github.com/rs/zerolog/log"
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
-
-	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -50,8 +49,6 @@ type EntClientConfig struct {
 	primaryDB *entsql.Driver
 	// secondaryDB contains the secondary db connection, if set
 	secondaryDB *entsql.Driver
-	// logger contains the logger
-	logger zerolog.Logger
 }
 
 // DBOption allows users to optionally supply configuration to the ent connection
@@ -61,7 +58,6 @@ type DBOption func(opts *EntClientConfig)
 func NewDBConfig(c Config, opts ...DBOption) (*EntClientConfig, error) {
 	ec := &EntClientConfig{
 		config: c,
-		logger: zerolog.New(nil), // set a no-op logger by default
 	}
 
 	// setup primary db connection
@@ -74,7 +70,7 @@ func NewDBConfig(c Config, opts ...DBOption) (*EntClientConfig, error) {
 
 	ec.primaryDB, err = ec.NewEntDB(c.PrimaryDBSource)
 	if err != nil {
-		ec.logger.Error().Err(err).Msg("failed to create primary db connection")
+		log.Error().Err(err).Msg("failed to create primary db connection")
 
 		return nil, err
 	}
@@ -92,25 +88,18 @@ func (c *EntClientConfig) GetSecondaryDB() *entsql.Driver {
 	return c.secondaryDB
 }
 
-// WithLogger sets the logger for the ent client
-func WithLogger(l zerolog.Logger) DBOption {
-	return func(c *EntClientConfig) {
-		c.logger = l
-	}
-}
-
 // WithSecondaryDB sets the secondary db connection if the driver supports multiwrite
 func WithSecondaryDB() DBOption {
 	return func(c *EntClientConfig) {
 		if !CheckMultiwriteSupport(c.config.DriverName) {
-			c.logger.Fatal().Str("driver", c.config.DriverName).Msg("unsupported multiwrite driver")
+			log.Fatal().Str("driver", c.config.DriverName).Msg("unsupported multiwrite driver")
 		}
 
 		var err error
 
 		c.secondaryDB, err = c.NewEntDB(c.config.SecondaryDBSource)
 		if err != nil {
-			c.logger.Fatal().Err(err).Msg("failed to create primary db connection")
+			log.Fatal().Err(err).Msg("failed to create primary db connection")
 		}
 	}
 }

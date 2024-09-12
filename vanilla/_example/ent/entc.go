@@ -7,7 +7,6 @@ import (
 
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
-	"github.com/rs/zerolog"
 	"github.com/theopenlane/entx/genhooks"
 
 	"entgo.io/ent/entc"
@@ -38,10 +37,6 @@ func main() {
 				genhooks.GenQuery(graphQueryDir),
 			},
 		},
-		entc.Dependency(
-			entc.DependencyName("Logger"),
-			entc.DependencyType(zerolog.Logger{}),
-		),
 		entc.Extensions(
 			gqlExt,
 		),

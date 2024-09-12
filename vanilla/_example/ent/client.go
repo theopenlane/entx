@@ -15,7 +15,6 @@ import (
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/rs/zerolog"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/orgmembership"
 )
@@ -57,7 +56,6 @@ type (
 		hooks *hooks
 		// interceptors to execute on queries.
 		inters *inters
-		Logger *zerolog.Logger
 	}
 	// Option function to configure the client.
 	Option func(*config)
@@ -98,13 +96,6 @@ func Log(fn func(...any)) Option {
 func Driver(driver dialect.Driver) Option {
 	return func(c *config) {
 		c.driver = driver
-	}
-}
-
-// Logger configures the Logger.
-func Logger(v *zerolog.Logger) Option {
-	return func(c *config) {
-		c.Logger = v
 	}
 }
 
