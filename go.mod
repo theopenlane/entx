@@ -14,8 +14,8 @@ require (
 	github.com/rs/zerolog v1.33.0
 	github.com/stoewer/go-strcase v1.3.0
 	github.com/stretchr/testify v1.9.0
-	github.com/theopenlane/iam v0.1.7-0.20240911224405-ef3f7999442e
-	github.com/theopenlane/utils v0.1.6-0.20240911214559-3e4455ffe31f
+	github.com/theopenlane/iam v0.2.0
+	github.com/theopenlane/utils v0.2.0
 	github.com/tursodatabase/libsql-client-go v0.0.0-20240902231107-85af5b9d094d
 	github.com/vektah/gqlparser/v2 v2.5.16
 	go.opentelemetry.io/otel v1.30.0
@@ -62,7 +62,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/sosodev/duration v1.3.1 // indirect
-	github.com/theopenlane/echox v0.1.0 // indirect
+	github.com/theopenlane/echox v0.2.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
