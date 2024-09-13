@@ -17,7 +17,6 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/orgmembership"
-	"go.uber.org/zap"
 )
 
 // Client is the client that holds all ent builders.
@@ -57,7 +56,6 @@ type (
 		hooks *hooks
 		// interceptors to execute on queries.
 		inters *inters
-		Logger zap.SugaredLogger
 	}
 	// Option function to configure the client.
 	Option func(*config)
@@ -98,13 +96,6 @@ func Log(fn func(...any)) Option {
 func Driver(driver dialect.Driver) Option {
 	return func(c *config) {
 		c.driver = driver
-	}
-}
-
-// Logger configures the Logger.
-func Logger(v zap.SugaredLogger) Option {
-	return func(c *config) {
-		c.Logger = v
 	}
 }
 

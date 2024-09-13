@@ -20,7 +20,7 @@ steps:
         key: "go_test"
         plugins:
           - docker#v5.11.0:
-              image: golang:1.23.0
+              image: golang:1.23.1
               command: ["go", "test", "-coverprofile=coverage.out", "./..."]
         artifact_paths: ["coverage.out"]
   - group: ":closed_lock_with_key: Security Checks"

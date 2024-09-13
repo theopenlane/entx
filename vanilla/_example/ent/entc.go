@@ -8,7 +8,6 @@ import (
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
 	"github.com/theopenlane/entx/genhooks"
-	"go.uber.org/zap"
 
 	"entgo.io/ent/entc"
 )
@@ -38,10 +37,6 @@ func main() {
 				genhooks.GenQuery(graphQueryDir),
 			},
 		},
-		entc.Dependency(
-			entc.DependencyName("Logger"),
-			entc.DependencyType(zap.SugaredLogger{}),
-		),
 		entc.Extensions(
 			gqlExt,
 		),
