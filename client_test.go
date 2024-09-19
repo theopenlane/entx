@@ -31,6 +31,11 @@ func TestCheckDialect(t *testing.T) {
 			expected: "postgres",
 		},
 		{
+			name:     "pgx",
+			dialect:  "pgx",
+			expected: "postgres",
+		},
+		{
 			name:     "unsupported",
 			dialect:  "mysql",
 			errorMsg: "unsupported dialect: mysql",
@@ -38,7 +43,7 @@ func TestCheckDialect(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run("Get "+tc.name, func(t *testing.T) {
+		t.Run("Driver_"+tc.name, func(t *testing.T) {
 			chk, err := entx.CheckEntDialect(tc.dialect)
 
 			if tc.errorMsg == "" {
