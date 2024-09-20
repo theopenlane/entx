@@ -8,6 +8,7 @@ import (
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/XSAM/otelsql"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/rs/zerolog/log"
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
 	"go.opentelemetry.io/otel/attribute"
@@ -159,7 +160,7 @@ func CheckEntDialect(d string) (string, error) {
 		return dialect.SQLite, nil
 	case "libsql":
 		return dialect.SQLite, nil
-	case "postgres":
+	case "postgres", "pgx":
 		return dialect.Postgres, nil
 	default:
 		return "", newDialectError(d)

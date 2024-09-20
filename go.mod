@@ -11,6 +11,7 @@ require (
 	github.com/XSAM/otelsql v0.34.0
 	github.com/brianvoe/gofakeit/v7 v7.0.4
 	github.com/gertd/go-pluralize v0.2.1
+	github.com/jackc/pgx/v5 v5.7.1
 	github.com/rs/zerolog v1.33.0
 	github.com/stoewer/go-strcase v1.3.0
 	github.com/stretchr/testify v1.9.0
@@ -45,6 +46,9 @@ require (
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hashicorp/hcl/v2 v2.22.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
 	github.com/lestrrat-go/httprc v1.0.6 // indirect
