@@ -8,9 +8,7 @@ import (
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/XSAM/otelsql"
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/rs/zerolog/log"
-	_ "github.com/tursodatabase/libsql-client-go/libsql"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -25,7 +23,7 @@ type Config struct {
 	// DatabaseName is the name of the database to use with otel tracing
 	DatabaseName string `json:"databaseName" koanf:"databaseName" jsonschema:"description=the name of the database to use with otel tracing" default:"openlane"`
 	// DriverName name from dialect.Driver
-	DriverName string `json:"driverName" koanf:"driverName" jsonschema:"description=sql driver name, supported drivers include sqlite, libsql, and psql" default:"libsql"`
+	DriverName string `json:"driverName" koanf:"driverName" jsonschema:"description=sql driver name, supported drivers include sqlite, libsql, psql, and pgx (postgres pooling)" default:"pgx"`
 	// MultiWrite enabled writing to two databases simultaneously
 	MultiWrite bool `json:"multiWrite" koanf:"multiWrite" jsonschema:"description=enables writing to two databases simultaneously" default:"false"`
 	// PrimaryDBSource is the primary database source for all read and write operations
