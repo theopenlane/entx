@@ -9,7 +9,7 @@ require (
 	entgo.io/ent v0.14.1
 	github.com/99designs/gqlgen v0.17.55
 	github.com/XSAM/otelsql v0.35.0
-	github.com/brianvoe/gofakeit/v7 v7.0.4
+	github.com/brianvoe/gofakeit/v7 v7.1.1
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/rs/zerolog v1.33.0
 	github.com/stoewer/go-strcase v1.3.0
