@@ -16,7 +16,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/theopenlane/iam v0.2.3
 	github.com/theopenlane/utils v0.3.0
-	github.com/vektah/gqlparser/v2 v2.5.18
+	github.com/vektah/gqlparser/v2 v2.5.19
 	go.opentelemetry.io/otel v1.31.0
 	golang.org/x/tools v0.26.0
 	modernc.org/sqlite v1.33.1
