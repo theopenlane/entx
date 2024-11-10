@@ -7,7 +7,7 @@ godebug gotypesalias=0
 require (
 	entgo.io/contrib v0.6.0
 	entgo.io/ent v0.14.1
-	github.com/99designs/gqlgen v0.17.55
+	github.com/99designs/gqlgen v0.17.56
 	github.com/XSAM/otelsql v0.35.0
 	github.com/brianvoe/gofakeit/v7 v7.1.2
 	github.com/gertd/go-pluralize v0.2.1
