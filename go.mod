@@ -19,7 +19,7 @@ require (
 	github.com/vektah/gqlparser/v2 v2.5.19
 	go.opentelemetry.io/otel v1.32.0
 	golang.org/x/tools v0.27.0
-	modernc.org/sqlite v1.33.1
+	modernc.org/sqlite v1.34.1
 )
 
 require (
