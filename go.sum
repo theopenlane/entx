@@ -153,8 +153,8 @@ github.com/theopenlane/echox v0.2.0 h1:s9DJJrsLOSPsXVfgmQxgXmSVtxzztBnSmcVX4ax7t
 github.com/theopenlane/echox v0.2.0/go.mod h1:nfxwQpwvqYYI/pFHJKDs3/HLvjYKEGCih4XDgLSma64=
 github.com/theopenlane/iam v0.3.1 h1:qZz/h1dHyuHbKMq4wvpKFCj1Gliq6cpfNNAT1ynK3JA=
 github.com/theopenlane/iam v0.3.1/go.mod h1:wdXzW9XiBzFzagNC7uW/TuwpVMQETrkkNBr0HbU3FEY=
-github.com/theopenlane/utils v0.3.1 h1:CCRre2rpuj35Qij2hWgro0Urg94KJq6aAo2pdaWkziI=
-github.com/theopenlane/utils v0.3.1/go.mod h1:sAvism3Vv8pb0kRj2lYQBYUaAKKRJSwULYoQzzLTTJw=
+github.com/theopenlane/utils v0.4.0 h1:k0DNZFjp1hpwfqObwXb2XgaO0jJ6ULJuJH06c9Ekquk=
+github.com/theopenlane/utils v0.4.0/go.mod h1:sAvism3Vv8pb0kRj2lYQBYUaAKKRJSwULYoQzzLTTJw=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/valyala/fasttemplate v1.2.2 h1:lxLXG0uE3Qnshl9QyaK6XJxMXlQZELvChBOCmQD0Loo=
