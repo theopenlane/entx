@@ -81,6 +81,15 @@ func TestGetAuthzPolicyInfo(t *testing.T) {
 			},
 		},
 		{
+			name:       "self referencing schema, snake case",
+			schemaName: "ActionPlan",
+			expectedValue: authzPolicyInfo{
+				ObjectType:      "action_plan",
+				NillableIDField: false,
+				IDField:         "Ref",
+			},
+		},
+		{
 			name:       "org owned schema",
 			schemaName: "List",
 			expectedValue: authzPolicyInfo{
