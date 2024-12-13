@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/entc"
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/entc/load"
+	"github.com/stoewer/go-strcase"
 	"github.com/theopenlane/iam/entfga"
 )
 
@@ -243,7 +244,7 @@ func (t *templateInfo) getAuthzPolicyInfo(schema *load.Schema) error {
 
 	// default to schema name if object type is not set
 	if annotations.ObjectType == "" {
-		t.AuthzPolicy.ObjectType = strings.ToLower(schema.Name)
+		t.AuthzPolicy.ObjectType = strcase.SnakeCase(schema.Name)
 	} else {
 		t.AuthzPolicy.ObjectType = annotations.ObjectType
 	}
