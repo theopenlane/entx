@@ -23,8 +23,17 @@ union SearchResult =
   {{- end }}
 
 type SearchResultConnection {
+  """
+  Information to aid in pagination.
+  """
   page: PageInfo!
-
+  """
+  Identifies the total count of items in the connection.
+  """
+  totalCount: Int!
+  """
+  A list of nodes with results.
+  """
   nodes: [SearchResult!]!
 }
 
