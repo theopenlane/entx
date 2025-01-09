@@ -16,7 +16,7 @@ require (
 	github.com/theopenlane/utils v0.4.2
 	github.com/vektah/gqlparser/v2 v2.5.21
 	go.opentelemetry.io/otel v1.33.0
-	golang.org/x/tools v0.28.0
+	golang.org/x/tools v0.29.0
 )
 
 require (
@@ -66,7 +66,7 @@ require (
 	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/oauth2 v0.24.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
