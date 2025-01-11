@@ -1,5 +1,8 @@
 default_stages: [pre-commit]
 fail_fast: true
+default_language_version:
+  golang: system
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -7,10 +10,10 @@ repos:
       - id: trailing-whitespace
       - id: detect-private-key
   - repo: https://github.com/google/yamlfmt
-    rev: v0.14.0
+    rev: v0.15.0
     hooks:
       - id: yamlfmt
   - repo: https://github.com/crate-ci/typos
-    rev: v1.27.3
+    rev: v1.29.4
     hooks:
       - id: typos
