@@ -78,6 +78,7 @@ func TestGetAuthzPolicyInfo(t *testing.T) {
 				ObjectType:      "user",
 				NillableIDField: false,
 				IDField:         "Ref",
+				UserOwned:       true,
 			},
 		},
 		{
@@ -87,6 +88,7 @@ func TestGetAuthzPolicyInfo(t *testing.T) {
 				ObjectType:      "action_plan",
 				NillableIDField: false,
 				IDField:         "Ref",
+				SelfAccess:      true,
 			},
 		},
 		{
@@ -96,6 +98,7 @@ func TestGetAuthzPolicyInfo(t *testing.T) {
 				ObjectType:      "organization",
 				NillableIDField: false,
 				IDField:         "OwnerID",
+				OrgOwned:        true,
 			},
 		},
 		{
@@ -105,6 +108,7 @@ func TestGetAuthzPolicyInfo(t *testing.T) {
 				ObjectType:      "todo",
 				NillableIDField: true,
 				IDField:         "Ref",
+				SelfAccess:      true,
 			},
 		},
 	}
