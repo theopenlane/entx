@@ -120,7 +120,7 @@ func ({{ $name }}) Interceptors() []ent.Interceptor {
 		{{- if .AuthzPolicy.SelfAccess }}
 		interceptors.FilterListQuery(),
 		{{- else }}
-		interceptors.HistoryAccess("{{ .AuthzPolicy.AllowedRelation }}", {{ .AuthzPolicy.OrgOwned }},  {{ .AuthzPolicy.UserOwned }}),
+		interceptors.HistoryAccess("{{ .AuthzPolicy.AllowedRelation }}", {{ .AuthzPolicy.OrgOwned }},  {{ .AuthzPolicy.UserOwned }}, "{{ .AuthzPolicy.ObjectOwner }}"),
 		{{- end }}
 	}
 }

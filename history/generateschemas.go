@@ -66,6 +66,8 @@ type authzPolicyInfo struct {
 	UserOwned bool
 	// SelfAccess is a boolean that tells the extension that the schema is self access, used by the history interceptor
 	SelfAccess bool
+	// ObjectOwner is a string that tells the extension that the schema is object owned, used by the history interceptor
+	ObjectOwner string
 }
 
 var (
@@ -247,8 +249,22 @@ func (t *templateInfo) getAuthzPolicyInfo(schema *load.Schema) error {
 	// default to schema name if object type is not set
 	if annotations.ObjectType == "" {
 		t.AuthzPolicy.ObjectType = strcase.SnakeCase(schema.Name)
+
+		// if the object type is empty, default to self access
+		t.AuthzPolicy.SelfAccess = true
 	} else {
 		t.AuthzPolicy.ObjectType = annotations.ObjectType
+
+		switch strings.ToLower(annotations.ObjectType) {
+		case "user":
+			t.AuthzPolicy.UserOwned = true
+		case "organization":
+			t.AuthzPolicy.OrgOwned = true
+		case strings.ToLower(t.SchemaName):
+			t.AuthzPolicy.SelfAccess = true
+		default:
+			t.AuthzPolicy.ObjectOwner = t.AuthzPolicy.ObjectType
+		}
 	}
 
 	// the id is now the `ref` field on the history table
@@ -258,43 +274,7 @@ func (t *templateInfo) getAuthzPolicyInfo(schema *load.Schema) error {
 		t.AuthzPolicy.IDField = annotations.IDField
 	}
 
-	t.AuthzPolicy.OrgOwned = isOrgOwned(schema)
-	t.AuthzPolicy.UserOwned = isUserOwned(schema)
-	t.AuthzPolicy.SelfAccess = !t.AuthzPolicy.OrgOwned && !t.AuthzPolicy.UserOwned
-
 	return nil
-}
-
-// isOrgOwned checks if the schema is org owned and returns true if it is
-func isOrgOwned(schema *load.Schema) bool {
-	for _, f := range schema.Fields {
-		// all org owned objects are mixed in
-		if !f.Position.MixedIn {
-			continue
-		}
-
-		if f.Name == "owner_id" {
-			return strings.Contains(f.Comment, "organization")
-		}
-	}
-
-	return false
-}
-
-// isUserOwned checks if the schema is user owned and returns true if it is
-func isUserOwned(schema *load.Schema) bool {
-	for _, f := range schema.Fields {
-		// all org owned objects are mixed in
-		if !f.Position.MixedIn {
-			continue
-		}
-
-		if f.Name == "owner_id" {
-			return strings.Contains(f.Comment, "user")
-		}
-	}
-
-	return false
 }
 
 // getAuthzAnnotation looks for the entfga Authz annotation in the schema
