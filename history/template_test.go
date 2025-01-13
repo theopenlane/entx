@@ -39,7 +39,7 @@ func TestExtractUpdatedByKey(t *testing.T) {
 	}
 }
 
-func TestExxtractUpdatedByValueType(t *testing.T) {
+func TestExtractUpdatedByValueType(t *testing.T) {
 	tests := []struct {
 		name string
 		val  any

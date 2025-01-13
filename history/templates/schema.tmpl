@@ -117,21 +117,11 @@ func ({{ $name }}) Indexes() []ent.Index {
 // Interceptors of the {{ $name }}
 func ({{ $name }}) Interceptors() []ent.Interceptor {
 	return []ent.Interceptor{
-		interceptors.HistoryAccess("{{ .AuthzPolicy.AllowedRelation }}", {{ .AuthzPolicy.OrgOwned }},  {{ .AuthzPolicy.UserOwned }}),
-	}
-}
-{{- end }}
-
-{{- if .AuthzPolicy.ObjectType }}
-// Policy of the {{ $name }}
-func ({{ $name }}) Policy() ent.Policy {
-	return privacy.Policy{
-		Query: privacy.QueryPolicy{
-			privacy.{{ $name }}QueryRuleFunc(func(ctx context.Context, q *generated.{{ $name }}Query) error {
-				return q.CheckAccess(ctx)
-			}),
-			privacy.AlwaysDenyRule(),
-		},
+		{{- if .AuthzPolicy.SelfAccess }}
+		interceptors.FilterListQuery(),
+		{{- else }}
+		interceptors.HistoryAccess("{{ .AuthzPolicy.AllowedRelation }}", {{ .AuthzPolicy.OrgOwned }},  {{ .AuthzPolicy.UserOwned }}, "{{ .AuthzPolicy.ObjectOwner }}"),
+		{{- end }}
 	}
 }
 {{- end }}
