@@ -260,7 +260,7 @@ func (t *templateInfo) getAuthzPolicyInfo(schema *load.Schema) error {
 			t.AuthzPolicy.UserOwned = true
 		case "organization":
 			t.AuthzPolicy.OrgOwned = true
-		case strings.ToLower(t.SchemaName):
+		case strings.ToLower(schema.Name):
 			t.AuthzPolicy.SelfAccess = true
 		default:
 			t.AuthzPolicy.ObjectOwner = t.AuthzPolicy.ObjectType
