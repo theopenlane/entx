@@ -64,6 +64,8 @@ type authzPolicyInfo struct {
 	OrgOwned bool
 	// UserOwned is a boolean that tells the extension that the schema is user owned, used by the history interceptor
 	UserOwned bool
+	// SelfAccess is a boolean that tells the extension that the schema is self access, used by the history interceptor
+	SelfAccess bool
 }
 
 var (
@@ -257,8 +259,8 @@ func (t *templateInfo) getAuthzPolicyInfo(schema *load.Schema) error {
 	}
 
 	t.AuthzPolicy.OrgOwned = isOrgOwned(schema)
-
 	t.AuthzPolicy.UserOwned = isUserOwned(schema)
+	t.AuthzPolicy.SelfAccess = !t.AuthzPolicy.OrgOwned && !t.AuthzPolicy.UserOwned
 
 	return nil
 }
