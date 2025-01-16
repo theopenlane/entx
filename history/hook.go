@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"entgo.io/ent"
+	"github.com/theopenlane/entx"
 )
 
 // Mutation is an interface that must be implemented by all mutations that are
@@ -24,7 +25,7 @@ type Mutator interface {
 func On(hk ent.Hook, op ent.Op) ent.Hook {
 	return func(next ent.Mutator) ent.Mutator {
 		return ent.MutateFunc(func(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-			if m.Op().Is(op) {
+			if m.Op().Is(op) && !(op.Is(ent.OpUpdate|ent.OpUpdateOne) && entx.CheckIsSoftDelete(ctx)) {
 				return hk(next).Mutate(ctx, m)
 			}
 
