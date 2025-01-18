@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"entgo.io/ent/schema/field"
@@ -21,7 +22,17 @@ func NewPrefixedIdentifier(prefix string) PrefixedIdentifier {
 
 // Value implements the TypeValueScanner.Value method.
 func (p PrefixedIdentifier) Value(s string) (driver.Value, error) {
-	return strings.TrimPrefix(s, p.prefix+"-"), nil
+	value := strings.TrimPrefix(s, p.prefix+"-")
+	if value == "" {
+		return "", nil
+	}
+
+	trimValue, err := strconv.Atoi(value)
+	if err != nil {
+		return nil, err
+	}
+
+	return fmt.Sprintf("%d", trimValue), nil
 }
 
 // ScanValue implements the TypeValueScanner.ScanValue method.
