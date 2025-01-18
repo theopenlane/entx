@@ -47,7 +47,7 @@ func (i IDMixin) Fields() []ent.Field {
 			),
 	}
 
-	if !i.IncludeMappingID {
+	if i.IncludeMappingID {
 		fields = append(fields,
 			field.String("mapping_id").
 				Immutable().
