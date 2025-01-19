@@ -123,6 +123,11 @@ func (o *OrganizationQuery) collectField(ctx context.Context, oneNode bool, opCt
 	)
 	for _, field := range graphql.CollectFields(opCtx, collected.Selections, satisfies) {
 		switch field.Name {
+		case "displayID":
+			if _, ok := fieldSeen[organization.FieldDisplayID]; !ok {
+				selectedFields = append(selectedFields, organization.FieldDisplayID)
+				fieldSeen[organization.FieldDisplayID] = struct{}{}
+			}
 		case "createdAt":
 			if _, ok := fieldSeen[organization.FieldCreatedAt]; !ok {
 				selectedFields = append(selectedFields, organization.FieldCreatedAt)

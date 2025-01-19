@@ -312,6 +312,21 @@ type OrganizationWhereInput struct {
 	IDEqualFold    *string  `json:"idEqualFold,omitempty"`
 	IDContainsFold *string  `json:"idContainsFold,omitempty"`
 
+	// "display_id" field predicates.
+	DisplayID             *string  `json:"displayID,omitempty"`
+	DisplayIDNEQ          *string  `json:"displayIDNEQ,omitempty"`
+	DisplayIDIn           []string `json:"displayIDIn,omitempty"`
+	DisplayIDNotIn        []string `json:"displayIDNotIn,omitempty"`
+	DisplayIDGT           *string  `json:"displayIDGT,omitempty"`
+	DisplayIDGTE          *string  `json:"displayIDGTE,omitempty"`
+	DisplayIDLT           *string  `json:"displayIDLT,omitempty"`
+	DisplayIDLTE          *string  `json:"displayIDLTE,omitempty"`
+	DisplayIDContains     *string  `json:"displayIDContains,omitempty"`
+	DisplayIDHasPrefix    *string  `json:"displayIDHasPrefix,omitempty"`
+	DisplayIDHasSuffix    *string  `json:"displayIDHasSuffix,omitempty"`
+	DisplayIDEqualFold    *string  `json:"displayIDEqualFold,omitempty"`
+	DisplayIDContainsFold *string  `json:"displayIDContainsFold,omitempty"`
+
 	// "created_at" field predicates.
 	CreatedAt       *time.Time  `json:"createdAt,omitempty"`
 	CreatedAtNEQ    *time.Time  `json:"createdAtNEQ,omitempty"`
@@ -503,6 +518,45 @@ func (i *OrganizationWhereInput) P() (predicate.Organization, error) {
 	}
 	if i.IDContainsFold != nil {
 		predicates = append(predicates, organization.IDContainsFold(*i.IDContainsFold))
+	}
+	if i.DisplayID != nil {
+		predicates = append(predicates, organization.DisplayIDEQ(*i.DisplayID))
+	}
+	if i.DisplayIDNEQ != nil {
+		predicates = append(predicates, organization.DisplayIDNEQ(*i.DisplayIDNEQ))
+	}
+	if len(i.DisplayIDIn) > 0 {
+		predicates = append(predicates, organization.DisplayIDIn(i.DisplayIDIn...))
+	}
+	if len(i.DisplayIDNotIn) > 0 {
+		predicates = append(predicates, organization.DisplayIDNotIn(i.DisplayIDNotIn...))
+	}
+	if i.DisplayIDGT != nil {
+		predicates = append(predicates, organization.DisplayIDGT(*i.DisplayIDGT))
+	}
+	if i.DisplayIDGTE != nil {
+		predicates = append(predicates, organization.DisplayIDGTE(*i.DisplayIDGTE))
+	}
+	if i.DisplayIDLT != nil {
+		predicates = append(predicates, organization.DisplayIDLT(*i.DisplayIDLT))
+	}
+	if i.DisplayIDLTE != nil {
+		predicates = append(predicates, organization.DisplayIDLTE(*i.DisplayIDLTE))
+	}
+	if i.DisplayIDContains != nil {
+		predicates = append(predicates, organization.DisplayIDContains(*i.DisplayIDContains))
+	}
+	if i.DisplayIDHasPrefix != nil {
+		predicates = append(predicates, organization.DisplayIDHasPrefix(*i.DisplayIDHasPrefix))
+	}
+	if i.DisplayIDHasSuffix != nil {
+		predicates = append(predicates, organization.DisplayIDHasSuffix(*i.DisplayIDHasSuffix))
+	}
+	if i.DisplayIDEqualFold != nil {
+		predicates = append(predicates, organization.DisplayIDEqualFold(*i.DisplayIDEqualFold))
+	}
+	if i.DisplayIDContainsFold != nil {
+		predicates = append(predicates, organization.DisplayIDContainsFold(*i.DisplayIDContainsFold))
 	}
 	if i.CreatedAt != nil {
 		predicates = append(predicates, organization.CreatedAtEQ(*i.CreatedAt))

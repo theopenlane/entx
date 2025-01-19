@@ -20,6 +20,12 @@ type OrganizationCreate struct {
 	hooks    []Hook
 }
 
+// SetDisplayID sets the "display_id" field.
+func (oc *OrganizationCreate) SetDisplayID(s string) *OrganizationCreate {
+	oc.mutation.SetDisplayID(s)
+	return oc
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (oc *OrganizationCreate) SetCreatedAt(t time.Time) *OrganizationCreate {
 	oc.mutation.SetCreatedAt(t)
@@ -102,6 +108,14 @@ func (oc *OrganizationCreate) SetID(s string) *OrganizationCreate {
 	return oc
 }
 
+// SetNillableID sets the "id" field if the given value is not nil.
+func (oc *OrganizationCreate) SetNillableID(s *string) *OrganizationCreate {
+	if s != nil {
+		oc.SetID(*s)
+	}
+	return oc
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (oc *OrganizationCreate) Mutation() *OrganizationMutation {
 	return oc.mutation
@@ -153,11 +167,26 @@ func (oc *OrganizationCreate) defaults() error {
 		v := organization.DefaultUpdatedAt()
 		oc.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := oc.mutation.ID(); !ok {
+		if organization.DefaultID == nil {
+			return fmt.Errorf("ent: uninitialized organization.DefaultID (forgotten import ent/runtime?)")
+		}
+		v := organization.DefaultID()
+		oc.mutation.SetID(v)
+	}
 	return nil
 }
 
 // check runs all checks and user-defined validators on the builder.
 func (oc *OrganizationCreate) check() error {
+	if _, ok := oc.mutation.DisplayID(); !ok {
+		return &ValidationError{Name: "display_id", err: errors.New(`ent: missing required field "Organization.display_id"`)}
+	}
+	if v, ok := oc.mutation.DisplayID(); ok {
+		if err := organization.DisplayIDValidator(v); err != nil {
+			return &ValidationError{Name: "display_id", err: fmt.Errorf(`ent: validator failed for field "Organization.display_id": %w`, err)}
+		}
+	}
 	if _, ok := oc.mutation.Name(); !ok {
 		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "Organization.name"`)}
 	}
@@ -200,6 +229,10 @@ func (oc *OrganizationCreate) createSpec() (*Organization, *sqlgraph.CreateSpec)
 	if id, ok := oc.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
+	}
+	if value, ok := oc.mutation.DisplayID(); ok {
+		_spec.SetField(organization.FieldDisplayID, field.TypeString, value)
+		_node.DisplayID = value
 	}
 	if value, ok := oc.mutation.CreatedAt(); ok {
 		_spec.SetField(organization.FieldCreatedAt, field.TypeTime, value)

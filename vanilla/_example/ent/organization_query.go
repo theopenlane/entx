@@ -264,12 +264,12 @@ func (oq *OrganizationQuery) Clone() *OrganizationQuery {
 // Example:
 //
 //	var v []struct {
-//		CreatedAt time.Time `json:"created_at,omitempty"`
+//		DisplayID string `json:"display_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.Organization.Query().
-//		GroupBy(organization.FieldCreatedAt).
+//		GroupBy(organization.FieldDisplayID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (oq *OrganizationQuery) GroupBy(field string, fields ...string) *OrganizationGroupBy {
@@ -287,11 +287,11 @@ func (oq *OrganizationQuery) GroupBy(field string, fields ...string) *Organizati
 // Example:
 //
 //	var v []struct {
-//		CreatedAt time.Time `json:"created_at,omitempty"`
+//		DisplayID string `json:"display_id,omitempty"`
 //	}
 //
 //	client.Organization.Query().
-//		Select(organization.FieldCreatedAt).
+//		Select(organization.FieldDisplayID).
 //		Scan(ctx, &v)
 func (oq *OrganizationQuery) Select(fields ...string) *OrganizationSelect {
 	oq.ctx.Fields = append(oq.ctx.Fields, fields...)

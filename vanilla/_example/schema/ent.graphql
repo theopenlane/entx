@@ -134,6 +134,10 @@ input OrgMembershipWhereInput {
 }
 type Organization implements Node {
   id: ID!
+  """
+  a shortened prefixed id field to use as a human readable identifier
+  """
+  displayID: String!
   createdAt: Time
   updatedAt: Time
   createdBy: String
@@ -168,6 +172,22 @@ input OrganizationWhereInput {
   idLTE: ID
   idEqualFold: ID
   idContainsFold: ID
+  """
+  display_id field predicates
+  """
+  displayID: String
+  displayIDNEQ: String
+  displayIDIn: [String!]
+  displayIDNotIn: [String!]
+  displayIDGT: String
+  displayIDGTE: String
+  displayIDLT: String
+  displayIDLTE: String
+  displayIDContains: String
+  displayIDHasPrefix: String
+  displayIDHasSuffix: String
+  displayIDEqualFold: String
+  displayIDContainsFold: String
   """
   created_at field predicates
   """

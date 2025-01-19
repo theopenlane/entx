@@ -17,6 +17,8 @@ type Organization struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID string `json:"id,omitempty"`
+	// a shortened prefixed id field to use as a human readable identifier
+	DisplayID string `json:"display_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -37,7 +39,7 @@ func (*Organization) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case organization.FieldID, organization.FieldCreatedBy, organization.FieldUpdatedBy, organization.FieldName, organization.FieldDescription:
+		case organization.FieldID, organization.FieldDisplayID, organization.FieldCreatedBy, organization.FieldUpdatedBy, organization.FieldName, organization.FieldDescription:
 			values[i] = new(sql.NullString)
 		case organization.FieldCreatedAt, organization.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -61,6 +63,12 @@ func (o *Organization) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field id", values[i])
 			} else if value.Valid {
 				o.ID = value.String
+			}
+		case organization.FieldDisplayID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field display_id", values[i])
+			} else if value.Valid {
+				o.DisplayID = value.String
 			}
 		case organization.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -134,6 +142,9 @@ func (o *Organization) String() string {
 	var builder strings.Builder
 	builder.WriteString("Organization(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", o.ID))
+	builder.WriteString("display_id=")
+	builder.WriteString(o.DisplayID)
+	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(o.CreatedAt.Format(time.ANSIC))
 	builder.WriteString(", ")
