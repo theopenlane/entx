@@ -1,10 +1,10 @@
 package mixin
 
 import (
+	"ariga.io/atlas/sql/postgres"
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
-	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/mixin"
 
@@ -64,14 +64,13 @@ func (i IDMixin) Fields() []ent.Field {
 			field.String("identifier").
 				Comment("a prefixed incremental field to use as a human readable identifier").
 				SchemaType(map[string]string{
-					dialect.Postgres: "SERIAL",
+					dialect.Postgres: postgres.TypeBigSerial,
 				}).
 				ValueScanner(customtypes.NewPrefixedIdentifier(i.HumanIdentifierPrefix)).
 				Immutable().
 				Annotations(
 					entx.FieldSearchable(),
 					entgql.Skip(entgql.SkipMutationCreateInput|entgql.SkipMutationUpdateInput),
-					entsql.DefaultExpr("nextval('identifier_id_seq')"),
 				).
 				Unique(),
 		)
