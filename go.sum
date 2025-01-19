@@ -1,5 +1,5 @@
-ariga.io/atlas v0.26.1 h1:UwLn9sXgcuoo9/A3sxXhDqnOImXUcaYb2JqVP0FQciw=
-ariga.io/atlas v0.26.1/go.mod h1:KPLc7Zj+nzoXfWshrcY1RwlOh94dsATQEy4UPrF2RkM=
+ariga.io/atlas v0.30.0 h1:Tyi4A1LXDp9VB+EO51e8Xacsw31uJge9fr5pmd3TL9U=
+ariga.io/atlas v0.30.0/go.mod h1:lkLAw/t2/P7g5CFYlYmHvNuShlmGujwm3OGsW00xowI=
 entgo.io/contrib v0.6.0 h1:xfo4TbJE7sJZWx7BV7YrpSz7IPFvS8MzL3fnfzZjKvQ=
 entgo.io/contrib v0.6.0/go.mod h1:3qWIseJ/9Wx2Hu5zVh15FDzv7d/UvKNcYKdViywWCQg=
 entgo.io/ent v0.14.1 h1:fUERL506Pqr92EPHJqr8EYxbPioflJo6PudkrEA8a/s=
@@ -24,6 +24,8 @@ github.com/apparentlymart/go-textseg/v15 v15.0.0 h1:uYvfpb3DyLSCGWnctWKGj857c6ew
 github.com/apparentlymart/go-textseg/v15 v15.0.0/go.mod h1:K8XmNZdhEBkdlyDdvbmmsvpAG721bKi0joRfFdHIWJ4=
 github.com/arbovm/levenshtein v0.0.0-20160628152529-48b4e1c0c4d0 h1:jfIu9sQUG6Ig+0+Ap1h4unLjW6YQJpKZVmUzxsD4E/Q=
 github.com/arbovm/levenshtein v0.0.0-20160628152529-48b4e1c0c4d0/go.mod h1:t2tdKJDJF9BV14lnkjHmOQgcvEKgtqs5a1N3LNdJhGE=
+github.com/bmatcuk/doublestar v1.3.4 h1:gPypJ5xD31uhX6Tf54sDPUOBXTqKH4c9aPY66CyQrS0=
+github.com/bmatcuk/doublestar v1.3.4/go.mod h1:wiQtGV+rzVYxB7WIlirSN++5HPtPlXEo9MEoZQC/PmE=
 github.com/brianvoe/gofakeit/v7 v7.1.2 h1:vSKaVScNhWVpf1rlyEKSvO8zKZfuDtGqoIHT//iNNb8=
 github.com/brianvoe/gofakeit/v7 v7.1.2/go.mod h1:QXuPeBw164PJCzCUZVmgpgHJ3Llj49jSLVkKPMtxtxA=
 github.com/bsm/ginkgo/v2 v2.12.0 h1:Ny8MWAHyOepLGlLKYmXG4IEkioBysk6GpaRTLC8zwWs=
