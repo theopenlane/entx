@@ -3,6 +3,7 @@ module github.com/theopenlane/entx
 go 1.23.3
 
 require (
+	ariga.io/atlas v0.26.1
 	entgo.io/contrib v0.6.0
 	entgo.io/ent v0.14.1
 	github.com/99designs/gqlgen v0.17.63
@@ -20,7 +21,6 @@ require (
 )
 
 require (
-	ariga.io/atlas v0.26.1 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/agnivade/levenshtein v1.2.0 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
