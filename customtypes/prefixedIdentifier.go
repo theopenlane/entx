@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"entgo.io/ent/schema/field"
+	"github.com/rs/zerolog/log"
 )
 
 // PrefixedIdentifier is a custom type that implements the TypeValueScanner interface
@@ -24,15 +25,17 @@ func NewPrefixedIdentifier(prefix string) PrefixedIdentifier {
 func (p PrefixedIdentifier) Value(s string) (driver.Value, error) {
 	value := strings.TrimPrefix(s, p.prefix+"-")
 	if value == "" {
-		return "", nil
+		return 0, nil
 	}
 
 	trimValue, err := strconv.Atoi(value)
 	if err != nil {
-		return nil, err
+		log.Debug().Err(err).Msg("failed to convert string to int, skipping")
+
+		return 0, nil
 	}
 
-	return fmt.Sprintf("%d", trimValue), nil
+	return trimValue, nil
 }
 
 // ScanValue implements the TypeValueScanner.ScanValue method.

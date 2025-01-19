@@ -18,21 +18,27 @@ func TestPrefixedIdentifierValue(t *testing.T) {
 	}{
 		{
 			name:   "with prefix",
-			prefix: "test",
-			input:  "test-000001",
-			want:   "1",
+			prefix: "TSK",
+			input:  "TSK-000006",
+			want:   6,
+		},
+		{
+			name:   "with wrong prefix",
+			prefix: "TEST",
+			input:  "TSK-000006",
+			want:   0,
 		},
 		{
 			name:   "without prefix",
 			prefix: "test",
 			input:  "123",
-			want:   "123",
+			want:   123,
 		},
 		{
 			name:   "empty input",
 			prefix: "test",
 			input:  "",
-			want:   "",
+			want:   0,
 		},
 	}
 
