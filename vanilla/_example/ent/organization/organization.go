@@ -14,6 +14,8 @@ const (
 	Label = "organization"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
+	// FieldDisplayID holds the string denoting the display_id field in the database.
+	FieldDisplayID = "display_id"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -33,6 +35,7 @@ const (
 // Columns holds all SQL columns for organization fields.
 var Columns = []string{
 	FieldID,
+	FieldDisplayID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldCreatedBy,
@@ -57,7 +60,9 @@ func ValidColumn(column string) bool {
 //
 //	import _ "github.com/theopenlane/entx/vanilla/_example/ent/runtime"
 var (
-	Hooks [1]ent.Hook
+	Hooks [2]ent.Hook
+	// DisplayIDValidator is a validator for the "display_id" field. It is called by the builders before save.
+	DisplayIDValidator func(string) error
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -66,6 +71,8 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
 	NameValidator func(string) error
+	// DefaultID holds the default value on creation for the "id" field.
+	DefaultID func() string
 )
 
 // OrderOption defines the ordering options for the Organization queries.
@@ -74,6 +81,11 @@ type OrderOption func(*sql.Selector)
 // ByID orders the results by the id field.
 func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
+}
+
+// ByDisplayID orders the results by the display_id field.
+func ByDisplayID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDisplayID, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

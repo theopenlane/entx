@@ -17,8 +17,6 @@ type Organization struct {
 // Fields of the Organization
 func (Organization) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("id").
-			Immutable(),
 		field.String("name").
 			Comment("the name of the organization").
 			NotEmpty(),
@@ -44,6 +42,10 @@ func (Organization) Annotations() []schema.Annotation {
 
 func (Organization) Mixin() []ent.Mixin {
 	return []ent.Mixin{
+		mixin.IDMixin{
+			HumanIdentifierPrefix: "ORG",
+			SingleFieldIndex:      true,
+		},
 		mixin.AuditMixin{},
 	}
 }

@@ -64,6 +64,11 @@ func IDContainsFold(id string) predicate.Organization {
 	return predicate.Organization(sql.FieldContainsFold(FieldID, id))
 }
 
+// DisplayID applies equality check predicate on the "display_id" field. It's identical to DisplayIDEQ.
+func DisplayID(v string) predicate.Organization {
+	return predicate.Organization(sql.FieldEQ(FieldDisplayID, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Organization {
 	return predicate.Organization(sql.FieldEQ(FieldCreatedAt, v))
@@ -92,6 +97,71 @@ func Name(v string) predicate.Organization {
 // Description applies equality check predicate on the "description" field. It's identical to DescriptionEQ.
 func Description(v string) predicate.Organization {
 	return predicate.Organization(sql.FieldEQ(FieldDescription, v))
+}
+
+// DisplayIDEQ applies the EQ predicate on the "display_id" field.
+func DisplayIDEQ(v string) predicate.Organization {
+	return predicate.Organization(sql.FieldEQ(FieldDisplayID, v))
+}
+
+// DisplayIDNEQ applies the NEQ predicate on the "display_id" field.
+func DisplayIDNEQ(v string) predicate.Organization {
+	return predicate.Organization(sql.FieldNEQ(FieldDisplayID, v))
+}
+
+// DisplayIDIn applies the In predicate on the "display_id" field.
+func DisplayIDIn(vs ...string) predicate.Organization {
+	return predicate.Organization(sql.FieldIn(FieldDisplayID, vs...))
+}
+
+// DisplayIDNotIn applies the NotIn predicate on the "display_id" field.
+func DisplayIDNotIn(vs ...string) predicate.Organization {
+	return predicate.Organization(sql.FieldNotIn(FieldDisplayID, vs...))
+}
+
+// DisplayIDGT applies the GT predicate on the "display_id" field.
+func DisplayIDGT(v string) predicate.Organization {
+	return predicate.Organization(sql.FieldGT(FieldDisplayID, v))
+}
+
+// DisplayIDGTE applies the GTE predicate on the "display_id" field.
+func DisplayIDGTE(v string) predicate.Organization {
+	return predicate.Organization(sql.FieldGTE(FieldDisplayID, v))
+}
+
+// DisplayIDLT applies the LT predicate on the "display_id" field.
+func DisplayIDLT(v string) predicate.Organization {
+	return predicate.Organization(sql.FieldLT(FieldDisplayID, v))
+}
+
+// DisplayIDLTE applies the LTE predicate on the "display_id" field.
+func DisplayIDLTE(v string) predicate.Organization {
+	return predicate.Organization(sql.FieldLTE(FieldDisplayID, v))
+}
+
+// DisplayIDContains applies the Contains predicate on the "display_id" field.
+func DisplayIDContains(v string) predicate.Organization {
+	return predicate.Organization(sql.FieldContains(FieldDisplayID, v))
+}
+
+// DisplayIDHasPrefix applies the HasPrefix predicate on the "display_id" field.
+func DisplayIDHasPrefix(v string) predicate.Organization {
+	return predicate.Organization(sql.FieldHasPrefix(FieldDisplayID, v))
+}
+
+// DisplayIDHasSuffix applies the HasSuffix predicate on the "display_id" field.
+func DisplayIDHasSuffix(v string) predicate.Organization {
+	return predicate.Organization(sql.FieldHasSuffix(FieldDisplayID, v))
+}
+
+// DisplayIDEqualFold applies the EqualFold predicate on the "display_id" field.
+func DisplayIDEqualFold(v string) predicate.Organization {
+	return predicate.Organization(sql.FieldEqualFold(FieldDisplayID, v))
+}
+
+// DisplayIDContainsFold applies the ContainsFold predicate on the "display_id" field.
+func DisplayIDContainsFold(v string) predicate.Organization {
+	return predicate.Organization(sql.FieldContainsFold(FieldDisplayID, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

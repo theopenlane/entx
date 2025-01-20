@@ -39,6 +39,7 @@ var (
 	// OrganizationsColumns holds the columns for the "organizations" table.
 	OrganizationsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
+		{Name: "display_id", Type: field.TypeString, Unique: true},
 		{Name: "created_at", Type: field.TypeTime, Nullable: true},
 		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_by", Type: field.TypeString, Nullable: true},
@@ -55,7 +56,7 @@ var (
 			{
 				Name:    "organization_name",
 				Unique:  true,
-				Columns: []*schema.Column{OrganizationsColumns[5]},
+				Columns: []*schema.Column{OrganizationsColumns[6]},
 			},
 		},
 	}

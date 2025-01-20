@@ -17,25 +17,37 @@ func init() {
 	_ = orgmembershipFields
 	organizationMixin := schema.Organization{}.Mixin()
 	organizationMixinHooks0 := organizationMixin[0].Hooks()
+	organizationMixinHooks1 := organizationMixin[1].Hooks()
 	organization.Hooks[0] = organizationMixinHooks0[0]
+	organization.Hooks[1] = organizationMixinHooks1[0]
 	organizationMixinFields0 := organizationMixin[0].Fields()
 	_ = organizationMixinFields0
+	organizationMixinFields1 := organizationMixin[1].Fields()
+	_ = organizationMixinFields1
 	organizationFields := schema.Organization{}.Fields()
 	_ = organizationFields
+	// organizationDescDisplayID is the schema descriptor for display_id field.
+	organizationDescDisplayID := organizationMixinFields0[1].Descriptor()
+	// organization.DisplayIDValidator is a validator for the "display_id" field. It is called by the builders before save.
+	organization.DisplayIDValidator = organizationDescDisplayID.Validators[0].(func(string) error)
 	// organizationDescCreatedAt is the schema descriptor for created_at field.
-	organizationDescCreatedAt := organizationMixinFields0[0].Descriptor()
+	organizationDescCreatedAt := organizationMixinFields1[0].Descriptor()
 	// organization.DefaultCreatedAt holds the default value on creation for the created_at field.
 	organization.DefaultCreatedAt = organizationDescCreatedAt.Default.(func() time.Time)
 	// organizationDescUpdatedAt is the schema descriptor for updated_at field.
-	organizationDescUpdatedAt := organizationMixinFields0[1].Descriptor()
+	organizationDescUpdatedAt := organizationMixinFields1[1].Descriptor()
 	// organization.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	organization.DefaultUpdatedAt = organizationDescUpdatedAt.Default.(func() time.Time)
 	// organization.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	organization.UpdateDefaultUpdatedAt = organizationDescUpdatedAt.UpdateDefault.(func() time.Time)
 	// organizationDescName is the schema descriptor for name field.
-	organizationDescName := organizationFields[1].Descriptor()
+	organizationDescName := organizationFields[0].Descriptor()
 	// organization.NameValidator is a validator for the "name" field. It is called by the builders before save.
 	organization.NameValidator = organizationDescName.Validators[0].(func(string) error)
+	// organizationDescID is the schema descriptor for id field.
+	organizationDescID := organizationMixinFields0[0].Descriptor()
+	// organization.DefaultID holds the default value on creation for the id field.
+	organization.DefaultID = organizationDescID.Default.(func() string)
 }
 
 const (

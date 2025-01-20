@@ -530,6 +530,7 @@ type OrganizationMutation struct {
 	op            Op
 	typ           string
 	id            *string
+	display_id    *string
 	created_at    *time.Time
 	updated_at    *time.Time
 	created_by    *string
@@ -644,6 +645,42 @@ func (m *OrganizationMutation) IDs(ctx context.Context) ([]string, error) {
 	default:
 		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
 	}
+}
+
+// SetDisplayID sets the "display_id" field.
+func (m *OrganizationMutation) SetDisplayID(s string) {
+	m.display_id = &s
+}
+
+// DisplayID returns the value of the "display_id" field in the mutation.
+func (m *OrganizationMutation) DisplayID() (r string, exists bool) {
+	v := m.display_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDisplayID returns the old "display_id" field's value of the Organization entity.
+// If the Organization object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OrganizationMutation) OldDisplayID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDisplayID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDisplayID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDisplayID: %w", err)
+	}
+	return oldValue.DisplayID, nil
+}
+
+// ResetDisplayID resets all changes to the "display_id" field.
+func (m *OrganizationMutation) ResetDisplayID() {
+	m.display_id = nil
 }
 
 // SetCreatedAt sets the "created_at" field.
@@ -961,7 +998,10 @@ func (m *OrganizationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *OrganizationMutation) Fields() []string {
-	fields := make([]string, 0, 6)
+	fields := make([]string, 0, 7)
+	if m.display_id != nil {
+		fields = append(fields, organization.FieldDisplayID)
+	}
 	if m.created_at != nil {
 		fields = append(fields, organization.FieldCreatedAt)
 	}
@@ -988,6 +1028,8 @@ func (m *OrganizationMutation) Fields() []string {
 // schema.
 func (m *OrganizationMutation) Field(name string) (ent.Value, bool) {
 	switch name {
+	case organization.FieldDisplayID:
+		return m.DisplayID()
 	case organization.FieldCreatedAt:
 		return m.CreatedAt()
 	case organization.FieldUpdatedAt:
@@ -1009,6 +1051,8 @@ func (m *OrganizationMutation) Field(name string) (ent.Value, bool) {
 // database failed.
 func (m *OrganizationMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
+	case organization.FieldDisplayID:
+		return m.OldDisplayID(ctx)
 	case organization.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case organization.FieldUpdatedAt:
@@ -1030,6 +1074,13 @@ func (m *OrganizationMutation) OldField(ctx context.Context, name string) (ent.V
 // type.
 func (m *OrganizationMutation) SetField(name string, value ent.Value) error {
 	switch name {
+	case organization.FieldDisplayID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDisplayID(v)
+		return nil
 	case organization.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -1154,6 +1205,9 @@ func (m *OrganizationMutation) ClearField(name string) error {
 // It returns an error if the field is not defined in the schema.
 func (m *OrganizationMutation) ResetField(name string) error {
 	switch name {
+	case organization.FieldDisplayID:
+		m.ResetDisplayID()
+		return nil
 	case organization.FieldCreatedAt:
 		m.ResetCreatedAt()
 		return nil
