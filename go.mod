@@ -5,7 +5,7 @@ go 1.23.5
 require (
 	entgo.io/contrib v0.6.0
 	entgo.io/ent v0.14.1
-	github.com/99designs/gqlgen v0.17.63
+	github.com/99designs/gqlgen v0.17.64
 	github.com/XSAM/otelsql v0.36.0
 	github.com/brianvoe/gofakeit/v7 v7.2.1
 	github.com/gertd/go-pluralize v0.2.1
@@ -14,7 +14,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/theopenlane/iam v0.7.1
 	github.com/theopenlane/utils v0.4.3
-	github.com/vektah/gqlparser/v2 v2.5.21
+	github.com/vektah/gqlparser/v2 v2.5.22
 	go.opentelemetry.io/otel v1.34.0
 	golang.org/x/tools v0.29.0
 )
@@ -43,7 +43,7 @@ require (
 	github.com/lestrrat-go/iter v1.0.2 // indirect
 	github.com/lestrrat-go/jwx/v2 v2.1.3 // indirect
 	github.com/lestrrat-go/option v1.0.1 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/oklog/ulid/v2 v2.1.0 // indirect
