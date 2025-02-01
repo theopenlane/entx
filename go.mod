@@ -12,7 +12,7 @@ require (
 	github.com/rs/zerolog v1.33.0
 	github.com/stoewer/go-strcase v1.3.0
 	github.com/stretchr/testify v1.10.0
-	github.com/theopenlane/iam v0.7.4
+	github.com/theopenlane/iam v0.7.5
 	github.com/theopenlane/utils v0.4.3
 	github.com/vektah/gqlparser/v2 v2.5.22
 	go.opentelemetry.io/otel v1.34.0
