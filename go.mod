@@ -5,7 +5,7 @@ go 1.23.5
 require (
 	entgo.io/contrib v0.6.0
 	entgo.io/ent v0.14.1
-	github.com/99designs/gqlgen v0.17.65
+	github.com/99designs/gqlgen v0.17.66
 	github.com/XSAM/otelsql v0.36.0
 	github.com/brianvoe/gofakeit/v7 v7.2.1
 	github.com/gertd/go-pluralize v0.2.1
