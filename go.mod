@@ -14,7 +14,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/theopenlane/iam v0.8.3
 	github.com/theopenlane/utils v0.4.3
-	github.com/vektah/gqlparser/v2 v2.5.22
+	github.com/vektah/gqlparser/v2 v2.5.23
 	go.opentelemetry.io/otel v1.34.0
 	golang.org/x/tools v0.30.0
 )
@@ -22,7 +22,7 @@ require (
 require (
 	ariga.io/atlas v0.31.1-0.20250212144724-069be8033e83 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
-	github.com/agnivade/levenshtein v1.2.0 // indirect
+	github.com/agnivade/levenshtein v1.2.1 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/bmatcuk/doublestar v1.3.4 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
