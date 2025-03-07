@@ -88,7 +88,7 @@ func AuditHook(next ent.Mutator) ent.Mutator {
 			return nil, newUnexpectedAuditError(m)
 		}
 
-		actor, err := auth.GetUserIDFromContext(ctx)
+		actor, err := auth.GetSubjectIDFromContext(ctx)
 		if err != nil {
 			actor = "unknown"
 		}
