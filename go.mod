@@ -2,8 +2,6 @@ module github.com/theopenlane/entx
 
 go 1.24.1
 
-replace github.com/theopenlane/iam => ../iam
-
 require (
 	entgo.io/contrib v0.6.0
 	entgo.io/ent v0.14.3
