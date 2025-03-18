@@ -86,7 +86,7 @@ query GetOrganizationByID($organizationId: ID!) {
   }
 }
 
-query GetOrganizations($first: Int, $last: $Int, $where: OrganizationWhereInput) {
+query GetOrganizations($first: Int, $last: Int, $where: OrganizationWhereInput) {
   organizations(first: $first, last: $last, where: $where) {
     totalCount
     pageInfo {

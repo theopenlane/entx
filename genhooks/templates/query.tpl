@@ -65,7 +65,7 @@ query Get{{ .Name }}ByID(${{ .Name | ToLowerCamel }}Id: ID!) {
 }
 {{- end}}
 
-query Get{{ .Name | ToPlural }}($first: Int, $last: $Int, $where: {{ .Name }}WhereInput) {
+query Get{{ .Name | ToPlural }}($first: Int, $last: Int, $where: {{ .Name }}WhereInput) {
   {{ .Name | ToLowerCamel | ToPlural }}(first: $first, last: $last, where: $where) {
     totalCount
     pageInfo {
