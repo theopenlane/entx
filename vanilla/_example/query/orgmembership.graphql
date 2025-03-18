@@ -40,6 +40,13 @@ mutation DeleteOrgMembership($deleteOrgMembershipId: ID!) {
 
 query GetAllOrgMemberships {
   orgMemberships {
+    totalCount
+    pageInfo {
+      startCursor
+      endCursor
+      hasPreviousPage
+      hasNextPage
+    }
     edges {
       node {
         id
@@ -59,8 +66,15 @@ query GetOrgMembershipByID($orgMembershipId: ID!) {
   }
 }
 
-query GetOrgMemberships($where: OrgMembershipWhereInput) {
-  orgMemberships(where: $where) {
+query GetOrgMemberships($first: Int, $last: $Int, $where: OrgMembershipWhereInput) {
+  orgMemberships(first: $first, last: $last, where: $where) {
+    totalCount
+    pageInfo {
+      startCursor
+      endCursor
+      hasPreviousPage
+      hasNextPage
+    }
     edges {
       node {
         id

@@ -38,6 +38,13 @@ mutation Delete{{ .Name }}($delete{{ .Name }}Id: ID!) {
 
 query GetAll{{ .Name | ToPlural }} {
   {{ .Name | ToLowerCamel | ToPlural }} {
+    totalCount
+    pageInfo {
+      startCursor
+      endCursor
+      hasPreviousPage
+      hasNextPage
+    }
     edges {
       node {
         {{- range .Fields }}
@@ -58,8 +65,15 @@ query Get{{ .Name }}ByID(${{ .Name | ToLowerCamel }}Id: ID!) {
 }
 {{- end}}
 
-query Get{{ .Name | ToPlural }}($where: {{ .Name }}WhereInput) {
-  {{ .Name | ToLowerCamel | ToPlural }}(where: $where) {
+query Get{{ .Name | ToPlural }}($first: Int, $last: $Int, $where: {{ .Name }}WhereInput) {
+  {{ .Name | ToLowerCamel | ToPlural }}(first: $first, last: $last, where: $where) {
+    totalCount
+    pageInfo {
+      startCursor
+      endCursor
+      hasPreviousPage
+      hasNextPage
+    }
     edges {
       node {
         {{- range .Fields }}

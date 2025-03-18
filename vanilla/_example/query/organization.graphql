@@ -5,6 +5,7 @@ mutation CreateBulkCSVOrganization($input: Upload!) {
       createdAt
       createdBy
       description
+      displayID
       id
       name
       updatedAt
@@ -19,6 +20,7 @@ mutation CreateBulkOrganization($input: [CreateOrganizationInput!]) {
       createdAt
       createdBy
       description
+      displayID
       id
       name
       updatedAt
@@ -33,6 +35,7 @@ mutation CreateOrganization($input: CreateOrganizationInput!) {
       createdAt
       createdBy
       description
+      displayID
       id
       name
       updatedAt
@@ -49,11 +52,19 @@ mutation DeleteOrganization($deleteOrganizationId: ID!) {
 
 query GetAllOrganizations {
   organizations {
+    totalCount
+    pageInfo {
+      startCursor
+      endCursor
+      hasPreviousPage
+      hasNextPage
+    }
     edges {
       node {
         createdAt
         createdBy
         description
+        displayID
         id
         name
         updatedAt
@@ -67,6 +78,7 @@ query GetOrganizationByID($organizationId: ID!) {
     createdAt
     createdBy
     description
+    displayID
     id
     name
     updatedAt
@@ -74,13 +86,21 @@ query GetOrganizationByID($organizationId: ID!) {
   }
 }
 
-query GetOrganizations($where: OrganizationWhereInput) {
-  organizations(where: $where) {
+query GetOrganizations($first: Int, $last: $Int, $where: OrganizationWhereInput) {
+  organizations(first: $first, last: $last, where: $where) {
+    totalCount
+    pageInfo {
+      startCursor
+      endCursor
+      hasPreviousPage
+      hasNextPage
+    }
     edges {
       node {
         createdAt
         createdBy
         description
+        displayID
         id
         name
         updatedAt
@@ -95,6 +115,7 @@ mutation UpdateOrganization($updateOrganizationId: ID!, $input: UpdateOrganizati
       createdAt
       createdBy
       description
+      displayID
       id
       name
       updatedAt
