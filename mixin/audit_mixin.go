@@ -31,6 +31,7 @@ func (AuditMixin) Fields() []ent.Field {
 					entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput,
 				),
 				entx.FieldAdminSearchable(false),
+				entgql.OrderField("created_at"),
 			),
 		field.Time("updated_at").
 			Default(time.Now).
@@ -41,6 +42,7 @@ func (AuditMixin) Fields() []ent.Field {
 					entgql.SkipMutationCreateInput, entgql.SkipMutationUpdateInput,
 				),
 				entx.FieldAdminSearchable(false),
+				entgql.OrderField("updated_at"),
 			),
 		field.String("created_by").
 			Immutable().

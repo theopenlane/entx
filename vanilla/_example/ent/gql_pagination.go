@@ -5,6 +5,9 @@ package ent
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"strconv"
 
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent"
@@ -551,6 +554,71 @@ func (o *OrganizationQuery) Paginate(
 	}
 	conn.build(nodes, pager, after, first, before, last)
 	return conn, nil
+}
+
+var (
+	// OrganizationOrderFieldCreatedAt orders Organization by created_at.
+	OrganizationOrderFieldCreatedAt = &OrganizationOrderField{
+		Value: func(o *Organization) (ent.Value, error) {
+			return o.CreatedAt, nil
+		},
+		column: organization.FieldCreatedAt,
+		toTerm: organization.ByCreatedAt,
+		toCursor: func(o *Organization) Cursor {
+			return Cursor{
+				ID:    o.ID,
+				Value: o.CreatedAt,
+			}
+		},
+	}
+	// OrganizationOrderFieldUpdatedAt orders Organization by updated_at.
+	OrganizationOrderFieldUpdatedAt = &OrganizationOrderField{
+		Value: func(o *Organization) (ent.Value, error) {
+			return o.UpdatedAt, nil
+		},
+		column: organization.FieldUpdatedAt,
+		toTerm: organization.ByUpdatedAt,
+		toCursor: func(o *Organization) Cursor {
+			return Cursor{
+				ID:    o.ID,
+				Value: o.UpdatedAt,
+			}
+		},
+	}
+)
+
+// String implement fmt.Stringer interface.
+func (f OrganizationOrderField) String() string {
+	var str string
+	switch f.column {
+	case OrganizationOrderFieldCreatedAt.column:
+		str = "created_at"
+	case OrganizationOrderFieldUpdatedAt.column:
+		str = "updated_at"
+	}
+	return str
+}
+
+// MarshalGQL implements graphql.Marshaler interface.
+func (f OrganizationOrderField) MarshalGQL(w io.Writer) {
+	io.WriteString(w, strconv.Quote(f.String()))
+}
+
+// UnmarshalGQL implements graphql.Unmarshaler interface.
+func (f *OrganizationOrderField) UnmarshalGQL(v interface{}) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("OrganizationOrderField %T must be a string", v)
+	}
+	switch str {
+	case "created_at":
+		*f = *OrganizationOrderFieldCreatedAt
+	case "updated_at":
+		*f = *OrganizationOrderFieldUpdatedAt
+	default:
+		return fmt.Errorf("%s is not a valid OrganizationOrderField", str)
+	}
+	return nil
 }
 
 // OrganizationOrderField defines the ordering field of Organization.
