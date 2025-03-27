@@ -77,7 +77,7 @@ var (
 // GenerateSchemas generates the history schema for all schemas in the schema path
 // this should be called before the entc.Generate call
 // so the schemas exist at the time of code generation
-func (h *HistoryExtension) GenerateSchemas() error {
+func (h *Extension) GenerateSchemas() error {
 	graph, err := entc.LoadGraph(h.config.SchemaPath, &gen.Config{})
 	if err != nil {
 		return fmt.Errorf("%w: failed loading ent graph: %v", ErrFailedToGenerateTemplate, err)
