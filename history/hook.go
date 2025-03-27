@@ -33,8 +33,8 @@ func On(hk ent.Hook, op ent.Op) ent.Hook {
 	}
 }
 
-// HistoryHooks returns a list of hooks that can be used to create history entries
-func HistoryHooks[T Mutation]() []ent.Hook {
+// Hooks returns a list of hooks that can be used to create history entries
+func Hooks[T Mutation]() []ent.Hook {
 	return []ent.Hook{
 		On(historyHookCreate[T](), ent.OpCreate),
 		On(historyHookUpdate[T](), ent.OpUpdate|ent.OpUpdateOne),

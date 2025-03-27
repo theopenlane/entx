@@ -1,7 +1,6 @@
 package entx
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -140,8 +139,8 @@ func (c *EntClientConfig) NewEntDB(dataSource string) (*entsql.Driver, error) {
 }
 
 // Healthcheck pings the DB to check if the connection is working
-func Healthcheck(client *entsql.Driver) func(ctx context.Context) error {
-	return func(ctx context.Context) error {
+func Healthcheck(client *entsql.Driver) func() error {
+	return func() error {
 		if err := client.DB().Ping(); err != nil {
 			return fmt.Errorf("db connection failed: %w", err)
 		}
