@@ -16,7 +16,7 @@ func (c *Client) WithHistory() {
 			{{- range $h := $.Nodes }}
 				{{- $sameNodeType := hasPrefix $h.Name (printf "%sHistory" $name) }}
 				{{- if $sameNodeType }}
-	for _, hook := range history.HistoryHooks[*{{ $name }}Mutation]() {
+	for _, hook := range history.Hooks[*{{ $name }}Mutation]() {
 		c.{{ $name }}.Use(hook)
 	}
 				{{- end }}
