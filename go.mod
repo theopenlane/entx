@@ -13,7 +13,7 @@ require (
 	github.com/stoewer/go-strcase v1.3.0
 	github.com/stretchr/testify v1.10.0
 	github.com/theopenlane/iam v0.9.4
-	github.com/theopenlane/utils v0.4.4
+	github.com/theopenlane/utils v0.4.5
 	github.com/vektah/gqlparser/v2 v2.5.23
 	go.opentelemetry.io/otel v1.35.0
 	golang.org/x/tools v0.31.0
