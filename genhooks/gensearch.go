@@ -91,21 +91,13 @@ func getInputData(g *gen.Graph) search {
 		// skipSearch must be false
 		// there must be at least one searchable field other than the ID field
 		if checkSchemaGenSkip(f) || !includeSchemaForSearch(f) {
-			log.Warn().Msgf("Skipping search schema generation for %s", f.Name)
 			continue
 		}
 
 		fields, adminFields := GetSearchableFields(f.Name, g)
 
-		log.Debug().Interface("fields", fields).Msgf("Searchable fields for %s", f.Name)
-
-		if len(fields) <= 1 {
-			log.Warn().Msgf("No searchable fields for %s", f.Name)
-			continue
-		}
-
 		// only add object if there are searchable fields other than the ID field (ID is always searchable)
-		if len(fields) > 0 {
+		if len(fields) > 1 {
 			inputData.Objects = append(inputData.Objects, Object{
 				Name:        f.Name,
 				Fields:      fields,
