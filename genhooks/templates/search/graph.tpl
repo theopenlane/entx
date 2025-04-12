@@ -9,20 +9,31 @@ extend type Query{
     {{ $.Name | toLower }}{{ $object.Name | toUpperCamel }}Search(
     {{- end }}
         """
-        Search query
+        Query string to search across objects
         """
         query: String!
-    ): {{ $object.Name }}SearchResult
+        """
+        Returns the elements in the list that come after the specified cursor.
+        """
+        after: Cursor
+        """
+        Returns the first _n_ elements from the list.
+        """
+        first: Int
+        """
+        Returns the elements in the list that come before the specified cursor.
+        """
+        before: Cursor
+        """
+        Returns the last _n_ elements from the list.
+        """
+        last: Int
+    ): {{ $object.Name | toUpperCamel }}Connection
     {{- end }}
 }
 
 {{- if eq $.Name "Global" }}
-union SearchResult =
-  {{- range $object := $.Objects }}
-  | {{ $object.Name | toUpperCamel }}SearchResult
-  {{- end }}
-
-type SearchResultConnection {
+type SearchResults{
   """
   Information to aid in pagination.
   """
@@ -31,10 +42,9 @@ type SearchResultConnection {
   Identifies the total count of items in the connection.
   """
   totalCount: Int!
-  """
-  A list of nodes with results.
-  """
-  nodes: [SearchResult!]!
+  {{- range $object := $.Objects }}
+  {{ $object.Name | toLower |toPlural }}: {{ $object.Name | toUpperCamel }}Connection
+  {{- end }}
 }
 
 extend type Query{
@@ -43,23 +53,50 @@ extend type Query{
     """
     search(
         """
-        Search query
+        Query string to search across objects
         """
         query: String!
-    ): SearchResultConnection
+        """
+        Returns the elements in the list that come after the specified cursor.
+        """
+        after: Cursor
+        """
+        Returns the first _n_ elements from the list.
+        """
+        first: Int
+        """
+        Returns the elements in the list that come before the specified cursor.
+        """
+        before: Cursor
+        """
+        Returns the last _n_ elements from the list.
+        """
+        last: Int
+    ): SearchResults
     """
     Admin search across all objects
     """
     adminSearch(
         """
-        Search query
+        Query string to search across objects
         """
         query: String!
-    ): SearchResultConnection
+        """
+        Returns the elements in the list that come after the specified cursor.
+        """
+        after: Cursor
+        """
+        Returns the first _n_ elements from the list.
+        """
+        first: Int
+        """
+        Returns the elements in the list that come before the specified cursor.
+        """
+        before: Cursor
+        """
+        Returns the last _n_ elements from the list.
+        """
+        last: Int
+    ): SearchResults
 }
-{{ range $object := $.Objects }}
-type  {{ $object.Name }}SearchResult {
-   {{ $object.Name | toLower | toPlural }}: [ {{ $object.Name | toUpperCamel}}!]
-}
-{{ end }}
 {{- end }}
