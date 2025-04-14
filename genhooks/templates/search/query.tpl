@@ -4,22 +4,31 @@ query {{ $.Name }}Search($query: String!) {
   {{- else }}
   search(query: $query) {
   {{- end }}
-    nodes {
+        totalCount
     {{- range $object := $.Objects }}
-      ... on {{ $object.Name | toUpperCamel }}SearchResult {
         {{ $object.Name| toLower | toPlural }} {
-          {{- if eq $.Name "Admin" }}
-          {{- range $field := $object.AdminFields }}
-          {{ $field.Name | toLower }}
-          {{- end }}
-          {{- else }}
-          {{- range $field := $object.Fields }}
-          {{ $field.Name  | toLower }}
-          {{- end }}
-          {{- end }}
+          totalCount
+          pageInfo {
+            hasNextPage
+            hasPreviousPage
+            startCursor
+            endCursor
+          }
+          edges {
+            node {
+              {{- if eq $.Name "Admin" }}
+              {{- range $field := $object.AdminFields }}
+              {{ $field.Name | toLower }}
+              {{- end }}
+              {{- else }}
+              {{- range $field := $object.Fields }}
+              {{ $field.Name  | toLower }}
+              {{- end }}
+              {{- end }}
+            }
+          }
         }
-      }
     {{- end }}
-    }
+
   }
 }

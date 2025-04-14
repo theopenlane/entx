@@ -3,7 +3,6 @@ package genhooks
 import (
 	"cmp"
 	"html/template"
-	"log"
 	"os"
 	"slices"
 
@@ -13,6 +12,7 @@ import (
 	entfield "entgo.io/ent/schema/field"
 	"github.com/99designs/gqlgen/codegen/templates"
 	"github.com/gertd/go-pluralize"
+	"github.com/rs/zerolog/log"
 
 	"github.com/theopenlane/entx"
 )
@@ -123,12 +123,12 @@ func genSearchSchemaTemplate(graphSchemaDir string, tmpl *template.Template, inp
 
 	file, err := os.Create(filePath)
 	if err != nil {
-		log.Fatalf("Unable to create file: %v", err)
+		log.Fatal().Msgf("Unable to create file: %v", err)
 	}
 
 	// execute template and write to file
 	if err = tmpl.Execute(file, inputData); err != nil {
-		log.Fatalf("Unable to execute template: %v", err)
+		log.Fatal().Msgf("Unable to execute template: %v", err)
 	}
 }
 
@@ -146,12 +146,12 @@ func genSearchQueryTemplate(graphQueryDir string, tmpl *template.Template, input
 
 	file, err := os.Create(filePath)
 	if err != nil {
-		log.Fatalf("Unable to create file: %v", err)
+		log.Fatal().Msgf("Unable to create file: %v", err)
 	}
 
 	// execute query template and write to file
 	if err = tmpl.Execute(file, inputData); err != nil {
-		log.Fatalf("Unable to execute query template: %v", err)
+		log.Fatal().Msgf("Unable to execute query template: %v", err)
 	}
 }
 
@@ -167,7 +167,7 @@ func createSearchTemplate() *template.Template {
 	// create schema template
 	tmpl, err := template.New("graph.tpl").Funcs(fm).ParseFS(_templates, "templates/search/graph.tpl")
 	if err != nil {
-		log.Fatalf("Unable to parse template: %v", err)
+		log.Fatal().Msgf("Unable to parse template: %v", err)
 	}
 
 	return tmpl
@@ -185,7 +185,7 @@ func createSearchQueryTemplate() *template.Template {
 	// create schema template
 	tmpl, err := template.New("query.tpl").Funcs(fm).ParseFS(_templates, "templates/search/query.tpl")
 	if err != nil {
-		log.Fatalf("Unable to parse template: %v", err)
+		log.Fatal().Msgf("Unable to parse template: %v", err)
 	}
 
 	return tmpl
