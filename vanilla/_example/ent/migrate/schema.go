@@ -54,6 +54,11 @@ var (
 		PrimaryKey: []*schema.Column{OrganizationsColumns[0]},
 		Indexes: []*schema.Index{
 			{
+				Name:    "organization_id",
+				Unique:  true,
+				Columns: []*schema.Column{OrganizationsColumns[0]},
+			},
+			{
 				Name:    "organization_name",
 				Unique:  true,
 				Columns: []*schema.Column{OrganizationsColumns[6]},
