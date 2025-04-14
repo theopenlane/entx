@@ -140,8 +140,8 @@ github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOf
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/theopenlane/echox v0.2.3 h1:RlaEIFj03q9SR0YFmv7atlXtOe/5a3bRu4sF26pYSk0=
 github.com/theopenlane/echox v0.2.3/go.mod h1:xM2ECZW3/KEXZPetd1QAmN4mR8RetSwhDaySEQj+CHk=
-github.com/theopenlane/iam v0.11.0 h1:AHViMKOnhdBLqrVlly7GDU411SwsTCmYlVDE82Oc84I=
-github.com/theopenlane/iam v0.11.0/go.mod h1:F9ocjjw2VaqBPBfFdfvIDUzvyZge23KENSKGhe5BMK0=
+github.com/theopenlane/iam v0.12.0 h1:83SWa1yd+ZWLdtGW3Th+hHwhz3K88C47CbgVbnU8PpY=
+github.com/theopenlane/iam v0.12.0/go.mod h1:F9ocjjw2VaqBPBfFdfvIDUzvyZge23KENSKGhe5BMK0=
 github.com/theopenlane/utils v0.4.5 h1:afS6VqnaNGHHZZ08b9roSEkfJls7fqx8QbJFi6B3f4w=
 github.com/theopenlane/utils v0.4.5/go.mod h1:aX2LvjiXj++v15Kigsqngx5I4cJLXT+Hb86F/4LJfb4=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
