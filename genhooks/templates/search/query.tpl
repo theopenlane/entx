@@ -4,8 +4,16 @@ query {{ $.Name }}Search($query: String!) {
   {{- else }}
   search(query: $query) {
   {{- end }}
+        totalCount
     {{- range $object := $.Objects }}
         {{ $object.Name| toLower | toPlural }} {
+          totalCount
+          pageInfo {
+            hasNextPage
+            hasPreviousPage
+            startCursor
+            endCursor
+          }
           edges {
             node {
               {{- if eq $.Name "Admin" }}
