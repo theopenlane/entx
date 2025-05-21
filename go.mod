@@ -15,7 +15,7 @@ require (
 	github.com/theopenlane/iam v0.12.0
 	github.com/theopenlane/utils v0.4.5
 	github.com/vektah/gqlparser/v2 v2.5.27
-	go.opentelemetry.io/otel v1.35.0
+	go.opentelemetry.io/otel v1.36.0
 	golang.org/x/tools v0.33.0
 )
 
@@ -61,8 +61,8 @@ require (
 	github.com/zclconf/go-cty v1.15.0 // indirect
 	github.com/zclconf/go-cty-yaml v1.1.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
-	go.opentelemetry.io/otel/metric v1.35.0 // indirect
-	go.opentelemetry.io/otel/trace v1.35.0 // indirect
+	go.opentelemetry.io/otel/metric v1.36.0 // indirect
+	go.opentelemetry.io/otel/trace v1.36.0 // indirect
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
 	golang.org/x/mod v0.24.0 // indirect
