@@ -3,6 +3,7 @@ package history
 import (
 	"time"
 
+	"entgo.io/contrib/entgql"
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
 )
@@ -17,6 +18,9 @@ type history struct {
 func (h history) Fields() []ent.Field {
 	return []ent.Field{
 		field.Time("history_time").
+			Annotations(
+				entgql.OrderField("history_time"),
+			).
 			Default(time.Now).
 			Immutable(),
 		field.Enum("operation").
