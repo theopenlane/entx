@@ -13,8 +13,11 @@ import (
 	"time"
 
 	"github.com/theopenlane/entx/history"
+	"entgo.io/ent"
+	"entgo.io/contrib/entgql"
+	"github.com/rs/zerolog/log"
 
-	{{- range $n := $.Nodes }}
+	{{ range $n := $.Nodes }}
 		{{- $name := $n.Name }}
 		{{- $history := hasSuffix $name "History" }}
 		{{- if $history }}
@@ -34,6 +37,54 @@ type Change struct {
 	New       any
 }
 
+// MarshalGQL implement the Marshaler interface for gqlgen
+func (c Change) MarshalGQL(w io.Writer) {
+	marshalGQLJSON(w, c)
+}
+
+// UnmarshalGQL implement the Unmarshaler interface for gqlgen
+func (c *Change) UnmarshalGQL(v interface{}) error {
+	return unmarshalGQLJSON(v, c)
+}
+
+// MarshalGQL implement the Marshaler interface for gqlgen
+func (c AuditLogOrderField) MarshalGQL(w io.Writer) {
+	marshalGQLJSON(w, c)
+}
+
+// UnmarshalGQL implement the Unmarshaler interface for gqlgen
+func (c *AuditLogOrderField) UnmarshalGQL(v interface{}) error {
+	return unmarshalGQLJSON(v, c)
+}
+
+// marshalGQLJSON marshals the given type into JSON and writes it to the given writer
+func marshalGQLJSON[T any](w io.Writer, a T) {
+	byteData, err := json.Marshal(a)
+	if err != nil {
+		log.Fatal().Err(err).Msg("error marshalling json object")
+	}
+
+	_, err = w.Write(byteData)
+	if err != nil {
+		log.Fatal().Err(err).Msg("error writing json object")
+	}
+}
+
+// unmarshalGQLJSON unmarshals a JSON object into the given type
+func unmarshalGQLJSON[T any](v any, a T) error {
+	byteData, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(byteData, &a)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func NewChange(fieldName string, old, new any) Change {
 	return Change{
 		FieldName: fieldName,
@@ -48,9 +99,103 @@ type HistoryDiff[T any] struct {
 	Changes []Change
 }
 
+// AuditLog is the representation of an audit log entry.
+type AuditLog struct {
+	// Table is the name of the table that this audit log entry is for.
+	Table string `json:"table"`
+	// Ref is the reference ID of the object that this audit log entry is for.
+	RefID string `json:"id"`
+	// HistoryTime is the time when the history entry was created.
+	HistoryTime time.Time `json:"time"`
+	// Operation is the type of operation that was performed on the object.
+	Operation history.OpType `json:"operation"`
+	// Changes is a JSON-encoded string containing the changes made to the object.
+	Changes []Change `json:"changes"`
+	{{- if $includeUpdatedBy }}
+	// UpdatedBy is the user who performed the operation.
+	UpdatedBy {{ if $updatedByNillable}}*{{- end}}{{ $updatedByValueType }} `json:"updatedBy"`
+	{{- end }}
+}
+
+var auditlogImplementors = []string{"AuditLog", "Node"}
+
+// IsNode implements the Node interface check for GQLGen.
+func (*AuditLog) IsNode() {}
+
+// AuditLogEdge is the edge representation of AuditLog.
+type AuditLogEdge struct {
+	Node   *AuditLog  `json:"node"`
+	Cursor Cursor `json:"cursor"`
+}
+
+// AuditLogConnection is the connection containing edges to AuditLog.
+type AuditLogConnection struct {
+	Edges      []*AuditLogEdge `json:"edges"`
+	PageInfo   PageInfo    `json:"pageInfo"`
+	TotalCount int         `json:"totalCount"`
+}
+
+// AuditLogWhereInput is the input type for filtering AuditLog entries
+// Table is always required for now due to pagination on a single table
+// TODO: (sfunk) use joins to allow for pagination across multiple tables
+type AuditLogWhereInput struct {
+	RefID     *string    		 `json:"refID,omitempty"`
+	UpdatedBy *string   		 `json:"updatedBy,omitempty"`
+	Operation *history.OpType    `json:"operation,omitempty"`
+	Table     string     		 `json:"table"`
+	Before    *time.Time 		 `json:"before,omitempty"`
+	After     *time.Time 		 `json:"after,omitempty"`
+}
+
+
+// AuditLogOrderField defines the ordering field of AuditLog.
+type AuditLogOrderField struct {
+	// Value extracts the ordering value from the given AuditLog.
+	Value    func(*AuditLog) (ent.Value, error)
+	column   string // field or computed.
+	toTerm   func(...sql.OrderTermOption) OrderOption
+	toCursor func(*AuditLog) Cursor
+}
+
+// OrderOption defines the ordering options for the AuditLog queries.
+type OrderOption func(*sql.Selector)
+
+// AuditLogOrder defines the ordering of AuditLog.
+type AuditLogOrder struct {
+	Direction OrderDirection `json:"direction"`
+	Field     *AuditLogOrderField `json:"field"`
+}
+
+// ByHistoryTime orders the results by the history_time field.
+func ByHistoryTime(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(AuditLogFieldHistoryTime, opts...).ToFunc()
+}
+
+const (
+	AuditLogFieldHistoryTime = "history_time"
+)
+
 var (
-	MismatchedRefError = errors.New("cannot take diff of histories with different Refs")
-	IdenticalHistoryError = errors.New("cannot take diff of identical history")
+	// AuditLogOrderFieldCreatedAt orders AuditLog by history_time.
+	AuditLogOrderFieldHistoryTime= &AuditLogOrderField{
+		Value: func(al *AuditLog) (ent.Value, error) {
+			return al.HistoryTime, nil
+		},
+		column: AuditLogFieldHistoryTime,
+		toTerm: ByHistoryTime,
+		toCursor: func(al *AuditLog) Cursor {
+			return Cursor{
+				ID:    al.RefID,
+				Value: al.HistoryTime,
+			}
+		},
+	}
+)
+
+
+var (
+	ErrMismatchedRef = errors.New("cannot take diff of histories with different Refs")
+	ErrIdenticalHistory = errors.New("cannot take diff of identical history")
 )
 
 	{{ range $n := $.Nodes }}
@@ -76,7 +221,7 @@ func ({{ $h.Receiver }} *{{ $h.Name }}) changes(new *{{ $h.Name }}) []Change {
 
 func ({{ $h.Receiver }} *{{ $h.Name }}) Diff(history *{{ $h.Name }}) (*HistoryDiff[{{ $h.Name }}], error) {
 	if {{ $h.Receiver }}.Ref != history.Ref {
-		return nil, MismatchedRefError
+		return nil, ErrMismatchedRef
 	}
 
 	{{ $h.Receiver }}Unix, historyUnix := {{ $h.Receiver }}.HistoryTime.Unix(), history.HistoryTime.Unix()
@@ -96,7 +241,7 @@ func ({{ $h.Receiver }} *{{ $h.Name }}) Diff(history *{{ $h.Name }}) (*HistoryDi
 			Changes: history.changes({{ $h.Receiver }}),
 		}, nil
 	}
-	return nil, IdenticalHistoryError
+	return nil, ErrIdenticalHistory
 }
 				{{ end }}
 			{{ end }}
@@ -131,62 +276,76 @@ func (c Change) String(op history.OpType) string {
 	}
 }
 
-func (c *Client) Audit(ctx context.Context) ([][]string, error) {
-	records := [][]string{
-		{"Table", "Ref Id", "History Time", "Operation", "Changes"{{ if $includeUpdatedBy }}, "Updated By" {{ end }}},
-	}
-	var record [][]string
-	var err error
+func (c *Client) Audit(ctx context.Context, after *Cursor, first *int, before *Cursor, last *int) (result *AuditLogConnection, err error) {
+	result = &AuditLogConnection{}
+
+	var record *AuditLogConnection
 
 	{{- range $n := $.Nodes }}
 	{{- if (hasSuffix $n.Name "History") }}
-	record, err = audit{{ $n.Name }}(ctx, c.config)
+	record, err = audit{{ $n.Name }}(ctx, c.config, after, first, before, last, nil, nil)
 	if err != nil {
 		return nil, err
 	}
-	records = append(records, record...)
+	result.Edges = append(result.Edges, record.Edges...)
 	{{ end }}
 	{{- end }}
 
-	return records, nil
+	return result, nil
 }
 
-func (c *Client) AuditWithFilter(ctx context.Context, tableName string) ([][]string, error) {
-	records := [][]string{
-		{"Table", "Ref Id", "History Time", "Operation", "Changes"{{ if $includeUpdatedBy }}, "Updated By" {{ end }}},
-	}
-	var record [][]string
-	var err error
-
+func (c *Client) AuditWithFilter(ctx context.Context, after *Cursor, first *int, before *Cursor, last *int, where *AuditLogWhereInput, orderBy *AuditLogOrder) (result *AuditLogConnection, err error) {
 	{{- range $n := $.Nodes }}
 	{{- if (hasSuffix $n.Name "History") }}
+	if where.Table == strings.TrimSuffix("{{ $n.Name }}", "History") {
+		// map AuditLogWhereInput to {{ $n.Name }}WhereInput
+		whereInput := &{{ $n.Name }}WhereInput{}
+		if where.RefID != nil {
+			whereInput.RefEqualFold = where.RefID
+		}
 
-	if tableName == "" || tableName == strings.TrimSuffix("{{ $n.Name }}", "History") {
-		record, err = audit{{ $n.Name }}(ctx, c.config)
+		if where.UpdatedBy != nil {
+			whereInput.UpdatedBy = where.UpdatedBy
+		}
+
+		if where.Operation != nil {
+			whereInput.Operation = where.Operation
+		}
+
+		if where.Before != nil {
+			whereInput.HistoryTimeLT = where.Before
+		}
+
+		if where.After != nil {
+			whereInput.HistoryTimeGT = where.After
+		}
+
+		// map AuditLogOrder to {{ $n.Name }}Order
+		// default to ordering by HistoryTime desc
+		orderByInput := &{{ $n.Name }}Order{
+			Field:     {{ $n.Name }}OrderFieldHistoryTime,
+			Direction: entgql.OrderDirectionDesc,
+		}
+
+		if orderBy != nil {
+			orderByInput.Direction = orderBy.Direction
+		}
+
+		result, err = audit{{ $n.Name }}(ctx, c.config, after, first, before, last, orderByInput, whereInput)
 		if err != nil {
 			return nil, err
 		}
 
-		records = append(records, record...)
+		return
 	}
-	{{ end }}
+	{{- end }}
 	{{- end }}
 
-	return records, nil
+	return
 }
 
-type record struct {
-	Table       string
-	RefId       any
-	HistoryTime time.Time
-	Operation   history.OpType
-	Changes     []Change
-	{{- if $includeUpdatedBy }}
-	UpdatedBy   {{ if $updatedByNillable}}*{{- end}}{{ $updatedByValueType }}
-	{{- end }}
-}
 
-func (r *record) toRow() []string {
+func (r *AuditLog) toRow() []string {
 	{{- if $includeUpdatedBy }}
 	row := make([]string, 6)
 	{{- else }}
@@ -194,7 +353,7 @@ func (r *record) toRow() []string {
 	{{- end }}
 
 	row[0] = r.Table
-	row[1] = fmt.Sprintf("%v", r.RefId)
+	row[1] = fmt.Sprintf("%v", r.RefID)
 	row[2] = r.HistoryTime.Format(time.ANSIC)
 	row[3] = r.Operation.String()
 	for i, change := range r.Changes {
@@ -234,55 +393,76 @@ type {{ lower $n.Name }}ref struct {
 {{- end }}
 {{- end }}
 
-func audit{{ $n.Name }}(ctx context.Context, config config) ([][]string, error) {
-	var records = [][]string{}
-	var refs []{{ lower $n.Name }}ref
-	client := New{{ $n.Name }}Client(config)
-	err := client.Query().
-		Unique(true).
-		Order({{ lower $n.Name }}.ByRef()).
-		Select({{ lower $n.Name }}.FieldRef).
-		Scan(ctx, &refs)
+func audit{{ $n.Name }}(ctx context.Context, config config, after *Cursor, first *int, before *Cursor, last *int, orderBy *{{ $n.Name }}Order, where *{{ $n.Name }}WhereInput) (result *AuditLogConnection, err error) {
+	result = &AuditLogConnection{
+		Edges: []*AuditLogEdge{},
+	}
 
+	opts := []{{ $n.Name }}PaginateOption{
+		With{{ $n.Name }}Order(orderBy),
+		With{{ $n.Name }}Filter(where.Filter),
+	}
+
+
+	client := New{{ $n.Name }}Client(config)
+
+	histories, err := client.Query().
+		Paginate(ctx, after, first, before, last, opts...)
 	if err != nil {
 		return nil, err
 	}
-	for _, currRef := range refs {
-		histories, err := client.Query().
-			Where({{ lower $n.Name }}.Ref(currRef.Ref)).
-			Order({{ lower $n.Name }}.ByHistoryTime()).
-			All(ctx)
-		if err != nil {
-			return nil, err
+
+	for _, curr := range histories.Edges {
+		record := &AuditLog{
+			Table:       "{{ $n.Name }}",
+			RefID:       curr.Node.Ref,
+			HistoryTime: curr.Node.HistoryTime,
+			Operation:   curr.Node.Operation,
+			{{- if $includeUpdatedBy }}
+			UpdatedBy:   curr.Node.UpdatedBy,
+			{{- end }}
+		}
+		switch curr.Node.Operation {
+		case history.OpTypeInsert:
+			record.Changes = (&{{ $n.Name }}{}).changes(curr.Node)
+		case history.OpTypeDelete:
+			record.Changes = curr.Node.changes(&{{ $n.Name }}{})
+		default:
+				// Get the previous history entry to calculate the changes
+				prev, err := client.Query().
+    				Where(
+						{{ lower $n.Name }}.Ref(curr.Node.Ref),
+						{{ lower $n.Name }}.HistoryTimeLT(curr.Node.HistoryTime),
+						).
+					Order({{ lower $n.Name }}.ByHistoryTime(sql.OrderDesc())).
+					Limit(1).
+					All(ctx) //there will be two when there is more than one change because we pull limit + 1 in our interceptors
+				if err != nil {
+					return nil, err
+				}
+
+				// this shouldn't happen because the initial change will always be an insert
+				// but just in case, we will handle it gracefully
+				if len(prev) == 0 {
+					prev = append(prev, &{{ $n.Name }}{})
+				}
+
+				record.Changes = prev[0].changes(curr.Node)
+			}
+
+			edge := &AuditLogEdge{
+				Node: record,
+				// we only currently support pagination from the same table, so we can use the existing cursor
+				Cursor:curr.Cursor,
+			}
+
+			result.Edges = append(result.Edges, edge)
 		}
 
-		for i := 0; i < len(histories); i++ {
-			curr := histories[i]
-			record := record{
-				Table:       "{{ $n.Name }}",
-				RefId:       curr.Ref,
-				HistoryTime: curr.HistoryTime,
-				Operation:   curr.Operation,
-				{{- if $includeUpdatedBy }}
-				UpdatedBy:   curr.UpdatedBy,
-				{{- end }}
-			}
-			switch curr.Operation {
-			case history.OpTypeInsert:
-				record.Changes = (&{{ $n.Name }}{}).changes(curr)
-			case history.OpTypeDelete:
-				record.Changes = curr.changes(&{{ $n.Name }}{})
-			default:
-				if i == 0 {
-					record.Changes = (&{{ $n.Name }}{}).changes(curr)
-				} else {
-					record.Changes = histories[i-1].changes(curr)
-				}
-			}
-			records = append(records, record.toRow())
-		}
-	}
-	return records, nil
+	result.TotalCount = histories.TotalCount
+	result.PageInfo = histories.PageInfo
+
+	return result, nil
 }
 
 {{- end }}
