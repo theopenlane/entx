@@ -14,9 +14,10 @@ import (
 
 	"github.com/theopenlane/entx/history"
 	"entgo.io/ent"
+	"entgo.io/contrib/entgql"
 	"github.com/rs/zerolog/log"
 
-	{{- range $n := $.Nodes }}
+	{{ range $n := $.Nodes }}
 		{{- $name := $n.Name }}
 		{{- $history := hasSuffix $name "History" }}
 		{{- if $history }}
@@ -43,6 +44,16 @@ func (c Change) MarshalGQL(w io.Writer) {
 
 // UnmarshalGQL implement the Unmarshaler interface for gqlgen
 func (c *Change) UnmarshalGQL(v interface{}) error {
+	return unmarshalGQLJSON(v, c)
+}
+
+// MarshalGQL implement the Marshaler interface for gqlgen
+func (c AuditLogOrderField) MarshalGQL(w io.Writer) {
+	marshalGQLJSON(w, c)
+}
+
+// UnmarshalGQL implement the Unmarshaler interface for gqlgen
+func (c *AuditLogOrderField) UnmarshalGQL(v interface{}) error {
 	return unmarshalGQLJSON(v, c)
 }
 
@@ -141,8 +152,13 @@ type AuditLogWhereInput struct {
 type AuditLogOrderField struct {
 	// Value extracts the ordering value from the given AuditLog.
 	Value    func(*AuditLog) (ent.Value, error)
+	column   string // field or computed.
+	toTerm   func(...sql.OrderTermOption) OrderOption
 	toCursor func(*AuditLog) Cursor
 }
+
+// OrderOption defines the ordering options for the AuditLog queries.
+type OrderOption func(*sql.Selector)
 
 // AuditLogOrder defines the ordering of AuditLog.
 type AuditLogOrder struct {
@@ -150,12 +166,23 @@ type AuditLogOrder struct {
 	Field     *AuditLogOrderField `json:"field"`
 }
 
+// ByHistoryTime orders the results by the history_time field.
+func ByHistoryTime(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(AuditLogFieldHistoryTime, opts...).ToFunc()
+}
+
+const (
+	AuditLogFieldHistoryTime = "history_time"
+)
+
 var (
 	// AuditLogOrderFieldCreatedAt orders AuditLog by history_time.
 	AuditLogOrderFieldHistoryTime= &AuditLogOrderField{
 		Value: func(al *AuditLog) (ent.Value, error) {
 			return al.HistoryTime, nil
 		},
+		column: AuditLogFieldHistoryTime,
+		toTerm: ByHistoryTime,
 		toCursor: func(al *AuditLog) Cursor {
 			return Cursor{
 				ID:    al.RefID,
@@ -167,8 +194,8 @@ var (
 
 
 var (
-	MismatchedRefError = errors.New("cannot take diff of histories with different Refs")
-	IdenticalHistoryError = errors.New("cannot take diff of identical history")
+	ErrMismatchedRef = errors.New("cannot take diff of histories with different Refs")
+	ErrIdenticalHistory = errors.New("cannot take diff of identical history")
 )
 
 	{{ range $n := $.Nodes }}
@@ -194,7 +221,7 @@ func ({{ $h.Receiver }} *{{ $h.Name }}) changes(new *{{ $h.Name }}) []Change {
 
 func ({{ $h.Receiver }} *{{ $h.Name }}) Diff(history *{{ $h.Name }}) (*HistoryDiff[{{ $h.Name }}], error) {
 	if {{ $h.Receiver }}.Ref != history.Ref {
-		return nil, MismatchedRefError
+		return nil, ErrMismatchedRef
 	}
 
 	{{ $h.Receiver }}Unix, historyUnix := {{ $h.Receiver }}.HistoryTime.Unix(), history.HistoryTime.Unix()
@@ -214,7 +241,7 @@ func ({{ $h.Receiver }} *{{ $h.Name }}) Diff(history *{{ $h.Name }}) (*HistoryDi
 			Changes: history.changes({{ $h.Receiver }}),
 		}, nil
 	}
-	return nil, IdenticalHistoryError
+	return nil, ErrIdenticalHistory
 }
 				{{ end }}
 			{{ end }}
@@ -267,7 +294,7 @@ func (c *Client) Audit(ctx context.Context, after *Cursor, first *int, before *C
 	return result, nil
 }
 
-func (c *Client) AuditWithFilter(ctx context.Context, tableName string, after *Cursor, first *int, before *Cursor, last *int, where *AuditLogWhereInput, orderBy *AuditLogOrder) (result *AuditLogConnection, err error) {
+func (c *Client) AuditWithFilter(ctx context.Context, after *Cursor, first *int, before *Cursor, last *int, where *AuditLogWhereInput, orderBy *AuditLogOrder) (result *AuditLogConnection, err error) {
 	{{- range $n := $.Nodes }}
 	{{- if (hasSuffix $n.Name "History") }}
 	if where.Table == strings.TrimSuffix("{{ $n.Name }}", "History") {
@@ -297,7 +324,7 @@ func (c *Client) AuditWithFilter(ctx context.Context, tableName string, after *C
 		// default to ordering by HistoryTime desc
 		orderByInput := &{{ $n.Name }}Order{
 			Field:     {{ $n.Name }}OrderFieldHistoryTime,
-			Direction: OrderDirectionDesc,
+			Direction: entgql.OrderDirectionDesc,
 		}
 
 		if orderBy != nil {
