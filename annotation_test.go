@@ -39,3 +39,11 @@ func TestSchemaGenAnnotation(t *testing.T) {
 	assert.Equal(t, sa.Name(), SchemaGenAnnotationName)
 	assert.Equal(t, sa.Skip, s)
 }
+
+func TestFeatureAnnotation(t *testing.T) {
+	mods := []string{gofakeit.Word(), gofakeit.Word()}
+	fa := Features(mods...)
+
+	assert.Equal(t, fa.Name(), FeatureAnnotationName)
+	assert.Equal(t, mods, fa.Features)
+}

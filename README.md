@@ -14,8 +14,9 @@ A helper package for working with [ent](https://entgo.io/), which includes the f
 - Soft-delete extension with cascade delete functionality added in
 - Multi-driver support for various databases
 - SQLite connection interface management
+- Annotating schemas with product modules and generating a feature map (see this README [section](#feature-map))
 
-# enthistory
+## enthistory
 
 enthistory is a powerful extension for generating history tables using ent - the plugin will add-on to your existing `entc` usage and enumerate over your current schemas to create new "history" schemas containing an inventory of the changes related to the existing tables.
 
@@ -28,7 +29,7 @@ Credit to [flume/enthistory](https://github.com/flume/enthistory) for the inspir
 - Authorization policies specific to using openFGA may be harder for others to adopt
 
 
-## Installation
+### Installation
 
 You can install enthistory by running the following command:
 
@@ -83,9 +84,9 @@ package ent
 
 You can additionally call other packages such as mockery within your `generate.go` - the [core](https://github.com/theopenlane/core/blob/main/generate.go) repo could be a good reference point for this.
 
-## Usage
+### Usage
 
-### Querying History
+#### Querying History
 
 After generating your history tables from your schema, you can use the ent client to query the history tables. The
 generated code automatically creates history tables for every table in your schema and hooks them up to the ent client.
@@ -153,7 +154,7 @@ prev, _ := next.Prev(ctx)
 fmt.Println(prev.ID == earliest.ID) // true
 ```
 
-### Restoring History
+#### Restoring History
 
 If you need to rollback a row in the database to a specific history entry, you can use the `.Restore()` function to
 accomplish that. **NOTE**: do not attempt to do this in your production environment or otherwise without testing in advance and creating your own SOP's around these types of procedures. By rolling back you are effectively overwriting your primary data source with a new entry, so use with caution!
@@ -177,7 +178,7 @@ simonHistory, _ := restored.History().All(ctx)
 fmt.Println(len(simonHistory)) // 3
 ```
 
-### Auditing
+#### Auditing
 
 enthistory includes tools for "auditing" history tables by providing a means of exporting the data inside of them. You can enable auditing by using the `enthistory.WithAuditing()`
 option when initializing the extension. The main tool for auditing is the `Audit()` method, which builds an audit log of
@@ -200,11 +201,11 @@ The audit log contains six columns when user tracking is enabled. Here's an exam
 You can also build your own custom audit log using the `.Diff()` method on history models. The `Diff()` method returns
 the older history, the newer history, and the changes to fields when comparing the newer history to the older history.
 
-## Configuration Options
+### Configuration Options
 
 enthistory provides several configuration options to customize its behavior.
 
-### Setting All Tracked Fields as Nillable and/or Immutable
+#### Setting All Tracked Fields as Nillable and/or Immutable
 
 By default, enthistory does not modify the columns in the history tables that are being tracked from your original
 tables; it simply copies their state from ent when loading them.
@@ -217,13 +218,13 @@ or `enthistory.WithImmutableFields()` to set them all as `Immutable`.
 history object. Setting all fields to `Nillable` causes the history tables to diverge from the original tables, and the
 unpredictability of that means the `Restore()` function cannot be generated.
 
-### History Time Indexing
+#### History Time Indexing
 
 By default, an index is not placed on the `history_time` field. If you want to enable indexing on the `history_time`
 field, you can use the `enthistory.WithHistoryTimeIndex()` configuration option. This option gives you more control over
 indexing based on your specific needs.
 
-### Updated By
+#### Updated By
 
 To track which users are making changes to your tables, you can use the `enthistory.WithUpdatedBy()` option when
 initializing the extension. You need to provide a key name (string) and specify the type of
@@ -238,7 +239,7 @@ enthistory.WithUpdatedBy("userId", enthistory.ValueTypeInt)
 enthistory.WithUpdatedBy("userEmail", enthistory.ValueTypeString)
 ```
 
-### Deleted By
+#### Deleted By
 
 To track which users are making changes to your tables, you can use the `enthistory.WithDeletedBy()` option when
 initializing the extension. You need to provide a key name (string) and specify the type of
@@ -254,12 +255,12 @@ enthistory.WithDeletedBy("userId", enthistory.ValueTypeInt)
 enthistory.WithDeletedBy("userEmail", enthistory.ValueTypeString)
 ```
 
-### Auditing
+#### Auditing
 
 As mentioned earlier, you can enable auditing by using the `enthistory.WithAuditing()` configuration option when
 initializing the extension.
 
-### Excluding History on a Schema
+#### Excluding History on a Schema
 
 enthistory is designed to always track history, but in cases where you don't want to generate history tables for a
 particular schema, you can apply annotations to the schema to exclude it. Here's an example:
@@ -275,7 +276,7 @@ func (Character) Annotations() []schema.Annotation {
 }
 ```
 
-### Setting a Schema Path
+#### Setting a Schema Path
 
 If you want to set an alternative schema location other than `ent/schema`, you can use the `enthistory.WithSchemaPath()`
 configuration option. The schema path should be the same as the one set in the `entc.Generate` function. If you don't
@@ -297,13 +298,13 @@ func main() {
 For a complete example of using a custom schema path, refer to the [custompaths](./_examples/custompaths/ent/entc.go)
 example.
 
-### Setting a Schema Name
+#### Setting a Schema Name
 
 If you want to set the schema name for `entsql`, you can use the `enthistory.WithSchemaName()` configuration option. This can be used in conjunction with
 ent [Multiple Schema Migrations](https://entgo.io/docs/multischema-migrations/) and the [Schema Config](https://entgo.io/docs/feature-flags/#schema-config)
 features.
 
-### Adding GQL Query
+#### Adding GQL Query
 
 If you are using [gqlgen](https://github.com/99designs/gqlgen/) and want to generate the query resolvers for the history schemas, you can use the `enthistory.WithGQLQuery()`
 configuration option. With this enabled, `ent.resolvers` with be created, such as:
@@ -315,7 +316,7 @@ func (r *queryResolver) TodoHistories(ctx context.Context, after *entgql.Cursor[
 }
 ```
 
-## Adding a Skipper Function
+### Adding a Skipper Function
 
 If you want to conditionally skip saving history data, you can use the `enthistory.WithSkipper()` configuration option. This
 should be the string representation that returns `true` or `false`. The function has access to the `mutation` object and the `context`. For example:
@@ -332,11 +333,11 @@ should be the string representation that returns `true` or `false`. The function
     )
 ```
 
-## Caveats
+### Caveats
 
 Here are a few caveats to keep in mind when using enthistory:
 
-### Edges
+#### Edges
 
 To track edges with history, you need to manage your own through tables. enthistory does not hook into the ent-generated
 through tables automatically, but managing through tables manually is straightforward. Note that if you use the setters
@@ -362,7 +363,7 @@ friendship, _ := client.Friendship.Create().SetCharacterID(finn.ID).SetFriendID(
 For more information on through tables and edges, refer to
 the [ent documentation](https://entgo.io/docs/schema-edges#edge-schema).
 
-### Enums
+#### Enums
 
 If your ent schemas contain enum fields, it is recommended to create Go enums and set the `GoType` on the enum field.
 This is because ent generates a unique enum type for both your schema and the history table schema, which may not work
@@ -383,6 +384,56 @@ field.Enum("action").
 ```
 
 For more information on enums, refer to the [ent documentation](https://entgo.io/docs/schema-fields#enum-fields).
+
+## Feature Map
+
+This package supports annotating ent schemas with feature identifiers. These annotations allow code generation or other tooling to enable or disable functionality based on the modules purchased by an end user.
+
+### Annotating Schemas
+
+Use the helper from `entx` to mark a schema with a list of features. Features are just string identifiers and can represent modules or add-ons in your product.
+
+```go
+func (Example) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        entx.Features("compliance", "trust-center"),
+    }
+}
+```
+
+Alternatively, you can apply the mixin from the `mixin` package:
+
+```go
+func (Example) Mixin() []ent.Mixin {
+    return []ent.Mixin{
+        mixin.Feature("compliance"),
+    }
+}
+```
+
+### Generating a Feature Map
+
+Use the `genhooks.GenFeatureMap` hook when running `entc` to create a file mapping each ent type to its features. Provide an output directory for the generated file.
+
+```go
+opts := []entc.Option{
+    entc.GenHooks(
+        genhooks.GenFeatureMap("ent/featuremap"),
+    ),
+}
+```
+
+Running code generation will produce a `features.go` file similar to:
+
+```go
+var FeatureOfType = map[string][]string{
+    "Example": {"compliance", "trust-center"},
+}
+```
+
+### Adding New Features
+
+Adding a new feature is as simple as referencing a new identifier in your schema annotations. After updating your schemas, run code generation again and the feature map will contain the new module.
 
 ## Contributing
 
