@@ -27,12 +27,15 @@ func GenFeatureMap(outputDir string) gen.Hook {
 	return func(next gen.Generator) gen.Generator {
 		return gen.GenerateFunc(func(g *gen.Graph) error {
 			var items []featureItem
+
 			ant := &entx.FeatureAnnotation{}
+
 			for _, node := range g.Nodes {
 				if raw, ok := node.Annotations[ant.Name()]; ok {
 					if err := ant.Decode(raw); err == nil {
 						// copy slice
 						feats := slices.Clone(ant.Features)
+
 						items = append(items, featureItem{Type: node.Name, Features: feats})
 					}
 				}
@@ -42,7 +45,7 @@ func GenFeatureMap(outputDir string) gen.Hook {
 
 			tmpl := createFeatureTemplate()
 
-			if err := os.MkdirAll(outputDir, 0o755); err != nil {
+			if err := os.MkdirAll(outputDir, 0o755); err != nil { // nolint: mnd
 				return err
 			}
 
@@ -71,5 +74,6 @@ func createFeatureTemplate() *template.Template {
 	if err != nil {
 		log.Fatalf("Unable to parse template: %v", err)
 	}
+
 	return tmpl
 }
