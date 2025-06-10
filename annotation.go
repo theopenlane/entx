@@ -17,6 +17,9 @@ var QueryGenAnnotationName = "OPENLANE_QUERYGEN"
 // SearchFieldAnnotationName is a name for the search field annotation
 var SearchFieldAnnotationName = "OPENLANE_SEARCH"
 
+// FeatureAnnotationName is the annotation name used for module feature tags
+var FeatureAnnotationName = "OPENLANE_FEATURE"
+
 // CascadeAnnotation is an annotation used to indicate that an edge should be cascaded
 type CascadeAnnotation struct {
 	Field string
@@ -61,6 +64,12 @@ type SearchFieldAnnotation struct {
 	JSONDotPath string
 }
 
+// FeatureAnnotation is an annotation used to specify modules that enable a schema
+type FeatureAnnotation struct {
+	// Features contains the list of feature identifiers
+	Features []string
+}
+
 // Name returns the name of the CascadeAnnotation
 func (a CascadeAnnotation) Name() string {
 	return CascadeAnnotationName
@@ -84,6 +93,11 @@ func (a QueryGenAnnotation) Name() string {
 // Name returns the name of the SearchFieldAnnotation
 func (a SearchFieldAnnotation) Name() string {
 	return SearchFieldAnnotationName
+}
+
+// Name returns the name of the FeatureAnnotation
+func (a FeatureAnnotation) Name() string {
+	return FeatureAnnotationName
 }
 
 // CascadeAnnotationField sets the field name of the edge containing the ID of a record from the current schema
@@ -151,6 +165,11 @@ func FieldAdminSearchable(s bool) *SearchFieldAnnotation {
 	}
 }
 
+// Features returns a new FeatureAnnotation for the provided module identifiers
+func Features(features ...string) *FeatureAnnotation {
+	return &FeatureAnnotation{Features: features}
+}
+
 // Decode unmarshalls the CascadeAnnotation
 func (a *CascadeAnnotation) Decode(annotation interface{}) error {
 	buf, err := json.Marshal(annotation)
@@ -193,6 +212,16 @@ func (a *QueryGenAnnotation) Decode(annotation interface{}) error {
 
 // Decode unmarshalls the SearchFieldAnnotation
 func (a *SearchFieldAnnotation) Decode(annotation interface{}) error {
+	buf, err := json.Marshal(annotation)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(buf, a)
+}
+
+// Decode unmarshalls the FeatureAnnotation
+func (a *FeatureAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
