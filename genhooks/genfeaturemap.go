@@ -15,7 +15,7 @@ import (
 
 type featureItem struct {
 	Type     string
-	Features []string
+	Features []entx.FeatureModule
 }
 
 type featureMap struct {

@@ -8,13 +8,13 @@ import (
 )
 
 // Feature returns a mixin that annotates the schema with the provided feature identifiers
-func Feature(features ...string) ent.Mixin {
+func Feature(features ...entx.FeatureModule) ent.Mixin {
 	return featureMixin{features: features}
 }
 
 type featureMixin struct {
 	ent.Mixin
-	features []string
+	features []entx.FeatureModule
 }
 
 func (featureMixin) Hooks() []ent.Hook   { return nil }
