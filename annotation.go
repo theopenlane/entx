@@ -20,6 +20,9 @@ var SearchFieldAnnotationName = "OPENLANE_SEARCH"
 // FeatureAnnotationName is the annotation name used for module feature tags
 var FeatureAnnotationName = "OPENLANE_FEATURE"
 
+// FeatureVisibilityAnnotationName is the annotation name used to flag schema visibility
+var FeatureVisibilityAnnotationName = "OPENLANE_SCHEMA_VISIBILITY"
+
 // CascadeAnnotation is an annotation used to indicate that an edge should be cascaded
 type CascadeAnnotation struct {
 	Field string
@@ -64,10 +67,17 @@ type SearchFieldAnnotation struct {
 	JSONDotPath string
 }
 
+// FeatureVisibilityAnnotation is an annotation used to flag schema visibility
+type FeatureVisibilityAnnotation struct {
+	Visibility Visibility
+}
+
 // FeatureAnnotation is an annotation used to specify modules that enable a schema
 type FeatureAnnotation struct {
 	// Features contains the list of feature identifiers
-	Features []string
+	Features []FeatureModule
+	// Visibility marks the associated feature modules visibility
+	Visibility Visibility `json:",omitempty"`
 }
 
 // Name returns the name of the CascadeAnnotation
@@ -98,6 +108,11 @@ func (a SearchFieldAnnotation) Name() string {
 // Name returns the name of the FeatureAnnotation
 func (a FeatureAnnotation) Name() string {
 	return FeatureAnnotationName
+}
+
+// Name returns the name of the FeatureVisibilityAnnotation
+func (a FeatureVisibilityAnnotation) Name() string {
+	return FeatureVisibilityAnnotationName
 }
 
 // CascadeAnnotationField sets the field name of the edge containing the ID of a record from the current schema
@@ -135,6 +150,11 @@ func QueryGenSkip(skip bool) *QueryGenAnnotation {
 	}
 }
 
+// FeatureVisibility returns a FeatureVisibilityAnnotation with the provided visibility.
+func FeatureVisibility(v Visibility) *FeatureVisibilityAnnotation {
+	return &FeatureVisibilityAnnotation{Visibility: v}
+}
+
 // FieldJSONPathSearchable returns a new SearchFieldAnnotation with the searchable flag set and the JSONPath set
 func FieldJSONPathSearchable(path string) *SearchFieldAnnotation {
 	return &SearchFieldAnnotation{
@@ -166,8 +186,13 @@ func FieldAdminSearchable(s bool) *SearchFieldAnnotation {
 }
 
 // Features returns a new FeatureAnnotation for the provided module identifiers
-func Features(features ...string) *FeatureAnnotation {
+func Features(features ...FeatureModule) *FeatureAnnotation {
 	return &FeatureAnnotation{Features: features}
+}
+
+// FeaturesWithVisibility returns a new FeatureAnnotation with a visibility flag
+func FeaturesWithVisibility(v Visibility, features ...FeatureModule) *FeatureAnnotation {
+	return &FeatureAnnotation{Features: features, Visibility: v}
 }
 
 // Decode unmarshalls the CascadeAnnotation
@@ -222,6 +247,16 @@ func (a *SearchFieldAnnotation) Decode(annotation interface{}) error {
 
 // Decode unmarshalls the FeatureAnnotation
 func (a *FeatureAnnotation) Decode(annotation any) error {
+	buf, err := json.Marshal(annotation)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(buf, a)
+}
+
+// Decode unmarshalls the FeatureVisibilityAnnotation
+func (a *FeatureVisibilityAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err

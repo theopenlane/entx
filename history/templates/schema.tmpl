@@ -23,9 +23,10 @@ type {{ $name }} struct {
 
 // Annotations of the {{ $name }}.
 func ({{ $name }}) Annotations() []schema.Annotation {
-	return []schema.Annotation{
-		entx.SchemaGenSkip(true),
-		entsql.Annotation{
+    return []schema.Annotation{
+            entx.SchemaGenSkip(true),
+            entx.Features(entx.ModuleAuditLog),
+            entsql.Annotation{
 			Table: "{{ .TableName }}",
 			{{- if .SchemaName }}
 			Schema: "{{ .SchemaName }}",
