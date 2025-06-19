@@ -10,7 +10,7 @@ require (
 	github.com/brianvoe/gofakeit/v7 v7.2.1
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/rs/zerolog v1.34.0
-	github.com/stoewer/go-strcase v1.3.0
+	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.10.0
 	github.com/theopenlane/iam v0.12.0
 	github.com/theopenlane/utils v0.4.7
