@@ -1,5 +1,5 @@
 [![Build status](https://badge.buildkite.com/e5e470387d1e2a8f7819fcb335e0c935a20cfb2fc249f73ee1.svg)](https://buildkite.com/theopenlane/entx)
-[![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=theopenlane_entx)](https://sonarcloud.io/summary/new_code?id=theopenlane_entx)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=theopenlane_entx&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=theopenlane_entx)
 [![Go Report Card](https://goreportcard.com/badge/github.com/theopenlane/entx)](https://goreportcard.com/report/github.com/theopenlane/entx)
 [![Go Reference](https://pkg.go.dev/badge/github.com/theopenlane/entx.svg)](https://pkg.go.dev/github.com/theopenlane/entx)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache2.0-brightgreen.svg)](https://opensource.org/licenses/Apache-2.0)
