@@ -109,6 +109,8 @@ func WithSecondaryDB() DBOption {
 
 // NewEntDB creates a new ent database connection
 func (c *EntClientConfig) NewEntDB(dataSource string) (*entsql.Driver, error) {
+	ctx := context.Background()
+
 	entDialect, err := CheckEntDialect(c.config.DriverName)
 	if err != nil {
 		return nil, fmt.Errorf("failed checking dialect: %w", err)
@@ -129,14 +131,14 @@ func (c *EntClientConfig) NewEntDB(dataSource string) (*entsql.Driver, error) {
 
 	// enable foreign keys for libsql
 	if c.config.DriverName == "libsql" {
-		if _, err := db.Exec("PRAGMA foreign_keys = on;", nil); err != nil {
+		if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys = on;", nil); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("failed to enable enable foreign keys: %w", err)
 		}
 	}
 
 	// verify db connection using ping
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("failed verifying database connection: %w", err)
 	}
 
@@ -152,9 +154,9 @@ func (c *EntClientConfig) NewEntDB(dataSource string) (*entsql.Driver, error) {
 }
 
 // Healthcheck pings the DB to check if the connection is working
-func Healthcheck(client *entsql.Driver) func(_ context.Context) error {
-	return func(_ context.Context) error {
-		if err := client.DB().Ping(); err != nil {
+func Healthcheck(client *entsql.Driver) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		if err := client.DB().PingContext(ctx); err != nil {
 			return fmt.Errorf("db connection failed: %w", err)
 		}
 
