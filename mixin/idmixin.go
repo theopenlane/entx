@@ -95,10 +95,7 @@ func (i IDMixin) Fields() []ent.Field {
 
 // Indexes of the IDMixin
 func (i IDMixin) Indexes() []ent.Index {
-	idx := []ent.Index{
-		index.Fields("id").
-			Unique(), // enforce globally unique ids
-	}
+	idx := []ent.Index{}
 
 	if i.HumanIdentifierPrefix != "" && !i.SingleFieldIndex {
 		idxField := "owner_id"
