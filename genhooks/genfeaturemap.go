@@ -1,6 +1,8 @@
 package genhooks
 
 import (
+	"bytes"
+	"fmt"
 	"html/template"
 	"log"
 	"os"
@@ -9,6 +11,7 @@ import (
 	"sort"
 
 	"entgo.io/ent/entc/gen"
+	"golang.org/x/tools/imports"
 
 	"github.com/theopenlane/entx"
 )
@@ -59,8 +62,19 @@ func GenFeatureMap(outputDir string) gen.Hook {
 			defer file.Close()
 
 			data := featureMap{Items: items}
-			if err := tmpl.Execute(file, data); err != nil {
+			var buf bytes.Buffer
+			if err := tmpl.ExecuteTemplate(&buf, "features.tmpl", data); err != nil {
 				log.Fatalf("Unable to execute template: %v", err)
+			}
+
+			// run gofmt and goimports on the file contents
+			formatted, err := imports.Process(filePath, buf.Bytes(), nil)
+			if err != nil {
+				return fmt.Errorf("%w: failed to format file", err)
+			}
+
+			if _, err := file.Write(formatted); err != nil {
+				log.Fatalf("Unable to write to file: %v", err)
 			}
 
 			return next.Generate(g)
