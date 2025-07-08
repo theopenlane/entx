@@ -28,7 +28,6 @@ Credit to [flume/enthistory](https://github.com/flume/enthistory) for the inspir
 - Specific desires / levels of control regarding data retention and tracking
 - Authorization policies specific to using openFGA may be harder for others to adopt
 
-
 ### Installation
 
 You can install enthistory by running the following command:
@@ -428,6 +427,19 @@ Running code generation will produce a `features.go` file similar to:
 ```go
 var FeatureOfType = map[string][]string{
     "Example": {"compliance", "trust-center"},
+}
+```
+
+## Exportable schemas
+
+This package supports annotating ent schemas to allow the to be exported into multiple formats e.g csv and others
+Here is an example
+
+```go
+func (Control) Annotations() []schema.Annotation {
+ return []schema.Annotation{
+  entx.Exportable{},
+ }
 }
 ```
 

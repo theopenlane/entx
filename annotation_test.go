@@ -47,3 +47,13 @@ func TestFeatureAnnotation(t *testing.T) {
 	assert.Equal(t, fa.Name(), FeatureAnnotationName)
 	assert.Equal(t, mods, fa.Features)
 }
+
+func TestExportableAnnotation(t *testing.T) {
+	ea := &Exportable{}
+
+	assert.Equal(t, ea.Name(), "Exportable")
+
+	// Test Decode method with empty annotation (since Exportable has no fields)
+	err := ea.Decode(map[string]any{})
+	assert.NoError(t, err)
+}
