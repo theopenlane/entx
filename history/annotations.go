@@ -21,9 +21,8 @@ const (
 
 // Annotations of the history extension
 type Annotations struct {
-	Exclude     bool `json:"exclude,omitempty"`   // Will exclude history tracking for this schema
-	IsHistory   bool `json:"isHistory,omitempty"` // DO NOT APPLY TO ANYTHING EXCEPT HISTORY SCHEMAS
-	usePondPool bool // Use pond pool to create history records in parallel
+	Exclude   bool `json:"exclude,omitempty"`   // Will exclude history tracking for this schema
+	IsHistory bool `json:"isHistory,omitempty"` // DO NOT APPLY TO ANYTHING EXCEPT HISTORY SCHEMAS
 }
 
 // Name of the annotation
