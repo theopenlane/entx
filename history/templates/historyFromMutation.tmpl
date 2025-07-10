@@ -36,6 +36,8 @@
 					{{- end }}
 
 					func (m *{{ $mutator }}) CreateHistoryFromCreate(ctx context.Context) error {
+					   ctx = history.WithContext(ctx)
+
 					   {{- if $.Annotations.HistoryConfig.Skipper }}
 					   if m.skipper(ctx) {
 						   return nil
@@ -82,6 +84,8 @@
 					}
 
 					func (m *{{ $mutator }}) CreateHistoryFromUpdate(ctx context.Context) error {
+						ctx = history.WithContext(ctx)
+
 						{{- if $.Annotations.HistoryConfig.Skipper }}
 						if m.skipper(ctx) {
 							return nil
@@ -143,6 +147,8 @@
 					}
 
 					func (m *{{ $mutator }}) CreateHistoryFromDelete(ctx context.Context) error {
+						ctx = history.WithContext(ctx)
+
 						{{- if $.Annotations.HistoryConfig.Skipper }}
 						if m.skipper(ctx) {
 							return nil
@@ -164,39 +170,86 @@
 							return fmt.Errorf("getting ids: %w", err)
 						}
 
-						for _, id := range ids {
-							{{ camel $name }}, err := client.{{ $name }}.Get(ctx, id)
-							if err != nil {
-								return err
-							}
+						{{- if (usePondPool $.Annotations.HistoryConfig) }}
+						errors := []error{}
+						var mu sync.Mutex
 
-							create := client.{{$h.Name}}.Create()
+						funks := make([]func(), len(ids))
+						{{- end }}
 
-							{{- if not (eq $updatedByKey "") }}
-								{{- if (eq $updatedByValueType "int") }}
-								if updatedBy != 0 {
-								{{- end }}
-								{{- if (eq $updatedByValueType "string") }}
-								if updatedBy != "" {
-								{{- end }}
-									create = create.SetUpdatedBy(updatedBy)
+						for i, id := range ids {
+							{{- if (usePondPool $.Annotations.HistoryConfig) }}
+							id := id // capture range variable
+							funks[i] = func() {
+							{{- end }}
+								{{ camel $name }}, err := client.{{ $name }}.Get(ctx, id)
+								if err != nil {
+									{{- if (usePondPool $.Annotations.HistoryConfig) }}
+									mu.Lock()
+									errors = append(errors, err)
+									mu.Unlock()
+
+									return
+									{{- else }}
+									return err
+									{{- end }}
 								}
-							{{- end }}
 
-							_, err = create.
-								SetOperation(EntOpToHistoryOp(m.Op())).
-								SetHistoryTime(time.Now()).
-								SetRef(id).
-							{{- range $f := $n.Fields }}
-								Set{{ if $f.Nillable }}Nillable{{ end }}{{ $f.StructField }}({{ camel $name }}.{{ pascal $f.Name }}).
-							{{- end }}
-								Save(ctx)
-							if err != nil {
-								return err
+								create := client.{{$h.Name}}.Create()
+
+								{{- if not (eq $updatedByKey "") }}
+									{{- if (eq $updatedByValueType "int") }}
+									if updatedBy != 0 {
+									{{- end }}
+									{{- if (eq $updatedByValueType "string") }}
+									if updatedBy != "" {
+									{{- end }}
+										create = create.SetUpdatedBy(updatedBy)
+									}
+								{{- end }}
+
+								_, err = create.
+									SetOperation(EntOpToHistoryOp(m.Op())).
+									SetHistoryTime(time.Now()).
+									SetRef(id).
+								{{- range $f := $n.Fields }}
+									Set{{ if $f.Nillable }}Nillable{{ end }}{{ $f.StructField }}({{ camel $name }}.{{ pascal $f.Name }}).
+								{{- end }}
+									Save(ctx)
+								if err != nil {
+									{{- if (usePondPool $.Annotations.HistoryConfig) }}
+									mu.Lock()
+									errors = append(errors, err)
+									mu.Unlock()
+
+									return
+									{{- else }}
+									return err
+									{{- end }}
+								}
 							}
 						}
 
+						{{- if (usePondPool $.Annotations.HistoryConfig) }}
+						// use the pond pool to submit the functions and wait for them to finish
+						if len(funks) == 0 {
+							return nil
+						}
+
+						m.PondPool.SubmitMultipleAndWait(funks)
+
+						if len(errors) == 0 {
+							return nil
+						}
+
+						log.Error().Errs("errors", errors).Msg("errors creating history from mutation")
+
+						// return the first error but log all
+						return errors[0]
+						{{- else }}
+
 						return nil
+						{{- end }}
 					}
 				{{ end }}
 			{{ end }}
