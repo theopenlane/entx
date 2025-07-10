@@ -49,6 +49,15 @@ func fieldPropertiesNillable(config Config) bool {
 	return config.FieldProperties != nil && config.FieldProperties.Nillable
 }
 
+// usePondPool checks the config to see if the pond pool should be used
+func usePondPool(config Config) bool {
+	if config.UsePondPool {
+		return true
+	}
+
+	return false
+}
+
 // isSlice checks if the string value of the type is prefixed with []
 func isSlice(typeString string) bool {
 	return strings.HasPrefix(typeString, "[]")
@@ -74,6 +83,7 @@ func parseTemplate(name, path string) *gen.Template {
 		"fieldPropertiesNillable":   fieldPropertiesNillable,
 		"isSlice":                   isSlice,
 		"in":                        in,
+		"usePondPool":               usePondPool,
 	})
 
 	return gen.MustParse(t.ParseFS(_templates, path))
