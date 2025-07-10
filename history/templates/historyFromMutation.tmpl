@@ -170,21 +170,23 @@
 							return fmt.Errorf("getting ids: %w", err)
 						}
 
-						{{- if (usePondPool $.Annotations.HistoryConfig) }}
+						{{- if $.Annotations.HistoryConfig.UsePondPool }}
 						errors := []error{}
 						var mu sync.Mutex
 
 						funks := make([]func(), len(ids))
 						{{- end }}
 
+						{{- if $.Annotations.HistoryConfig.UsePondPool }}
 						for i, id := range ids {
-							{{- if (usePondPool $.Annotations.HistoryConfig) }}
 							id := id // capture range variable
 							funks[i] = func() {
-							{{- end }}
+						{{- else }}
+						for _, id := range ids {
+						{{- end }}
 								{{ camel $name }}, err := client.{{ $name }}.Get(ctx, id)
 								if err != nil {
-									{{- if (usePondPool $.Annotations.HistoryConfig) }}
+									{{- if $.Annotations.HistoryConfig.UsePondPool }}
 									mu.Lock()
 									errors = append(errors, err)
 									mu.Unlock()
@@ -217,7 +219,7 @@
 								{{- end }}
 									Save(ctx)
 								if err != nil {
-									{{- if (usePondPool $.Annotations.HistoryConfig) }}
+									{{- if $.Annotations.HistoryConfig.UsePondPool }}
 									mu.Lock()
 									errors = append(errors, err)
 									mu.Unlock()
@@ -233,7 +235,7 @@
 							{{- end }}
 						}
 
-						{{- if (usePondPool $.Annotations.HistoryConfig) }}
+						{{- if $.Annotations.HistoryConfig.UsePondPool }}
 						// use the pond pool to submit the functions and wait for them to finish
 						if len(funks) == 0 {
 							return nil
