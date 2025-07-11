@@ -32,6 +32,8 @@ type Config struct {
 	FieldProperties  *FieldProperties
 	HistoryTimeIndex bool
 	Auth             AuthzSettings
+	// UsePondPool to create history updates in parallel
+	UsePondPool bool
 }
 
 type AuthzSettings struct {
@@ -165,6 +167,13 @@ func WithSchemaPath(schemaPath string) ExtensionOption {
 func WithFirstRun(firstRun bool) ExtensionOption {
 	return func(h *Extension) {
 		h.config.Auth.FirstRun = firstRun
+	}
+}
+
+// WithUsePondPool allows you to use the pond pool to create history records in parallel
+func WithUsePondPool() ExtensionOption {
+	return func(h *Extension) {
+		h.config.UsePondPool = true
 	}
 }
 

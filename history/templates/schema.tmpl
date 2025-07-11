@@ -117,6 +117,16 @@ func ({{ $name }}) Indexes() []ent.Index {
 
 {{- if and (.AuthzPolicy.Enabled) ($.AddPolicy) }}
 
+// Policy of the {{ $name }}.
+// ensure history.AllowIfHistoryRequest() is already added to the base policy
+func ({{ $name }}) Policy() ent.Policy {
+	return policy.NewPolicy(
+		policy.WithMutationRules(
+			history.AllowIfHistoryRequest(),
+		),
+	)
+}
+
 {{- if .AuthzPolicy.AllowedRelation }}
 // Interceptors of the {{ $name }}
 func ({{ $name }}) Interceptors() []ent.Interceptor {

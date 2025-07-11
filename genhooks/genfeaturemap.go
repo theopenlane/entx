@@ -62,7 +62,9 @@ func GenFeatureMap(outputDir string) gen.Hook {
 			defer file.Close()
 
 			data := featureMap{Items: items}
+
 			var buf bytes.Buffer
+
 			if err := tmpl.ExecuteTemplate(&buf, "features.tmpl", data); err != nil {
 				log.Fatalf("Unable to execute template: %v", err)
 			}

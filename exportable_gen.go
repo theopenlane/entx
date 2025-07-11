@@ -135,6 +135,7 @@ func (e *ExportableGenerator) findExportableSchemas(graph *gen.Graph) []string {
 	}
 
 	sort.Strings(exportableSchemas)
+
 	return exportableSchemas
 }
 
@@ -145,10 +146,12 @@ func (e *ExportableGenerator) generateValidationFile(schemas []string) error {
 	}
 
 	filePath := fmt.Sprintf("%s/exportable_generated.go", e.OutputDir)
+
 	file, err := os.Create(filePath)
 	if err != nil {
 		return err
 	}
+
 	defer file.Close()
 
 	data := struct {
