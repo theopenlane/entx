@@ -170,14 +170,14 @@
 							return fmt.Errorf("getting ids: %w", err)
 						}
 
-						{{- if $.Annotations.HistoryConfig.UsePondPool }}
+						{{ if $.Annotations.HistoryConfig.UsePondPool }}
 						errors := []error{}
 						var mu sync.Mutex
 
 						funks := make([]func(), len(ids))
 						{{- end }}
 
-						{{- if $.Annotations.HistoryConfig.UsePondPool }}
+						{{ if $.Annotations.HistoryConfig.UsePondPool }}
 						for i, id := range ids {
 							id := id // capture range variable
 							funks[i] = func() {
