@@ -184,51 +184,50 @@
 						{{- else }}
 						for _, id := range ids {
 						{{- end }}
-								{{ camel $name }}, err := client.{{ $name }}.Get(ctx, id)
-								if err != nil {
-									{{- if $.Annotations.HistoryConfig.UsePondPool }}
-									mu.Lock()
-									errors = append(errors, err)
-									mu.Unlock()
+							{{ camel $name }}, err := client.{{ $name }}.Get(ctx, id)
+							if err != nil {
+								{{- if $.Annotations.HistoryConfig.UsePondPool }}
+								mu.Lock()
+								errors = append(errors, err)
+								mu.Unlock()
 
-									return
-									{{- else }}
-									return err
-									{{- end }}
-								}
-
-								create := client.{{$h.Name}}.Create()
-
-								{{- if not (eq $updatedByKey "") }}
-									{{- if (eq $updatedByValueType "int") }}
-									if updatedBy != 0 {
-									{{- end }}
-									{{- if (eq $updatedByValueType "string") }}
-									if updatedBy != "" {
-									{{- end }}
-										create = create.SetUpdatedBy(updatedBy)
-									}
+								return
+								{{- else }}
+								return err
 								{{- end }}
+							}
 
-								_, err = create.
-									SetOperation(EntOpToHistoryOp(m.Op())).
-									SetHistoryTime(time.Now()).
-									SetRef(id).
-								{{- range $f := $n.Fields }}
-									Set{{ if $f.Nillable }}Nillable{{ end }}{{ $f.StructField }}({{ camel $name }}.{{ pascal $f.Name }}).
+							create := client.{{$h.Name}}.Create()
+
+							{{- if not (eq $updatedByKey "") }}
+								{{- if (eq $updatedByValueType "int") }}
+								if updatedBy != 0 {
 								{{- end }}
-									Save(ctx)
-								if err != nil {
-									{{- if $.Annotations.HistoryConfig.UsePondPool }}
-									mu.Lock()
-									errors = append(errors, err)
-									mu.Unlock()
-
-									return
-									{{- else }}
-									return err
-									{{- end }}
+								{{- if (eq $updatedByValueType "string") }}
+								if updatedBy != "" {
+								{{- end }}
+									create = create.SetUpdatedBy(updatedBy)
 								}
+							{{- end }}
+
+							_, err = create.
+								SetOperation(EntOpToHistoryOp(m.Op())).
+								SetHistoryTime(time.Now()).
+								SetRef(id).
+							{{- range $f := $n.Fields }}
+								Set{{ if $f.Nillable }}Nillable{{ end }}{{ $f.StructField }}({{ camel $name }}.{{ pascal $f.Name }}).
+							{{- end }}
+								Save(ctx)
+							if err != nil {
+								{{- if $.Annotations.HistoryConfig.UsePondPool }}
+								mu.Lock()
+								errors = append(errors, err)
+								mu.Unlock()
+
+								return
+								{{- else }}
+								return err
+								{{- end }}
 							}
 							{{- if $.Annotations.HistoryConfig.UsePondPool }}
 							}
