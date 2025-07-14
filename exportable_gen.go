@@ -1,6 +1,7 @@
 package entx
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"sort"
@@ -9,6 +10,7 @@ import (
 
 	"entgo.io/ent/entc"
 	"entgo.io/ent/entc/gen"
+	"golang.org/x/tools/imports"
 )
 
 // ExportableGenerator handles the generation of exportable schema validation.
@@ -164,5 +166,20 @@ func (e *ExportableGenerator) generateValidationFile(schemas []string) error {
 		Schemas:    schemas,
 	}
 
-	return tmpl.Execute(file, data)
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "generated", data); err != nil {
+		return err
+	}
+
+	// run gofmt and goimports on the file contents
+	formatted, err := imports.Process(filePath, buf.Bytes(), nil)
+	if err != nil {
+		return fmt.Errorf("%w: failed to format file", err)
+	}
+
+	if _, err := file.Write(formatted); err != nil {
+		return err
+	}
+
+	return nil
 }
