@@ -133,7 +133,7 @@ type EdgeAccess struct {
 
 // EdgeAccessMap maps <SchemaName> -> <edgeName> -> metadata.
 // If an edge defines the accessmap.EdgeAccess annotation, its values are used.
-// Otherwise, defaults are used: ObjectType = edge name, RequiresCheck = false.
+// Otherwise, defaults are used: ObjectType = edge name, SkipEditCheck = false.
 var EdgeAccessMap = map[string]map[string]EdgeAccess{
 {{- range $n := $.Nodes }}
 	{{- if not (contains $n.Name "History") -}}
