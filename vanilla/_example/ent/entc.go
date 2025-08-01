@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	graphSchemaDir = "./../schema/"
-	graphQueryDir  = "./../query/"
+	graphSchemaDir  = "./../schema/"
+	graphQueryDir   = "./../query/"
+	entGeneratedDir = "./../ent/"
 )
 
 func main() {
@@ -29,12 +30,17 @@ func main() {
 		log.Fatalf("creating entgql extension: %v", err)
 	}
 
+	accessExt := genhooks.NewAccessMapExt(
+		genhooks.WithGeneratedDir(entGeneratedDir),
+	)
+
 	if err := entc.Generate("./schema",
 		&gen.Config{
 			Features: []gen.Feature{gen.FeaturePrivacy},
 			Hooks: []gen.Hook{
 				genhooks.GenSchema(graphSchemaDir),
 				genhooks.GenQuery(graphQueryDir),
+				accessExt.Hook(),
 			},
 		},
 		entc.Extensions(
