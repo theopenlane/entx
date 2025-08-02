@@ -3,7 +3,7 @@ module github.com/theopenlane/entx
 go 1.24.4
 
 require (
-	entgo.io/contrib v0.6.0
+	entgo.io/contrib v0.7.0
 	entgo.io/ent v0.14.4
 	github.com/99designs/gqlgen v0.17.76
 	github.com/XSAM/otelsql v0.39.0
