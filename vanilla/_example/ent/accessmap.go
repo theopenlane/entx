@@ -3,16 +3,18 @@
 package generated
 
 type EdgeAccess struct {
-	ObjectType    string
-	SkipEditCheck bool
+	ObjectType      string
+	SkipEditCheck   bool
+	CheckViewAccess bool
 }
 
 // EdgeAccessMap maps <SchemaName> -> <edgeName> -> metadata.
 // If an edge defines the accessmap.EdgeAccess annotation, its values are used.
 // Otherwise, defaults are used: ObjectType = edge name, SkipEditCheck = false.
 var EdgeAccessMap = map[string]map[string]EdgeAccess{"org_membership": {"organization": {
-	ObjectType:    "organization",
-	SkipEditCheck: false,
+	ObjectType:      "organization",
+	SkipEditCheck:   false,
+	CheckViewAccess: false,
 },
 }, "organization": {},
 }

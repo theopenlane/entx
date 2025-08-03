@@ -57,8 +57,17 @@ func (a AccessMapAnnotations) Name() string {
 
 // AccessMapAnnotations defines the configuration settings for the edge access map annotation
 type AccessMapAnnotations struct {
-	ObjectType    string `yaml:"ObjectType,omitempty"`
-	SkipEditCheck bool   `yaml:"SkipEditCheck,omitempty"`
+	// ObjectType is the type of the object that the edge is associated with and referenced in authz checks
+	ObjectType string `yaml:"ObjectType,omitempty"`
+	// SkipEditCheck indicates whether the edge requires an edit access check at all
+	// If SkipEditCheck is true and CheckViewAccess is false, the edge will not be checked for access at all
+	SkipEditCheck bool `yaml:"SkipEditCheck,omitempty"`
+	// CheckViewAccess indicates whether the edge requires a view access check instead of an edit access check
+	// this is useful for edges that you can allow users to set with only view access to the edge, for example
+	// system owned edges that are not editable by the user
+	// If CheckViewAccess is true, but SkipEditCheck is false, the edge will still be checked for edit access and
+	// this setting is ignored
+	CheckViewAccess bool `yaml:"CheckViewAccess,omitempty"`
 }
 
 // EdgeAuthCheck creates an annotation for edge access checks with the specified object type
@@ -69,6 +78,18 @@ func EdgeAuthCheck(objectType string) AccessMapAnnotations {
 	return AccessMapAnnotations{
 		ObjectType:    objectType,
 		SkipEditCheck: false,
+	}
+}
+
+// EdgeViewCheck creates an annotation for edge access checks with the specified object type
+// and requires only view access to the object
+// this should be used to for edges that only require view access to the object
+// such as system owned edges
+func EdgeViewCheck(objectType string) AccessMapAnnotations {
+	return AccessMapAnnotations{
+		ObjectType:      objectType,
+		SkipEditCheck:   true,
+		CheckViewAccess: true,
 	}
 }
 
@@ -129,6 +150,7 @@ package generated
 type EdgeAccess struct {
 	ObjectType    string
 	SkipEditCheck bool
+	CheckViewAccess bool
 }
 
 // EdgeAccessMap maps <SchemaName> -> <edgeName> -> metadata.
@@ -143,6 +165,7 @@ var EdgeAccessMap = map[string]map[string]EdgeAccess{
 		"{{ toSnake $e.Name }}": {
 			ObjectType: "{{- if and $ann (ne $ann.ObjectType "") -}}{{ $ann.ObjectType }}{{- else -}}{{ singular $e.Name }}{{- end -}}",
 			SkipEditCheck: {{- if $ann -}}{{ $ann.SkipEditCheck }}{{- else -}}false{{- end -}},
+			CheckViewAccess: {{- if $ann -}}{{ $ann.CheckViewAccess }}{{- else -}}false{{- end -}},
 		},
 	{{- end }}
 	},
