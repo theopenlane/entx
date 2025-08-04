@@ -7,6 +7,7 @@ import (
 
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
+	"github.com/theopenlane/entx/accessmap"
 	"github.com/theopenlane/entx/genhooks"
 
 	"entgo.io/ent/entc"
@@ -30,8 +31,8 @@ func main() {
 		log.Fatalf("creating entgql extension: %v", err)
 	}
 
-	accessExt := genhooks.NewAccessMapExt(
-		genhooks.WithGeneratedDir(entGeneratedDir),
+	accessExt := accessmap.New(
+		accessmap.WithGeneratedDir(entGeneratedDir),
 	)
 
 	if err := entc.Generate("./schema",
