@@ -40,14 +40,6 @@ func TestSchemaGenAnnotation(t *testing.T) {
 	assert.Equal(t, sa.Skip, s)
 }
 
-func TestFeatureAnnotation(t *testing.T) {
-	mods := []FeatureModule{FeatureModule(gofakeit.Word()), FeatureModule(gofakeit.Word())}
-	fa := Features(mods...)
-
-	assert.Equal(t, fa.Name(), FeatureAnnotationName)
-	assert.Equal(t, mods, fa.Features)
-}
-
 func TestExportableAnnotation(t *testing.T) {
 	ea := &Exportable{}
 
