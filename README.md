@@ -384,52 +384,6 @@ field.Enum("action").
 
 For more information on enums, refer to the [ent documentation](https://entgo.io/docs/schema-fields#enum-fields).
 
-## Feature Map
-
-This package supports annotating ent schemas with feature identifiers. These annotations allow code generation or other tooling to enable or disable functionality based on the modules purchased by an end user.
-
-### Annotating Schemas
-
-Use the helper from `entx` to mark a schema with a list of features. Features are just string identifiers and can represent modules or add-ons in your product.
-
-```go
-func (Example) Annotations() []schema.Annotation {
-    return []schema.Annotation{
-        entx.Features("compliance", "trust-center"),
-    }
-}
-```
-
-Alternatively, you can apply the mixin from the `mixin` package:
-
-```go
-func (Example) Mixin() []ent.Mixin {
-    return []ent.Mixin{
-        mixin.Feature("compliance"),
-    }
-}
-```
-
-### Generating a Feature Map
-
-Use the `genhooks.GenFeatureMap` hook when running `entc` to create a file mapping each ent type to its features. Provide an output directory for the generated file.
-
-```go
-opts := []entc.Option{
-    entc.GenHooks(
-        genhooks.GenFeatureMap("ent/featuremap"),
-    ),
-}
-```
-
-Running code generation will produce a `features.go` file similar to:
-
-```go
-var FeatureOfType = map[string][]string{
-    "Example": {"compliance", "trust-center"},
-}
-```
-
 ## Exportable schemas
 
 This package supports annotating ent schemas to allow the to be exported into multiple formats e.g csv and others
