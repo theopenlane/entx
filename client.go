@@ -27,9 +27,9 @@ type Config struct {
 	// MultiWrite enabled writing to two databases simultaneously
 	MultiWrite bool `json:"multiWrite" koanf:"multiWrite" jsonschema:"description=enables writing to two databases simultaneously" default:"false"`
 	// PrimaryDBSource is the primary database source for all read and write operations
-	PrimaryDBSource string `json:"primaryDbSource" koanf:"primaryDbSource" jsonschema:"description=dsn of the primary database,required" default:"postgres://postgres:password@0.0.0.0:5432/core?sslmode=disable"`
+	PrimaryDBSource string `json:"primaryDbSource" koanf:"primaryDbSource" sensitive:"true" jsonschema:"description=dsn of the primary database,required" default:"postgres://postgres:password@0.0.0.0:5432/core?sslmode=disable"`
 	// SecondaryDBSource for when multi write is enabled
-	SecondaryDBSource string `json:"secondaryDbSource" koanf:"secondaryDbSource" jsonschema:"description=dsn of the secondary database if multi-write is enabled" default:"postgres://postgres:password@0.0.0.0:5432/core-secondary?sslmode=disable"`
+	SecondaryDBSource string `json:"secondaryDbSource" koanf:"secondaryDbSource" sensitive:"true" jsonschema:"description=dsn of the secondary database if multi-write is enabled" default:"postgres://postgres:password@0.0.0.0:5432/core-secondary?sslmode=disable"`
 	// CacheTTL to have results cached for subsequent requests
 	CacheTTL time.Duration `json:"cacheTTL" koanf:"cacheTTL" jsonschema:"description=cache results for subsequent requests, defaults to 1s" default:"1s"`
 	// RunMigrations to run migrations on startup
