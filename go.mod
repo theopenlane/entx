@@ -11,7 +11,7 @@ require (
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/rs/zerolog v1.34.0
 	github.com/stoewer/go-strcase v1.3.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/theopenlane/iam v0.14.2
 	github.com/theopenlane/utils v0.4.8
 	github.com/vektah/gqlparser/v2 v2.5.30
