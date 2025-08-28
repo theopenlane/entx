@@ -208,8 +208,8 @@ func (p *orgmembershipPager) applyFilter(query *OrgMembershipQuery) (*OrgMembers
 	return query, nil
 }
 
-func (p *orgmembershipPager) toCursor(om *OrgMembership) Cursor {
-	return p.order.Field.toCursor(om)
+func (p *orgmembershipPager) toCursor(_m *OrgMembership) Cursor {
+	return p.order.Field.toCursor(_m)
 }
 
 func (p *orgmembershipPager) applyCursors(query *OrgMembershipQuery, after, before *Cursor) (*OrgMembershipQuery, error) {
@@ -255,7 +255,7 @@ func (p *orgmembershipPager) orderExpr(query *OrgMembershipQuery) sql.Querier {
 }
 
 // Paginate executes the query and returns a relay based cursor connection to OrgMembership.
-func (om *OrgMembershipQuery) Paginate(
+func (_m *OrgMembershipQuery) Paginate(
 	ctx context.Context, after *Cursor, first *int,
 	before *Cursor, last *int, opts ...OrgMembershipPaginateOption,
 ) (*OrgMembershipConnection, error) {
@@ -266,7 +266,7 @@ func (om *OrgMembershipQuery) Paginate(
 	if err != nil {
 		return nil, err
 	}
-	if om, err = pager.applyFilter(om); err != nil {
+	if _m, err = pager.applyFilter(_m); err != nil {
 		return nil, err
 	}
 	conn := &OrgMembershipConnection{Edges: []*OrgMembershipEdge{}}
@@ -274,7 +274,7 @@ func (om *OrgMembershipQuery) Paginate(
 	if hasCollectedField(ctx, totalCountField) || hasCollectedField(ctx, pageInfoField) {
 		hasPagination := after != nil || first != nil || before != nil || last != nil
 		if hasPagination || ignoredEdges {
-			c := om.Clone()
+			c := _m.Clone()
 			c.ctx.Fields = nil
 			if conn.TotalCount, err = c.Count(ctx); err != nil {
 				return nil, err
@@ -286,20 +286,20 @@ func (om *OrgMembershipQuery) Paginate(
 	if ignoredEdges || (first != nil && *first == 0) || (last != nil && *last == 0) {
 		return conn, nil
 	}
-	if om, err = pager.applyCursors(om, after, before); err != nil {
+	if _m, err = pager.applyCursors(_m, after, before); err != nil {
 		return nil, err
 	}
 	limit := paginateLimit(first, last)
 	if limit != 0 {
-		om.Limit(limit)
+		_m.Limit(limit)
 	}
 	if field := collectedField(ctx, edgesField, nodeField); field != nil {
-		if err := om.collectField(ctx, limit == 1, graphql.GetOperationContext(ctx), *field, []string{edgesField, nodeField}); err != nil {
+		if err := _m.collectField(ctx, limit == 1, graphql.GetOperationContext(ctx), *field, []string{edgesField, nodeField}); err != nil {
 			return nil, err
 		}
 	}
-	om = pager.applyOrder(om)
-	nodes, err := om.All(ctx)
+	_m = pager.applyOrder(_m)
+	nodes, err := _m.All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -326,25 +326,25 @@ type OrgMembershipOrder struct {
 var DefaultOrgMembershipOrder = &OrgMembershipOrder{
 	Direction: entgql.OrderDirectionAsc,
 	Field: &OrgMembershipOrderField{
-		Value: func(om *OrgMembership) (ent.Value, error) {
-			return om.ID, nil
+		Value: func(_m *OrgMembership) (ent.Value, error) {
+			return _m.ID, nil
 		},
 		column: orgmembership.FieldID,
 		toTerm: orgmembership.ByID,
-		toCursor: func(om *OrgMembership) Cursor {
-			return Cursor{ID: om.ID}
+		toCursor: func(_m *OrgMembership) Cursor {
+			return Cursor{ID: _m.ID}
 		},
 	},
 }
 
 // ToEdge converts OrgMembership into OrgMembershipEdge.
-func (om *OrgMembership) ToEdge(order *OrgMembershipOrder) *OrgMembershipEdge {
+func (_m *OrgMembership) ToEdge(order *OrgMembershipOrder) *OrgMembershipEdge {
 	if order == nil {
 		order = DefaultOrgMembershipOrder
 	}
 	return &OrgMembershipEdge{
-		Node:   om,
-		Cursor: order.Field.toCursor(om),
+		Node:   _m,
+		Cursor: order.Field.toCursor(_m),
 	}
 }
 
@@ -457,8 +457,8 @@ func (p *organizationPager) applyFilter(query *OrganizationQuery) (*Organization
 	return query, nil
 }
 
-func (p *organizationPager) toCursor(o *Organization) Cursor {
-	return p.order.Field.toCursor(o)
+func (p *organizationPager) toCursor(_m *Organization) Cursor {
+	return p.order.Field.toCursor(_m)
 }
 
 func (p *organizationPager) applyCursors(query *OrganizationQuery, after, before *Cursor) (*OrganizationQuery, error) {
@@ -504,7 +504,7 @@ func (p *organizationPager) orderExpr(query *OrganizationQuery) sql.Querier {
 }
 
 // Paginate executes the query and returns a relay based cursor connection to Organization.
-func (o *OrganizationQuery) Paginate(
+func (_m *OrganizationQuery) Paginate(
 	ctx context.Context, after *Cursor, first *int,
 	before *Cursor, last *int, opts ...OrganizationPaginateOption,
 ) (*OrganizationConnection, error) {
@@ -515,7 +515,7 @@ func (o *OrganizationQuery) Paginate(
 	if err != nil {
 		return nil, err
 	}
-	if o, err = pager.applyFilter(o); err != nil {
+	if _m, err = pager.applyFilter(_m); err != nil {
 		return nil, err
 	}
 	conn := &OrganizationConnection{Edges: []*OrganizationEdge{}}
@@ -523,7 +523,7 @@ func (o *OrganizationQuery) Paginate(
 	if hasCollectedField(ctx, totalCountField) || hasCollectedField(ctx, pageInfoField) {
 		hasPagination := after != nil || first != nil || before != nil || last != nil
 		if hasPagination || ignoredEdges {
-			c := o.Clone()
+			c := _m.Clone()
 			c.ctx.Fields = nil
 			if conn.TotalCount, err = c.Count(ctx); err != nil {
 				return nil, err
@@ -535,20 +535,20 @@ func (o *OrganizationQuery) Paginate(
 	if ignoredEdges || (first != nil && *first == 0) || (last != nil && *last == 0) {
 		return conn, nil
 	}
-	if o, err = pager.applyCursors(o, after, before); err != nil {
+	if _m, err = pager.applyCursors(_m, after, before); err != nil {
 		return nil, err
 	}
 	limit := paginateLimit(first, last)
 	if limit != 0 {
-		o.Limit(limit)
+		_m.Limit(limit)
 	}
 	if field := collectedField(ctx, edgesField, nodeField); field != nil {
-		if err := o.collectField(ctx, limit == 1, graphql.GetOperationContext(ctx), *field, []string{edgesField, nodeField}); err != nil {
+		if err := _m.collectField(ctx, limit == 1, graphql.GetOperationContext(ctx), *field, []string{edgesField, nodeField}); err != nil {
 			return nil, err
 		}
 	}
-	o = pager.applyOrder(o)
-	nodes, err := o.All(ctx)
+	_m = pager.applyOrder(_m)
+	nodes, err := _m.All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -559,29 +559,29 @@ func (o *OrganizationQuery) Paginate(
 var (
 	// OrganizationOrderFieldCreatedAt orders Organization by created_at.
 	OrganizationOrderFieldCreatedAt = &OrganizationOrderField{
-		Value: func(o *Organization) (ent.Value, error) {
-			return o.CreatedAt, nil
+		Value: func(_m *Organization) (ent.Value, error) {
+			return _m.CreatedAt, nil
 		},
 		column: organization.FieldCreatedAt,
 		toTerm: organization.ByCreatedAt,
-		toCursor: func(o *Organization) Cursor {
+		toCursor: func(_m *Organization) Cursor {
 			return Cursor{
-				ID:    o.ID,
-				Value: o.CreatedAt,
+				ID:    _m.ID,
+				Value: _m.CreatedAt,
 			}
 		},
 	}
 	// OrganizationOrderFieldUpdatedAt orders Organization by updated_at.
 	OrganizationOrderFieldUpdatedAt = &OrganizationOrderField{
-		Value: func(o *Organization) (ent.Value, error) {
-			return o.UpdatedAt, nil
+		Value: func(_m *Organization) (ent.Value, error) {
+			return _m.UpdatedAt, nil
 		},
 		column: organization.FieldUpdatedAt,
 		toTerm: organization.ByUpdatedAt,
-		toCursor: func(o *Organization) Cursor {
+		toCursor: func(_m *Organization) Cursor {
 			return Cursor{
-				ID:    o.ID,
-				Value: o.UpdatedAt,
+				ID:    _m.ID,
+				Value: _m.UpdatedAt,
 			}
 		},
 	}
@@ -640,24 +640,24 @@ type OrganizationOrder struct {
 var DefaultOrganizationOrder = &OrganizationOrder{
 	Direction: entgql.OrderDirectionAsc,
 	Field: &OrganizationOrderField{
-		Value: func(o *Organization) (ent.Value, error) {
-			return o.ID, nil
+		Value: func(_m *Organization) (ent.Value, error) {
+			return _m.ID, nil
 		},
 		column: organization.FieldID,
 		toTerm: organization.ByID,
-		toCursor: func(o *Organization) Cursor {
-			return Cursor{ID: o.ID}
+		toCursor: func(_m *Organization) Cursor {
+			return Cursor{ID: _m.ID}
 		},
 	},
 }
 
 // ToEdge converts Organization into OrganizationEdge.
-func (o *Organization) ToEdge(order *OrganizationOrder) *OrganizationEdge {
+func (_m *Organization) ToEdge(order *OrganizationOrder) *OrganizationEdge {
 	if order == nil {
 		order = DefaultOrganizationOrder
 	}
 	return &OrganizationEdge{
-		Node:   o,
-		Cursor: order.Field.toCursor(o),
+		Node:   _m,
+		Cursor: order.Field.toCursor(_m),
 	}
 }
