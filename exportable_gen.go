@@ -98,8 +98,7 @@ func IsSchemaExportable(schemaName string) bool {
 
 // ValidateExportType validates that an export type corresponds to an exportable schema
 func ValidateExportType(exportType string) error {
-	schemaName := strings.ToLower(exportType)
-	if !IsSchemaExportable(schemaName) {
+	if !IsSchemaExportable(exportType) {
 		return fmt.Errorf("schema %s is not exportable (missing Exportable annotation)", exportType)
 	}
 	return nil
