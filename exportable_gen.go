@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 	"text/template"
 
 	"entgo.io/ent/entc"
 	"entgo.io/ent/entc/gen"
+	"github.com/stoewer/go-strcase"
 	"golang.org/x/tools/imports"
 )
 
@@ -93,7 +93,7 @@ var ExportableSchemas = map[string]bool{
 
 // IsSchemaExportable checks if a schema name is exportable
 func IsSchemaExportable(schemaName string) bool {
-	return ExportableSchemas[strings.ToLower(schemaName)]
+	return ExportableSchemas[schemaName]
 }
 
 // ValidateExportType validates that an export type corresponds to an exportable schema
@@ -131,7 +131,7 @@ func (e *ExportableGenerator) findExportableSchemas(graph *gen.Graph) []string {
 	for _, schema := range graph.Schemas {
 		if raw, ok := schema.Annotations[ant.Name()]; ok {
 			if err := ant.Decode(raw); err == nil {
-				exportableSchemas = append(exportableSchemas, strings.ToLower(schema.Name))
+				exportableSchemas = append(exportableSchemas, strcase.UpperSnakeCase(schema.Name))
 			}
 		}
 	}
