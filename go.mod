@@ -1,6 +1,6 @@
 module github.com/theopenlane/entx
 
-go 1.24.4
+go 1.25.1
 
 require (
 	entgo.io/contrib v0.7.0
