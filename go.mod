@@ -7,13 +7,13 @@ require (
 	entgo.io/ent v0.14.5
 	github.com/99designs/gqlgen v0.17.78
 	github.com/XSAM/otelsql v0.40.0
-	github.com/brianvoe/gofakeit/v7 v7.6.0
+	github.com/brianvoe/gofakeit/v7 v7.7.1
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/rs/zerolog v1.34.0
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.11.1
 	github.com/theopenlane/iam v0.17.0
-	github.com/theopenlane/utils v0.5.0
+	github.com/theopenlane/utils v0.5.2
 	github.com/vektah/gqlparser/v2 v2.5.30
 	go.opentelemetry.io/otel v1.38.0
 	golang.org/x/tools v0.36.0
@@ -50,7 +50,7 @@ require (
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/redis/go-redis/v9 v9.13.0 // indirect
+	github.com/redis/go-redis/v9 v9.14.0 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/sosodev/duration v1.3.1 // indirect
 	github.com/theopenlane/echox v0.2.4 // indirect
