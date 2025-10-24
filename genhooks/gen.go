@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"entgo.io/ent/entc/gen"
-	sliceutil "github.com/theopenlane/utils/slice"
+	"github.com/samber/lo"
 )
 
 var (
@@ -20,7 +20,7 @@ var (
 
 // isSoftDeleteField checks if the field is a soft delete field
 func isSoftDeleteField(f *gen.Field) bool {
-	return sliceutil.Contains(softDeleteFields, f.Name)
+	return lo.Contains(softDeleteFields, f.Name)
 }
 
 // getFileName returns the file name for the query file
