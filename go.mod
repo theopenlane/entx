@@ -5,7 +5,7 @@ go 1.25.1
 require (
 	entgo.io/contrib v0.7.0
 	entgo.io/ent v0.14.5
-	github.com/99designs/gqlgen v0.17.81
+	github.com/99designs/gqlgen v0.17.83
 	github.com/XSAM/otelsql v0.40.0
 	github.com/brianvoe/gofakeit/v7 v7.8.0
 	github.com/gertd/go-pluralize v0.2.1
@@ -14,7 +14,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/theopenlane/iam v0.19.0
 	github.com/theopenlane/utils v0.5.2
-	github.com/vektah/gqlparser/v2 v2.5.30
+	github.com/vektah/gqlparser/v2 v2.5.31
 	go.opentelemetry.io/otel v1.38.0
 	golang.org/x/tools v0.38.0
 )
