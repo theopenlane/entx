@@ -21,27 +21,27 @@ type Config struct {
 	// Debug to print debug database logs
 	Debug bool `json:"debug" koanf:"debug" jsonschema:"description=debug enables printing the debug database logs" default:"false"`
 	// DatabaseName is the name of the database to use with otel tracing
-	DatabaseName string `json:"databaseName" koanf:"databaseName" jsonschema:"description=the name of the database to use with otel tracing" default:"openlane"`
+	DatabaseName string `json:"databasename" koanf:"databasename" jsonschema:"description=the name of the database to use with otel tracing" default:"openlane"`
 	// DriverName name from dialect.Driver
-	DriverName string `json:"driverName" koanf:"driverName" jsonschema:"description=sql driver name, supported drivers include sqlite, libsql, psql, and pgx (postgres pooling)" default:"pgx"`
+	DriverName string `json:"drivername" koanf:"drivername" jsonschema:"description=sql driver name, supported drivers include sqlite, libsql, psql, and pgx (postgres pooling)" default:"pgx"`
 	// MultiWrite enabled writing to two databases simultaneously
-	MultiWrite bool `json:"multiWrite" koanf:"multiWrite" jsonschema:"description=enables writing to two databases simultaneously" default:"false"`
+	MultiWrite bool `json:"multiwrite" koanf:"multiwrite" jsonschema:"description=enables writing to two databases simultaneously" default:"false"`
 	// PrimaryDBSource is the primary database source for all read and write operations
-	PrimaryDBSource string `json:"primaryDbSource" koanf:"primaryDbSource" sensitive:"true" jsonschema:"description=dsn of the primary database,required" default:"postgres://postgres:password@0.0.0.0:5432/core?sslmode=disable"`
+	PrimaryDBSource string `json:"primarydbsource" koanf:"primarydbsource" sensitive:"true" jsonschema:"description=dsn of the primary database,required" default:"postgres://postgres:password@0.0.0.0:5432/core?sslmode=disable"`
 	// SecondaryDBSource for when multi write is enabled
-	SecondaryDBSource string `json:"secondaryDbSource" koanf:"secondaryDbSource" sensitive:"true" jsonschema:"description=dsn of the secondary database if multi-write is enabled" default:"postgres://postgres:password@0.0.0.0:5432/core-secondary?sslmode=disable"`
+	SecondaryDBSource string `json:"secondarydbsource" koanf:"secondarydbsource" sensitive:"true" jsonschema:"description=dsn of the secondary database if multi-write is enabled" default:"postgres://postgres:password@0.0.0.0:5432/core-secondary?sslmode=disable"`
 	// CacheTTL to have results cached for subsequent requests
-	CacheTTL time.Duration `json:"cacheTTL" koanf:"cacheTTL" jsonschema:"description=cache results for subsequent requests, defaults to 1s" default:"1s"`
+	CacheTTL time.Duration `json:"cachettl" koanf:"cachettl" jsonschema:"description=cache results for subsequent requests, defaults to 1s" default:"1s"`
 	// RunMigrations to run migrations on startup
-	RunMigrations bool `json:"runMigrations" koanf:"runMigrations" jsonschema:"description=run migrations on startup" default:"true"`
+	RunMigrations bool `json:"runmigrations" koanf:"runmigrations" jsonschema:"description=run migrations on startup" default:"true"`
 	// MigrationProvider to use for running migrations
-	MigrationProvider string `json:"migrationProvider" koanf:"migrationProvider" jsonschema:"description=migration provider to use for running migrations" default:"atlas"`
+	MigrationProvider string `json:"migrationprovider" koanf:"migrationprovider" jsonschema:"description=migration provider to use for running migrations" default:"atlas"`
 	// EnableHistory to enable history data to be logged to the database
-	EnableHistory bool `json:"enableHistory" koanf:"enableHistory" jsonschema:"description=enable history data to be logged to the database" default:"false"`
+	EnableHistory bool `json:"enablehistory" koanf:"enablehistory" jsonschema:"description=enable history data to be logged to the database" default:"false"`
 	// MaxConnections is the maximum number of connections to the database
-	MaxConnections int `json:"maxConnections" koanf:"maxConnections" jsonschema:"description=maximum number of connections to the database" default:"0"`
+	MaxConnections int `json:"maxconnections" koanf:"maxconnections" jsonschema:"description=maximum number of connections to the database" default:"0"`
 	// MaxIdleConnections is the maximum number of idle connections to the database
-	MaxIdleConnections int `json:"maxIdleConnections" koanf:"maxIdleConnections" jsonschema:"description=maximum number of idle connections to the database" default:"0"`
+	MaxIdleConnections int `json:"maxidleconnections" koanf:"maxidleconnections" jsonschema:"description=maximum number of idle connections to the database" default:"0"`
 }
 
 // EntClientConfig configures the entsql drivers
