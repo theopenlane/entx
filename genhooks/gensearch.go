@@ -89,8 +89,9 @@ func getInputData(g *gen.Graph) search {
 		// to generate search schema the following conditions must be met:
 		// skip must be false
 		// skipSearch must be false
+		// skipQueryGen must be false
 		// there must be at least one searchable field other than the ID field
-		if checkSchemaGenSkip(f) || !includeSchemaForSearch(f) {
+		if checkSchemaGenSkip(f) || checkQueryGenSkip(f) || !includeSchemaForSearch(f) {
 			continue
 		}
 
