@@ -43,7 +43,7 @@ type SchemaGenAnnotation struct {
 	// Skip indicates that the schema generation should be skipped for this type
 	Skip bool
 	// SkipSearch indicates that the schema should not be searchable
-	// Schemas are also not searchable if not fields are marked as searchable
+	// Schemas are also not searchable if no fields are marked as searchable
 	SkipSearch bool
 }
 

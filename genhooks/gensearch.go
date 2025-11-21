@@ -47,10 +47,48 @@ type Field struct {
 	DotPath string
 }
 
+// Config holds configuration options for the search schema generation
+type Config struct {
+	graphSchemaDir     string
+	graphQueryDir      string
+	includeAdminSearch bool
+}
+
+// add options to generate search schema
+type Option func(*Config)
+
+// WithGraphSchemaDir sets the directory to output the generated search schema files
+func WithGraphSchemaDir(dir string) Option {
+	return func(c *Config) {
+		c.graphSchemaDir = dir
+	}
+}
+
+// WithGraphQueryDir sets the directory to output the generated search query files
+func WithGraphQueryDir(dir string) Option {
+	return func(c *Config) {
+		c.graphQueryDir = dir
+	}
+}
+
+// WithIncludeAdminSearch sets whether to include admin search schema generation
+func WithIncludeAdminSearch(include bool) Option {
+	return func(c *Config) {
+		c.includeAdminSearch = include
+	}
+}
+
 // GenSchema generates graphql schemas when specified to be searchable
-func GenSearchSchema(graphSchemaDir, graphQueryDir string) gen.Hook {
+func GenSearchSchema(opts ...Option) gen.Hook {
 	return func(next gen.Generator) gen.Generator {
 		return gen.GenerateFunc(func(g *gen.Graph) error {
+			c := &Config{}
+
+			// apply options
+			for _, opt := range opts {
+				opt(c)
+			}
+
 			// create schema template
 			schemaTmpl := createSearchTemplate()
 
@@ -65,13 +103,21 @@ func GenSearchSchema(graphSchemaDir, graphQueryDir string) gen.Hook {
 				return cmp.Compare(a.Name, b.Name)
 			})
 
+			log.Warn().Interface("objects", inputData.Objects).Msg("found objects for schema")
+
 			// create search schema file for global and admin
-			genSearchSchemaTemplate(graphSchemaDir, schemaTmpl, inputData, false)
-			genSearchSchemaTemplate(graphSchemaDir, schemaTmpl, inputData, true)
+			genSearchSchemaTemplate(c.graphSchemaDir, schemaTmpl, inputData, false)
+
+			if c.includeAdminSearch {
+				genSearchSchemaTemplate(c.graphSchemaDir, schemaTmpl, inputData, true)
+			}
 
 			// create search query file for global and admin
-			genSearchQueryTemplate(graphQueryDir, queryTmpl, inputData, false)
-			genSearchQueryTemplate(graphQueryDir, queryTmpl, inputData, true)
+			genSearchQueryTemplate(c.graphQueryDir, queryTmpl, inputData, false)
+
+			if c.includeAdminSearch {
+				genSearchQueryTemplate(c.graphQueryDir, queryTmpl, inputData, true)
+			}
 
 			return next.Generate(g)
 		})
@@ -92,13 +138,18 @@ func getInputData(g *gen.Graph) search {
 		// skipQueryGen must be false
 		// there must be at least one searchable field other than the ID field
 		if checkSchemaGenSkip(f) || checkQueryGenSkip(f) || !includeSchemaForSearch(f) {
+			log.Warn().Msgf("Skipping search schema generation for schema: %s", f.Name)
 			continue
 		}
 
 		fields, adminFields := GetSearchableFields(f.Name, g)
 
+		log.Info().Msgf("Found fields for schema %s: %+v", f.Name, fields)
+
 		// only add object if there are searchable fields other than the ID field (ID is always searchable)
-		if len(fields) > 1 {
+		if hasMeaningfulSearchFields(fields) {
+			log.Warn().Msgf("Searchable fields for schema %s: %+v", f.Name, fields)
+
 			inputData.Objects = append(inputData.Objects, Object{
 				Name:        f.Name,
 				Fields:      fields,
@@ -108,6 +159,28 @@ func getInputData(g *gen.Graph) search {
 	}
 
 	return inputData
+}
+
+var defaultFieldsMap = map[string]struct{}{
+	"ID":        {},
+	"DisplayID": {},
+	"Tags":      {},
+}
+
+// hasMeaningfulSearchFields checks if there are searchable fields other than the ID, DisplayID, and Tags fields
+// these fields are included in almost all schemas and do not provide meaningful search capabilities on their own
+func hasMeaningfulSearchFields(fields []Field) bool {
+	if len(fields) <= 1 {
+		return false
+	}
+
+	for _, field := range fields {
+		if _, ok := defaultFieldsMap[field.Name]; !ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 // genSearchSchemaTemplate generates the search schema file
