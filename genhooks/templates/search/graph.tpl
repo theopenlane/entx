@@ -73,6 +73,7 @@ extend type Query{
         """
         last: Int
     ): SearchResults
+    {{- if $.IncludeAdminSearch }}
     """
     Admin search across all objects
     """
@@ -98,5 +99,6 @@ extend type Query{
         """
         last: Int
     ): SearchResults
+    {{- end }}
 }
 {{- end }}
