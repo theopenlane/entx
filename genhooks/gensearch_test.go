@@ -444,3 +444,84 @@ func TestGetDotPathAnnotation(t *testing.T) {
 		})
 	}
 }
+func TestHasMeaningfulSearchFields(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    []Field
+		expected bool
+	}{
+		{
+			name:     "empty fields",
+			input:    []Field{},
+			expected: false,
+		},
+		{
+			name: "only one field",
+			input: []Field{
+				{Name: "ID"},
+			},
+			expected: false,
+		},
+		{
+			name: "only default fields - ID and Tags",
+			input: []Field{
+				{Name: "ID"},
+				{Name: "Tags"},
+			},
+			expected: false,
+		},
+		{
+			name: "only default fields - ID, DisplayID, and Tags",
+			input: []Field{
+				{Name: "ID"},
+				{Name: "DisplayID"},
+				{Name: "Tags"},
+			},
+			expected: false,
+		},
+		{
+			name: "has meaningful field with ID",
+			input: []Field{
+				{Name: "ID"},
+				{Name: "Name"},
+			},
+			expected: true,
+		},
+		{
+			name: "has meaningful field with default fields",
+			input: []Field{
+				{Name: "ID"},
+				{Name: "Tags"},
+				{Name: "Description"},
+			},
+			expected: true,
+		},
+		{
+			name: "only meaningful fields",
+			input: []Field{
+				{Name: "Name"},
+				{Name: "Description"},
+			},
+			expected: true,
+		},
+		{
+			name: "mixed default and meaningful fields",
+			input: []Field{
+				{Name: "ID"},
+				{Name: "DisplayID"},
+				{Name: "Tags"},
+				{Name: "Email"},
+				{Name: "Username"},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := HasMeaningfulSearchFields(tc.input)
+
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}

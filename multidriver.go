@@ -45,8 +45,8 @@ func (d *MultiWriteDriver) BeginTx(ctx context.Context, opts *sql.TxOptions) (di
 // Close the underlying connections
 func (d *MultiWriteDriver) Close() error {
 	wserr := d.Ws.Close()
-	wperr := d.Wp.Close()
 
+	wperr := d.Wp.Close()
 	if wperr != nil {
 		return wserr
 	}
