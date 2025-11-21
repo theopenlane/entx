@@ -23,6 +23,8 @@ type search struct {
 	Name string
 	// Objects is a list of objects to generate search resolvers for
 	Objects []Object
+	// IncludeAdminSearch indicates whether admin search schema is being generated
+	IncludeAdminSearch bool
 }
 
 // Object is a struct to hold the object name for the search resolver
@@ -100,6 +102,7 @@ func GenSearchSchema(opts ...Option) gen.Hook {
 
 			// get input data
 			inputData := getInputData(g)
+			inputData.IncludeAdminSearch = c.includeAdminSearch
 
 			// sort objects by name so we have consistent output
 			slices.SortFunc(inputData.Objects, func(a, b Object) int {
