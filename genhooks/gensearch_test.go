@@ -519,7 +519,7 @@ func TestHasMeaningfulSearchFields(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := hasMeaningfulSearchFields(tc.input)
+			result := HasMeaningfulSearchFields(tc.input)
 
 			assert.Equal(t, tc.expected, result)
 		})

@@ -139,16 +139,13 @@ func getInputData(g *gen.Graph) search {
 		// skipQueryGen must be false
 		// there must be at least one searchable field other than the ID field
 		if checkSchemaGenSkip(f) || checkQueryGenSkip(f) || !includeSchemaForSearch(f) {
-			log.Warn().Msgf("Skipping search schema generation for schema: %s", f.Name)
 			continue
 		}
 
 		fields, adminFields := GetSearchableFields(f.Name, g)
 
 		// only add object if there are searchable fields other than the ID field (ID is always searchable)
-		if hasMeaningfulSearchFields(fields) {
-			log.Warn().Msgf("Searchable fields for schema %s: %+v", f.Name, fields)
-
+		if HasMeaningfulSearchFields(fields) {
 			inputData.Objects = append(inputData.Objects, Object{
 				Name:        f.Name,
 				Fields:      fields,
@@ -168,7 +165,7 @@ var defaultFieldsMap = map[string]struct{}{
 
 // hasMeaningfulSearchFields checks if there are searchable fields other than the ID, DisplayID, and Tags fields
 // these fields are included in almost all schemas and do not provide meaningful search capabilities on their own
-func hasMeaningfulSearchFields(fields []Field) bool {
+func HasMeaningfulSearchFields(fields []Field) bool {
 	if len(fields) <= 1 {
 		return false
 	}
