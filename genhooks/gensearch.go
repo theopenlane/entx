@@ -82,7 +82,10 @@ func WithIncludeAdminSearch(include bool) Option {
 func GenSearchSchema(opts ...Option) gen.Hook {
 	return func(next gen.Generator) gen.Generator {
 		return gen.GenerateFunc(func(g *gen.Graph) error {
-			c := &Config{}
+			c := &Config{
+				// keep behavior default to include admin search
+				includeAdminSearch: true,
+			}
 
 			// apply options
 			for _, opt := range opts {
@@ -102,8 +105,6 @@ func GenSearchSchema(opts ...Option) gen.Hook {
 			slices.SortFunc(inputData.Objects, func(a, b Object) int {
 				return cmp.Compare(a.Name, b.Name)
 			})
-
-			log.Warn().Interface("objects", inputData.Objects).Msg("found objects for schema")
 
 			// create search schema file for global and admin
 			genSearchSchemaTemplate(c.graphSchemaDir, schemaTmpl, inputData, false)
@@ -143,8 +144,6 @@ func getInputData(g *gen.Graph) search {
 		}
 
 		fields, adminFields := GetSearchableFields(f.Name, g)
-
-		log.Info().Msgf("Found fields for schema %s: %+v", f.Name, fields)
 
 		// only add object if there are searchable fields other than the ID field (ID is always searchable)
 		if hasMeaningfulSearchFields(fields) {
