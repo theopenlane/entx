@@ -54,7 +54,7 @@ type Config struct {
 	includeAdminSearch bool
 }
 
-// add options to generate search schema
+// Option adds functional params for Config
 type Option func(*Config)
 
 // WithGraphSchemaDir sets the directory to output the generated search schema files
