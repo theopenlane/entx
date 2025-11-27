@@ -20,6 +20,9 @@ var SearchFieldAnnotationName = "OPENLANE_SEARCH"
 // FeatureVisibilityAnnotationName is the annotation name used to flag schema visibility
 var FeatureVisibilityAnnotationName = "OPENLANE_SCHEMA_VISIBILITY"
 
+// WorkflowEligibleAnnotationName is the annotation name for workflow-eligible fields
+var WorkflowEligibleAnnotationName = "OPENLANE_WORKFLOW_ELIGIBLE"
+
 // CascadeAnnotation is an annotation used to indicate that an edge should be cascaded
 type CascadeAnnotation struct {
 	Field string
@@ -64,6 +67,12 @@ type SearchFieldAnnotation struct {
 	JSONDotPath string
 }
 
+// WorkflowEligibleAnnotation is an annotation used to indicate that a field can be modified via workflow proposed changes
+type WorkflowEligibleAnnotation struct {
+	// Eligible indicates that the field can be included in workflow definitions and modified via proposed changes
+	Eligible bool
+}
+
 // Name returns the name of the CascadeAnnotation
 func (a CascadeAnnotation) Name() string {
 	return CascadeAnnotationName
@@ -87,6 +96,11 @@ func (a QueryGenAnnotation) Name() string {
 // Name returns the name of the SearchFieldAnnotation
 func (a SearchFieldAnnotation) Name() string {
 	return SearchFieldAnnotationName
+}
+
+// Name returns the name of the WorkflowEligibleAnnotation
+func (a WorkflowEligibleAnnotation) Name() string {
+	return WorkflowEligibleAnnotationName
 }
 
 // CascadeAnnotationField sets the field name of the edge containing the ID of a record from the current schema
@@ -154,6 +168,13 @@ func FieldAdminSearchable(s bool) *SearchFieldAnnotation {
 	}
 }
 
+// FieldWorkflowEligible returns a new WorkflowEligibleAnnotation with the eligible flag set
+func FieldWorkflowEligible() *WorkflowEligibleAnnotation {
+	return &WorkflowEligibleAnnotation{
+		Eligible: true,
+	}
+}
+
 // Decode unmarshalls the CascadeAnnotation
 func (a *CascadeAnnotation) Decode(annotation interface{}) error {
 	buf, err := json.Marshal(annotation)
@@ -196,6 +217,16 @@ func (a *QueryGenAnnotation) Decode(annotation interface{}) error {
 
 // Decode unmarshalls the SearchFieldAnnotation
 func (a *SearchFieldAnnotation) Decode(annotation interface{}) error {
+	buf, err := json.Marshal(annotation)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(buf, a)
+}
+
+// Decode unmarshalls the WorkflowEligibleAnnotation
+func (a *WorkflowEligibleAnnotation) Decode(annotation interface{}) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err

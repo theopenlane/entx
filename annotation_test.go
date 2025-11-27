@@ -49,3 +49,16 @@ func TestExportableAnnotation(t *testing.T) {
 	err := ea.Decode(map[string]any{})
 	assert.NoError(t, err)
 }
+
+func TestWorkflowEligibleAnnotation(t *testing.T) {
+	wea := FieldWorkflowEligible()
+
+	assert.Equal(t, wea.Name(), WorkflowEligibleAnnotationName)
+	assert.True(t, wea.Eligible)
+
+	// Test Decode method
+	decoded := &WorkflowEligibleAnnotation{}
+	err := decoded.Decode(map[string]any{"Eligible": true})
+	assert.NoError(t, err)
+	assert.True(t, decoded.Eligible)
+}
