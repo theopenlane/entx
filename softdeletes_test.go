@@ -23,14 +23,13 @@ func TestCheckSkipSoftDelete(t *testing.T) {
 
 func TestIsSoftDelete(t *testing.T) {
 	parent := context.Background()
-	ctx := IsSoftDelete(parent)
+	ctx := IsSoftDelete(parent, "TestObject")
 
-	assert.True(t, CheckIsSoftDelete(ctx))
+	assert.True(t, CheckIsSoftDeleteType(ctx, "TestObject"))
 }
 
 func TestCheckIsSoftDelete(t *testing.T) {
-	ctx := context.WithValue(context.Background(), SoftDeleteKey{}, true)
-
-	assert.True(t, CheckIsSoftDelete(ctx))
-	assert.False(t, CheckIsSoftDelete(context.Background()))
+	ctx := context.WithValue(context.Background(), SoftDeleteKey{}, "TestObject")
+	assert.True(t, CheckIsSoftDeleteType(ctx, "TestObject"))
+	assert.False(t, CheckIsSoftDeleteType(context.Background(), "TestObject"))
 }
