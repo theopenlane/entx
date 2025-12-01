@@ -20,7 +20,7 @@ steps:
         key: "go_test"
         plugins:
           - docker#v5.13.0:
-              image: golang:1.25.1
+              image: golang:1.25.4
               command: ["go", "test", "-coverprofile=coverage.out", "./..."]
         artifact_paths: ["coverage.out"]
       - label: ":github: upload PR reports"
