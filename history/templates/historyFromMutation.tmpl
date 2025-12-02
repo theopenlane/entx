@@ -92,7 +92,7 @@
 
 						{{- end }}
 						 // check for soft delete operation and delete instead
-						if entx.CheckIsSoftDelete(ctx) {
+						if entx.CheckIsSoftDeleteType(ctx, m.Type()) {
 							return m.CreateHistoryFromDelete(ctx)
 						}
 						client := m.Client()
@@ -155,7 +155,7 @@
 						{{- end }}
 
 						// check for soft delete operation and skip so it happens on update
-						if entx.CheckIsSoftDelete(ctx) {
+						if entx.CheckIsSoftDeleteType(ctx, m.Type()) {
 							return nil
 						}
 
