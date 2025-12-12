@@ -23,6 +23,12 @@ var FeatureVisibilityAnnotationName = "OPENLANE_SCHEMA_VISIBILITY"
 // WorkflowEligibleAnnotationName is the annotation name for workflow-eligible fields
 var WorkflowEligibleAnnotationName = "OPENLANE_WORKFLOW_ELIGIBLE"
 
+// WebhookPayloadFieldAnnotationName is the annotation name for fields to include in webhook payloads
+var WebhookPayloadFieldAnnotationName = "OPENLANE_WEBHOOK_PAYLOAD_FIELD"
+
+// WorkflowObjectConfigAnnotationName is the annotation name for workflow object configuration
+var WorkflowObjectConfigAnnotationName = "OPENLANE_WORKFLOW_OBJECT_CONFIG"
+
 // CascadeAnnotation is an annotation used to indicate that an edge should be cascaded
 type CascadeAnnotation struct {
 	Field string
@@ -73,6 +79,18 @@ type WorkflowEligibleAnnotation struct {
 	Eligible bool
 }
 
+// WebhookPayloadFieldAnnotation is an annotation used to indicate that a field should be included in webhook payloads
+type WebhookPayloadFieldAnnotation struct {
+	// Include indicates that the field should be included in webhook payloads
+	Include bool
+}
+
+// WorkflowObjectConfigAnnotation is an annotation used to configure workflow object loading behavior
+type WorkflowObjectConfigAnnotation struct {
+	// EagerLoadEdges lists edges that should be eagerly loaded when loading workflow objects
+	EagerLoadEdges []string
+}
+
 // Name returns the name of the CascadeAnnotation
 func (a CascadeAnnotation) Name() string {
 	return CascadeAnnotationName
@@ -101,6 +119,16 @@ func (a SearchFieldAnnotation) Name() string {
 // Name returns the name of the WorkflowEligibleAnnotation
 func (a WorkflowEligibleAnnotation) Name() string {
 	return WorkflowEligibleAnnotationName
+}
+
+// Name returns the name of the WebhookPayloadFieldAnnotation
+func (a WebhookPayloadFieldAnnotation) Name() string {
+	return WebhookPayloadFieldAnnotationName
+}
+
+// Name returns the name of the WorkflowObjectConfigAnnotation
+func (a WorkflowObjectConfigAnnotation) Name() string {
+	return WorkflowObjectConfigAnnotationName
 }
 
 // CascadeAnnotationField sets the field name of the edge containing the ID of a record from the current schema
@@ -175,6 +203,20 @@ func FieldWorkflowEligible() *WorkflowEligibleAnnotation {
 	}
 }
 
+// FieldWebhookPayloadField returns a new WebhookPayloadFieldAnnotation with the include flag set
+func FieldWebhookPayloadField() *WebhookPayloadFieldAnnotation {
+	return &WebhookPayloadFieldAnnotation{
+		Include: true,
+	}
+}
+
+// WorkflowObjectConfig returns a new WorkflowObjectConfigAnnotation with the specified eager load edges
+func WorkflowObjectConfig(eagerLoadEdges []string) *WorkflowObjectConfigAnnotation {
+	return &WorkflowObjectConfigAnnotation{
+		EagerLoadEdges: eagerLoadEdges,
+	}
+}
+
 // Decode unmarshalls the CascadeAnnotation
 func (a *CascadeAnnotation) Decode(annotation interface{}) error {
 	buf, err := json.Marshal(annotation)
@@ -227,6 +269,26 @@ func (a *SearchFieldAnnotation) Decode(annotation interface{}) error {
 
 // Decode unmarshalls the WorkflowEligibleAnnotation
 func (a *WorkflowEligibleAnnotation) Decode(annotation interface{}) error {
+	buf, err := json.Marshal(annotation)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(buf, a)
+}
+
+// Decode unmarshalls the WebhookPayloadFieldAnnotation
+func (a *WebhookPayloadFieldAnnotation) Decode(annotation any) error {
+	buf, err := json.Marshal(annotation)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(buf, a)
+}
+
+// Decode unmarshalls the WorkflowObjectConfigAnnotation
+func (a *WorkflowObjectConfigAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
