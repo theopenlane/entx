@@ -7,16 +7,16 @@ require (
 	entgo.io/ent v0.14.5
 	github.com/99designs/gqlgen v0.17.84
 	github.com/XSAM/otelsql v0.40.0
-	github.com/brianvoe/gofakeit/v7 v7.11.0
+	github.com/brianvoe/gofakeit/v7 v7.12.1
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/rs/zerolog v1.34.0
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.11.1
 	github.com/theopenlane/iam v0.23.0
-	github.com/theopenlane/utils v0.6.1
+	github.com/theopenlane/utils v0.6.2
 	github.com/vektah/gqlparser/v2 v2.5.31
-	go.opentelemetry.io/otel v1.38.0
-	golang.org/x/tools v0.39.0
+	go.opentelemetry.io/otel v1.39.0
+	golang.org/x/tools v0.40.0
 )
 
 require (
@@ -54,7 +54,7 @@ require (
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/redis/go-redis/v9 v9.17.0 // indirect
+	github.com/redis/go-redis/v9 v9.17.2 // indirect
 	github.com/samber/lo v1.52.0
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/sosodev/duration v1.3.1 // indirect
@@ -66,13 +66,13 @@ require (
 	github.com/zclconf/go-cty v1.15.0 // indirect
 	github.com/zclconf/go-cty-yaml v1.1.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/otel/metric v1.38.0 // indirect
-	go.opentelemetry.io/otel/trace v1.38.0 // indirect
+	go.opentelemetry.io/otel/metric v1.39.0 // indirect
+	go.opentelemetry.io/otel/trace v1.39.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/mod v0.30.0 // indirect
+	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/oauth2 v0.33.0 // indirect
-	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

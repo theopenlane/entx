@@ -78,7 +78,7 @@ var (
 // this should be called before the entc.Generate call
 // so the schemas exist at the time of code generation
 func (h *Extension) GenerateSchemas() error {
-	graph, err := entc.LoadGraph(h.config.SchemaPath, &gen.Config{})
+	graph, err := entc.LoadGraph(h.config.InputSchemaPath, &gen.Config{})
 	if err != nil {
 		return fmt.Errorf("%w: failed loading ent graph: %v", ErrFailedToGenerateTemplate, err)
 	}
@@ -131,7 +131,7 @@ func shouldGenerate(schema *load.Schema) bool {
 
 // getTemplateInfo returns the template info for the history schema based on the schema and config
 func getTemplateInfo(schema *load.Schema, config *Config, idType string) (*templateInfo, error) {
-	pkg, err := getPkgFromSchemaPath(config.SchemaPath)
+	pkg, err := getPkgFromSchemaPath(config.InputSchemaPath)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func generateHistorySchema(schema *load.Schema, config *Config, idType string, w
 
 // getHistorySchemaPath returns the path of the history schemas
 func getHistorySchemaPath(schema *load.Schema, config *Config) (string, error) {
-	abs, err := filepath.Abs(config.SchemaPath)
+	abs, err := filepath.Abs(config.OutputSchemaPath)
 	if err != nil {
 		return "", err
 	}

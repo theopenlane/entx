@@ -7,6 +7,10 @@ import (
 
 type ExtensionOption = func(*Extension)
 
+const (
+	defaultSchemaPath = "./schema"
+)
+
 // UpdatedBy is a struct that holds the key and type for the updated_by field
 type UpdatedBy struct {
 	key       string
@@ -22,10 +26,12 @@ type FieldProperties struct {
 
 // Config is the configuration for the history extension
 type Config struct {
+	// IncludeUpdatedBy optionally adds an updated_by field to the history schema
 	IncludeUpdatedBy bool
 	UpdatedBy        *UpdatedBy
 	Auditing         bool
-	SchemaPath       string
+	InputSchemaPath  string
+	OutputSchemaPath string
 	SchemaName       string
 	Query            bool
 	Skipper          string
@@ -62,9 +68,10 @@ func New(opts ...ExtensionOption) *Extension {
 	extension := &Extension{
 		// Set configuration defaults that can get overridden with ExtensionOption
 		config: &Config{
-			SchemaPath:      "./schema",
-			Auditing:        false,
-			FieldProperties: &FieldProperties{},
+			InputSchemaPath:  defaultSchemaPath,
+			OutputSchemaPath: defaultSchemaPath,
+			Auditing:         false,
+			FieldProperties:  &FieldProperties{},
 		},
 	}
 
@@ -154,11 +161,19 @@ func WithSchemaName(schemaName string) ExtensionOption {
 	}
 }
 
-// WithSchemaPath allows you to set an alternative schemaPath
+// WithInputSchemaPath allows you to set an alternative schemaPath
 // Defaults to "./schema"
-func WithSchemaPath(schemaPath string) ExtensionOption {
+func WithInputSchemaPath(schemaPath string) ExtensionOption {
 	return func(h *Extension) {
-		h.config.SchemaPath = schemaPath
+		h.config.InputSchemaPath = schemaPath
+	}
+}
+
+// WithOutputSchemaPath allows you to set an alternative schemaPath
+// Defaults to "./schema"
+func WithOutputSchemaPath(schemaPath string) ExtensionOption {
+	return func(h *Extension) {
+		h.config.OutputSchemaPath = schemaPath
 	}
 }
 
