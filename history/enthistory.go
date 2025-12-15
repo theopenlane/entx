@@ -8,7 +8,8 @@ import (
 type ExtensionOption = func(*Extension)
 
 const (
-	defaultSchemaPath = "./schema"
+	defaultSchemaPath  = "./schema"
+	defaultPackageName = "schema"
 )
 
 // UpdatedBy is a struct that holds the key and type for the updated_by field
@@ -41,6 +42,8 @@ type Config struct {
 	OutputSchemaPath string
 	// SchemaName is an optional schema name to use instead of the default generated name
 	SchemaName string
+	// PackageName is an optional package name to use for the history schema
+	PackageName string
 	// Query is a boolean that tells the extension to add the entgql query annotations
 	Query bool
 	// Skipper is an optional function name to use as a skipper for history tracking
@@ -84,6 +87,7 @@ func New(opts ...ExtensionOption) *Extension {
 			InputSchemaPath:  defaultSchemaPath,
 			OutputSchemaPath: defaultSchemaPath,
 			Auditing:         false,
+			PackageName:      defaultPackageName,
 			FieldProperties:  &FieldProperties{},
 		},
 	}
@@ -154,6 +158,13 @@ func WithHistoryTimeIndex() ExtensionOption {
 func WithImmutableFields() ExtensionOption {
 	return func(h *Extension) {
 		h.config.FieldProperties.Immutable = true
+	}
+}
+
+// WithPackageName allows you to set an alternative package name for the history schema
+func WithPackageName(packageName string) ExtensionOption {
+	return func(h *Extension) {
+		h.config.PackageName = packageName
 	}
 }
 

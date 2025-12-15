@@ -26,8 +26,10 @@ type templateInfo struct {
 	Schema *load.Schema
 	// IDType is the type of the id field in the schema (e.g. int, string)
 	IDType string
-	// SchemaPkg is the package of the schema
+	// SchemaPkg is the package of the original schema
 	SchemaPkg string
+	// HistorySchemaPkg is the package name to use for the history schema
+	HistorySchemaPkg string
 	// TableName is the name of the history table
 	TableName string
 	// SchemaName is the name of the schema
@@ -136,10 +138,16 @@ func getTemplateInfo(schema *load.Schema, config *Config, idType string) (*templ
 		return nil, err
 	}
 
+	historyPkg := config.PackageName
+	if historyPkg == "" {
+		historyPkg = pkg
+	}
+
 	info := &templateInfo{
 		TableName:         fmt.Sprintf("%v%s", getSchemaTableName(schema), historyTableSuffix),
 		OriginalTableName: schema.Name,
 		SchemaPkg:         pkg,
+		HistorySchemaPkg:  historyPkg,
 		SchemaName:        config.SchemaName,
 		Query:             config.Query,
 		AuthzPolicy: authzPolicyInfo{
