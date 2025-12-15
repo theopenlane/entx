@@ -1,0 +1,147 @@
+package genhooks
+
+import (
+	"html/template"
+	"log"
+	"os"
+	"strings"
+
+	"entgo.io/ent/entc/gen"
+	"github.com/99designs/gqlgen/codegen/templates"
+)
+
+// workflowSchema holds data for the workflow GraphQL schema template
+type workflowSchema struct {
+	Name        string
+	HasWorkflow bool
+}
+
+// GenWorkflowSchema generates GraphQL schema extensions for entities with ApprovalRequiredMixin
+// This adds the WorkflowEnabled interface implementation with hasPendingWorkflow and activeWorkflowInstance fields
+func GenWorkflowSchema(graphSchemaDir string) gen.Hook {
+	return func(next gen.Generator) gen.Generator {
+		return gen.GenerateFunc(func(g *gen.Graph) error {
+			tmpl := createWorkflowSchemaTemplate()
+
+			for _, node := range g.Nodes {
+				// Check if node has ApprovalRequiredMixin (indicated by proposed_changes field)
+				hasWorkflowSupport := false
+
+				for _, field := range node.Fields {
+					if field.Name == "proposed_changes" {
+						hasWorkflowSupport = true
+						break
+					}
+				}
+
+				if !hasWorkflowSupport {
+					continue
+				}
+
+				// Skip history types
+				if node.Annotations != nil {
+					if historyAnt, ok := node.Annotations["History"]; ok {
+						if historyMap, ok := historyAnt.(map[string]any); ok {
+							if isHistory, ok := historyMap["isHistory"].(bool); ok && isHistory {
+								continue
+							}
+						}
+					}
+				}
+
+				filePath := getFileName(graphSchemaDir, node.Name)
+
+				// Read existing schema file
+				content, err := os.ReadFile(filePath)
+				if err != nil {
+					// File doesn't exist, skip
+					continue
+				}
+
+				// Check if workflow fields are already present
+				existingContent := string(content)
+				if containsWorkflowFields(existingContent) {
+					continue
+				}
+
+				// Prepend workflow interface extension to the file
+				file, err := os.OpenFile(filePath, os.O_RDWR, 0600) // nolint:mnd
+				if err != nil {
+					log.Fatalf("Unable to open file: %v", err)
+				}
+
+				defer file.Close()
+
+				s := workflowSchema{
+					Name:        node.Name,
+					HasWorkflow: true,
+				}
+
+				// Create a temporary buffer for the new content
+				tmpFile, err := os.CreateTemp("", "workflow-schema-*")
+				if err != nil {
+					log.Fatalf("Unable to create temp file: %v", err)
+				}
+
+				defer os.Remove(tmpFile.Name())
+
+				// Write the template to the temp file
+				if err = tmpl.Execute(tmpFile, s); err != nil {
+					log.Fatalf("Unable to execute template: %v", err)
+				}
+
+				// Append the original content
+				if _, err := tmpFile.Write(content); err != nil {
+					log.Fatalf("Unable to write original content: %v", err)
+				}
+
+				tmpFile.Close()
+
+				// Replace the original file with the new content
+				tmpContent, err := os.ReadFile(tmpFile.Name())
+				if err != nil {
+					log.Fatalf("Unable to read temp file: %v", err)
+				}
+
+				if err := os.WriteFile(filePath, tmpContent, 0600); err != nil { // nolint:mnd
+					log.Fatalf("Unable to write file: %v", err)
+				}
+			}
+
+			return next.Generate(g)
+		})
+	}
+}
+
+// containsWorkflowFields checks if the schema already contains workflow fields
+func containsWorkflowFields(content string) bool {
+	return strings.Contains(content, "hasPendingWorkflow") ||
+		strings.Contains(content, "activeWorkflowInstance")
+}
+
+// createWorkflowSchemaTemplate creates the template for workflow schema extensions
+func createWorkflowSchemaTemplate() *template.Template {
+	fm := template.FuncMap{
+		"ToLowerCamel": templates.ToGoPrivate,
+	}
+
+	tmplStr := `extend type {{ .Name }} {
+    """
+    Indicates if this {{ .Name | ToLowerCamel }} has pending changes awaiting workflow approval
+    """
+    hasPendingWorkflow: Boolean!
+    """
+    Returns the active workflow instance for this {{ .Name | ToLowerCamel }} if one is running
+    """
+    activeWorkflowInstance: WorkflowInstance
+}
+
+`
+
+	tmpl, err := template.New("workflow_schema.tpl").Funcs(fm).Parse(tmplStr)
+	if err != nil {
+		log.Fatalf("Unable to parse workflow schema template: %v", err)
+	}
+
+	return tmpl
+}
