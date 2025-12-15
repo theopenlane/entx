@@ -15,12 +15,15 @@ const (
 type UpdatedBy struct {
 	key       string
 	valueType ValueType
-	Nillable  bool
+	// Nillable indicates if the updated_by field should be nillable
+	Nillable bool
 }
 
 // FieldProperties is a struct that holds the properties for the fields in the history schema
 type FieldProperties struct {
-	Nillable  bool
+	// Nillable indicates if the fields should be nillable
+	Nillable bool
+	// Immutable indicates if the fields should be immutable (not allowed to be updated)
 	Immutable bool
 }
 
@@ -28,16 +31,26 @@ type FieldProperties struct {
 type Config struct {
 	// IncludeUpdatedBy optionally adds an updated_by field to the history schema
 	IncludeUpdatedBy bool
-	UpdatedBy        *UpdatedBy
-	Auditing         bool
-	InputSchemaPath  string
+	// UpdatedBy holds the key and type for the updated_by field
+	UpdatedBy *UpdatedBy
+	// Auditing enables the generation of the Audit() method on the client
+	Auditing bool
+	// InputSchemaPath is the path to the input schema directory, defaults to "./schema"
+	InputSchemaPath string
+	// OutputSchemaPath is the path to the output schema directory, defaults to "./schema"
 	OutputSchemaPath string
-	SchemaName       string
-	Query            bool
-	Skipper          string
-	FieldProperties  *FieldProperties
+	// SchemaName is an optional schema name to use instead of the default generated name
+	SchemaName string
+	// Query is a boolean that tells the extension to add the entgql query annotations
+	Query bool
+	// Skipper is an optional function name to use as a skipper for history tracking
+	Skipper string
+	// FieldProperties holds the properties for the fields in the history schema
+	FieldProperties *FieldProperties
+	// HistoryTimeIndex tells the extension to add an index to the history_time field
 	HistoryTimeIndex bool
-	Auth             AuthzSettings
+	// Auth includes the authz policy settings
+	Auth AuthzSettings
 	// UsePondPool to create history updates in parallel
 	UsePondPool bool
 }
