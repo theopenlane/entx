@@ -36,6 +36,8 @@ type Config struct {
 	UpdatedBy *UpdatedBy
 	// Auditing enables the generation of the Audit() method on the client
 	Auditing bool
+	// QueryHelpers enables the generation the query helpers for the history schema
+	QueryHelpers bool
 	// InputSchemaPath is the path to the input schema directory, defaults to "./schema"
 	InputSchemaPath string
 	// OutputSchemaPath is the path to the output schema directory, defaults to "./schema"
@@ -104,8 +106,11 @@ func New(opts ...ExtensionOption) *Extension {
 func (h *Extension) Templates() []*gen.Template {
 	templates := []*gen.Template{
 		parseTemplate("historyFromMutation", "templates/historyFromMutation.tmpl"),
-		parseTemplate("historyQuery", "templates/historyQuery.tmpl"),
 		parseTemplate("historyClient", "templates/historyClient.tmpl"),
+	}
+
+	if h.config.Query {
+		templates = append(templates, parseTemplate("historyQuery", "templates/historyQuery.tmpl"))
 	}
 
 	if h.config.Auditing {
@@ -131,6 +136,13 @@ func (h *Extension) SetFirstRun(firstRun bool) {
 func WithAuditing() ExtensionOption {
 	return func(h *Extension) {
 		h.config.Auditing = true
+	}
+}
+
+// WithQueryHelpers generates the history query helpers for the history schema for pagination with Next(), Latest(), etc.
+func WithQueryHelpers() ExtensionOption {
+	return func(h *Extension) {
+		h.config.QueryHelpers = true
 	}
 }
 

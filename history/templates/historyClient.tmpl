@@ -13,13 +13,11 @@ func (c *Client) WithHistory() {
 		{{- $history := hasSuffix $name "History" }}
 		{{- if $history }}
 		{{- else }}
-			{{- range $h := $.Nodes }}
-				{{- $sameNodeType := hasPrefix $h.Name (printf "%sHistory" $name) }}
-				{{- if $sameNodeType }}
-	for _, hook := range history.Hooks[*{{ $name }}Mutation]() {
-		c.{{ $name }}.Use(hook)
-	}
-				{{- end }}
+			{{- $include := or ( not $n.Annotations.History ) (eq $n.Annotations.History.Exclude false) }}
+			{{- if $include }}
+for _, hook := range history.Hooks[*{{ $name }}Mutation]() {
+	c.{{ $name }}.Use(hook)
+}
 			{{- end }}
 		{{- end }}
 	{{- end }}

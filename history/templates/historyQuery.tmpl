@@ -25,68 +25,66 @@ import (
 		{{ $history := hasSuffix $name "History" }}
 		{{ if $history }}
 		{{ else }}
-			{{ range $h := $.Nodes }}
-				{{ $sameNodeType := hasPrefix $h.Name (printf "%sHistory" $n.Name) }}
-				{{ if $sameNodeType }}
-					func ({{ $n.Receiver }} *{{ $n.Name }}) History() *{{ $h.QueryName }}  {
-						historyClient := New{{ $h.Name }}Client({{ $n.Receiver }}.config)
-						return historyClient.Query().Where({{ lower $h.Name }}.Ref({{ $n.Receiver }}.ID))
-					}
+			{{- $include := or ( not $n.Annotations.History ) (eq $n.Annotations.History.Exclude false) }}
+			{{- if $include }}
+				func ({{ $n.Receiver }} *{{ $n.Name }}) History() *{{ $n.QueryName }}  {
+					historyClient := New{{ $n.Name }}HistoryClient({{ $n.Receiver }}.config)
+					return historyClient.Query().Where({{ lower $n.Name }}history.Ref({{ $n.Receiver }}.ID))
+				}
 
-					func ({{ $h.Receiver }} *{{ $h.Name }}) Next(ctx context.Context) (*{{ $h.Name }}, error) {
-						client := New{{ $h.Name }}Client({{ $h.Receiver }}.config)
-						return client.Query().
-							Where(
-								{{ lower $h.Name }}.Ref({{ $h.Receiver }}.Ref),
-								{{ lower $h.Name }}.HistoryTimeGT({{ $h.Receiver }}.HistoryTime),
-							).
-							Order({{ lower $h.Name }}.ByHistoryTime()).
-							First(ctx)
-					}
+				func ({{ $n.Receiver }}History *{{ $n.Name }}) Next(ctx context.Context) (*{{ $n.Name }}, error) {
+					client := New{{ $n.Name }}Client({{ $n.Receiver }}.config)
+					return client.Query().
+						Where(
+							{{ lower $n.Name }}.Ref({{ $n.Receiver }}.Ref),
+							{{ lower $n.Name }}.HistoryTimeGT({{ $n.Receiver }}.HistoryTime),
+						).
+						Order({{ lower $n.Name }}.ByHistoryTime()).
+						First(ctx)
+				}
 
-					func ({{ $h.Receiver }} *{{ $h.Name }}) Prev(ctx context.Context) (*{{ $h.Name }}, error) {
-						client := New{{ $h.Name }}Client({{ $h.Receiver }}.config)
-						return client.Query().
-							Where(
-								{{ lower $h.Name }}.Ref({{ $h.Receiver }}.Ref),
-								{{ lower $h.Name }}.HistoryTimeLT({{ $h.Receiver }}.HistoryTime),
-							).
-							Order({{ lower $h.Name }}.ByHistoryTime(sql.OrderDesc())).
-							First(ctx)
-					}
+				func ({{ $n.Receiver }} *{{ $n.Name }}) Prev(ctx context.Context) (*{{ $n.Name }}, error) {
+					client := New{{ $n.Name }}Client({{ $n.Receiver }}.config)
+					return client.Query().
+						Where(
+							{{ lower $n.Name }}.Ref({{ $n.Receiver }}.Ref),
+							{{ lower $n.Name }}.HistoryTimeLT({{ $n.Receiver }}.HistoryTime),
+						).
+						Order({{ lower $n.Name }}.ByHistoryTime(sql.OrderDesc())).
+						First(ctx)
+				}
 
-					func ({{ receiver $h.QueryName }} *{{ $h.QueryName }}) Earliest(ctx context.Context) (*{{ $h.Name }}, error)  {
-						return {{ receiver $h.QueryName }}.
-									Order({{ lower $h.Name }}.ByHistoryTime()).
-									First(ctx)
-					}
+				func ({{ receiver $n.QueryName }} *{{ $n.QueryName }}) Earliest(ctx context.Context) (*{{ $n.Name }}, error)  {
+					return {{ receiver $n.QueryName }}.
+								Order({{ lower $n.Name }}.ByHistoryTime()).
+								First(ctx)
+				}
 
-					func ({{ receiver $h.QueryName }} *{{ $h.QueryName }}) Latest(ctx context.Context) (*{{ $h.Name }}, error)  {
-						return {{ receiver $h.QueryName }}.
-									Order({{ lower $h.Name }}.ByHistoryTime(sql.OrderDesc())).
-									First(ctx)
-					}
+				func ({{ receiver $n.QueryName }} *{{ $n.QueryName }}) Latest(ctx context.Context) (*{{ $n.Name }}, error)  {
+					return {{ receiver $n.QueryName }}.
+								Order({{ lower $n.Name }}.ByHistoryTime(sql.OrderDesc())).
+								First(ctx)
+				}
 
-					func ({{ receiver $h.QueryName }} *{{ $h.QueryName }}) AsOf(ctx context.Context, time time.Time) (*{{ $h.Name }}, error)  {
-						return {{ receiver $h.QueryName }}.
-									Where({{ lower $h.Name }}.HistoryTimeLTE(time)).
-									Order({{ lower $h.Name }}.ByHistoryTime(sql.OrderDesc())).
-									First(ctx)
-					}
+				func ({{ receiver $n.QueryName }} *{{ $n.QueryName }}) AsOf(ctx context.Context, time time.Time) (*{{ $n.Name }}, error)  {
+					return {{ receiver $n.QueryName }}.
+								Where({{ lower $n.Name }}.HistoryTimeLTE(time)).
+								Order({{ lower $n.Name }}.ByHistoryTime(sql.OrderDesc())).
+								First(ctx)
+				}
 
-					{{ if not (fieldPropertiesNillable $.Annotations.HistoryConfig) }}
-					func ({{ $h.Receiver }} *{{ $h.Name }}) Restore(ctx context.Context) (*{{ $n.Name }}, error) {
-						client := New{{ $n.Name }}Client({{ $h.Receiver }}.config)
-						return client.
-							UpdateOneID({{ $h.Receiver }}.Ref).
-						{{- range $f := $n.Fields }}
-						{{- if not $f.Immutable }}
-							Set{{ if $f.Nillable }}Nillable{{ end }}{{ $f.StructField }}({{ $h.Receiver }}.{{ pascal $f.Name }}).
-						{{- end }}
-						{{- end }}
-							Save(ctx)
-					}
-					{{ end }}
+				{{ if not (fieldPropertiesNillable $.Annotations.HistoryConfig) }}
+				func ({{ $n.Receiver }} *{{ $n.Name }}) Restore(ctx context.Context) (*{{ $n.Name }}, error) {
+					client := New{{ $n.Name }}Client({{ $n.Receiver }}.config)
+					return client.
+						UpdateOneID({{ $n.Receiver }}.Ref).
+					{{- range $f := $n.Fields }}
+					{{- if not $f.Immutable }}
+						Set{{ if $f.Nillable }}Nillable{{ end }}{{ $f.StructField }}({{ $n.Receiver }}.{{ pascal $f.Name }}).
+					{{- end }}
+					{{- end }}
+						Save(ctx)
+				}
 				{{ end }}
 			{{ end }}
 		{{ end }}
