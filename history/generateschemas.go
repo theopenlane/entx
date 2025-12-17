@@ -26,8 +26,10 @@ type templateInfo struct {
 	Schema *load.Schema
 	// IDType is the type of the id field in the schema (e.g. int, string)
 	IDType string
-	// SchemaPkg is the package of the schema
+	// SchemaPkg is the package of the original schema
 	SchemaPkg string
+	// HistorySchemaPkg is the package name to use for the history schema
+	HistorySchemaPkg string
 	// TableName is the name of the history table
 	TableName string
 	// SchemaName is the name of the schema
@@ -78,7 +80,7 @@ var (
 // this should be called before the entc.Generate call
 // so the schemas exist at the time of code generation
 func (h *Extension) GenerateSchemas() error {
-	graph, err := entc.LoadGraph(h.config.SchemaPath, &gen.Config{})
+	graph, err := entc.LoadGraph(h.config.InputSchemaPath, &gen.Config{})
 	if err != nil {
 		return fmt.Errorf("%w: failed loading ent graph: %v", ErrFailedToGenerateTemplate, err)
 	}
@@ -131,15 +133,21 @@ func shouldGenerate(schema *load.Schema) bool {
 
 // getTemplateInfo returns the template info for the history schema based on the schema and config
 func getTemplateInfo(schema *load.Schema, config *Config, idType string) (*templateInfo, error) {
-	pkg, err := getPkgFromSchemaPath(config.SchemaPath)
+	pkg, err := getPkgFromSchemaPath(config.InputSchemaPath)
 	if err != nil {
 		return nil, err
+	}
+
+	historyPkg := config.PackageName
+	if historyPkg == "" {
+		historyPkg = pkg
 	}
 
 	info := &templateInfo{
 		TableName:         fmt.Sprintf("%v%s", getSchemaTableName(schema), historyTableSuffix),
 		OriginalTableName: schema.Name,
 		SchemaPkg:         pkg,
+		HistorySchemaPkg:  historyPkg,
 		SchemaName:        config.SchemaName,
 		Query:             config.Query,
 		AuthzPolicy: authzPolicyInfo{
@@ -219,7 +227,7 @@ func generateHistorySchema(schema *load.Schema, config *Config, idType string, w
 
 // getHistorySchemaPath returns the path of the history schemas
 func getHistorySchemaPath(schema *load.Schema, config *Config) (string, error) {
-	abs, err := filepath.Abs(config.SchemaPath)
+	abs, err := filepath.Abs(config.OutputSchemaPath)
 	if err != nil {
 		return "", err
 	}

@@ -7,31 +7,55 @@ import (
 
 type ExtensionOption = func(*Extension)
 
+const (
+	defaultSchemaPath  = "./schema"
+	defaultPackageName = "schema"
+)
+
 // UpdatedBy is a struct that holds the key and type for the updated_by field
 type UpdatedBy struct {
 	key       string
 	valueType ValueType
-	Nillable  bool
+	// Nillable indicates if the updated_by field should be nillable
+	Nillable bool
 }
 
 // FieldProperties is a struct that holds the properties for the fields in the history schema
 type FieldProperties struct {
-	Nillable  bool
+	// Nillable indicates if the fields should be nillable
+	Nillable bool
+	// Immutable indicates if the fields should be immutable (not allowed to be updated)
 	Immutable bool
 }
 
 // Config is the configuration for the history extension
 type Config struct {
+	// IncludeUpdatedBy optionally adds an updated_by field to the history schema
 	IncludeUpdatedBy bool
-	UpdatedBy        *UpdatedBy
-	Auditing         bool
-	SchemaPath       string
-	SchemaName       string
-	Query            bool
-	Skipper          string
-	FieldProperties  *FieldProperties
+	// UpdatedBy holds the key and type for the updated_by field
+	UpdatedBy *UpdatedBy
+	// Auditing enables the generation of the Audit() method on the client
+	Auditing bool
+	// QueryHelpers enables the generation the query helpers for the history schema
+	QueryHelpers bool
+	// InputSchemaPath is the path to the input schema directory, defaults to "./schema"
+	InputSchemaPath string
+	// OutputSchemaPath is the path to the output schema directory, defaults to "./schema"
+	OutputSchemaPath string
+	// SchemaName is an optional schema name to use instead of the default generated name
+	SchemaName string
+	// PackageName is an optional package name to use for the history schema
+	PackageName string
+	// Query is a boolean that tells the extension to add the entgql query annotations
+	Query bool
+	// Skipper is an optional function name to use as a skipper for history tracking
+	Skipper string
+	// FieldProperties holds the properties for the fields in the history schema
+	FieldProperties *FieldProperties
+	// HistoryTimeIndex tells the extension to add an index to the history_time field
 	HistoryTimeIndex bool
-	Auth             AuthzSettings
+	// Auth includes the authz policy settings
+	Auth AuthzSettings
 	// UsePondPool to create history updates in parallel
 	UsePondPool bool
 }
@@ -62,9 +86,11 @@ func New(opts ...ExtensionOption) *Extension {
 	extension := &Extension{
 		// Set configuration defaults that can get overridden with ExtensionOption
 		config: &Config{
-			SchemaPath:      "./schema",
-			Auditing:        false,
-			FieldProperties: &FieldProperties{},
+			InputSchemaPath:  defaultSchemaPath,
+			OutputSchemaPath: defaultSchemaPath,
+			Auditing:         false,
+			PackageName:      defaultPackageName,
+			FieldProperties:  &FieldProperties{},
 		},
 	}
 
@@ -80,8 +106,11 @@ func New(opts ...ExtensionOption) *Extension {
 func (h *Extension) Templates() []*gen.Template {
 	templates := []*gen.Template{
 		parseTemplate("historyFromMutation", "templates/historyFromMutation.tmpl"),
-		parseTemplate("historyQuery", "templates/historyQuery.tmpl"),
 		parseTemplate("historyClient", "templates/historyClient.tmpl"),
+	}
+
+	if h.config.QueryHelpers {
+		templates = append(templates, parseTemplate("historyQuery", "templates/historyQuery.tmpl"))
 	}
 
 	if h.config.Auditing {
@@ -107,6 +136,13 @@ func (h *Extension) SetFirstRun(firstRun bool) {
 func WithAuditing() ExtensionOption {
 	return func(h *Extension) {
 		h.config.Auditing = true
+	}
+}
+
+// WithQueryHelpers generates the history query helpers for the history schema for pagination with Next(), Latest(), etc.
+func WithQueryHelpers() ExtensionOption {
+	return func(h *Extension) {
+		h.config.QueryHelpers = true
 	}
 }
 
@@ -137,6 +173,13 @@ func WithImmutableFields() ExtensionOption {
 	}
 }
 
+// WithPackageName allows you to set an alternative package name for the history schema
+func WithPackageName(packageName string) ExtensionOption {
+	return func(h *Extension) {
+		h.config.PackageName = packageName
+	}
+}
+
 // WithNillableFields allows you to set all tracked fields in history to Nillable
 // except enthistory managed fields (history_time, ref, operation, updated_by, & deleted_by)
 func WithNillableFields() ExtensionOption {
@@ -154,11 +197,19 @@ func WithSchemaName(schemaName string) ExtensionOption {
 	}
 }
 
-// WithSchemaPath allows you to set an alternative schemaPath
+// WithInputSchemaPath allows you to set an alternative schemaPath
 // Defaults to "./schema"
-func WithSchemaPath(schemaPath string) ExtensionOption {
+func WithInputSchemaPath(schemaPath string) ExtensionOption {
 	return func(h *Extension) {
-		h.config.SchemaPath = schemaPath
+		h.config.InputSchemaPath = schemaPath
+	}
+}
+
+// WithOutputSchemaPath allows you to set an alternative schemaPath
+// Defaults to "./schema"
+func WithOutputSchemaPath(schemaPath string) ExtensionOption {
+	return func(h *Extension) {
+		h.config.OutputSchemaPath = schemaPath
 	}
 }
 
