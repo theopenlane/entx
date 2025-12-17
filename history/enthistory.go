@@ -109,7 +109,7 @@ func (h *Extension) Templates() []*gen.Template {
 		parseTemplate("historyClient", "templates/historyClient.tmpl"),
 	}
 
-	if h.config.Query {
+	if h.config.QueryHelpers {
 		templates = append(templates, parseTemplate("historyQuery", "templates/historyQuery.tmpl"))
 	}
 
