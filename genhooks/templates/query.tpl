@@ -36,8 +36,14 @@ mutation Delete{{ .Name }}($delete{{ .Name }}Id: ID!) {
 }
 {{- end}}
 
-query GetAll{{ .Name | ToPlural }} {
-  {{ .Name | ToLowerCamel | ToPlural }} {
+query GetAll{{ .Name | ToPlural }}($first: Int, $last: Int, $after: Cursor, $before: Cursor, $orderBy: [{{ .Name }}Order!]){
+  {{ .Name | ToLowerCamel | ToPlural }}(
+    first: $first
+    last: $last
+    after: $after
+    before: $before
+    orderBy: $orderBy
+  ) {
     totalCount
     pageInfo {
       startCursor
@@ -65,8 +71,15 @@ query Get{{ .Name }}ByID(${{ .Name | ToLowerCamel }}Id: ID!) {
 }
 {{- end}}
 
-query Get{{ .Name | ToPlural }}($first: Int, $last: Int, $where: {{ .Name }}WhereInput) {
-  {{ .Name | ToLowerCamel | ToPlural }}(first: $first, last: $last, where: $where) {
+query Get{{ .Name | ToPlural }}($first: Int, $last: Int, $after: Cursor, $before: Cursor, $orderBy: [{{ .Name }}Order!], $where: {{ .Name }}WhereInput) {
+  {{ .Name | ToLowerCamel | ToPlural }}(
+      first: $first
+      last: $last
+      after: $after
+      before: $before
+      orderBy: $orderBy
+      where: $where
+    ) {
     totalCount
     pageInfo {
       startCursor
