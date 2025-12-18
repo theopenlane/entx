@@ -123,7 +123,7 @@ func (c *EntClientConfig) NewEntDB(dataSource string) (*entsql.Driver, error) {
 		return nil, fmt.Errorf("failed connecting to database: %w", err)
 	}
 
-	if err = otelsql.RegisterDBStatsMetrics(db,
+	if _, err = otelsql.RegisterDBStatsMetrics(db,
 		otelsql.WithAttributes(attribute.String("db.system", c.config.DriverName)),
 	); err != nil {
 		return nil, fmt.Errorf("failed registering database metrics for otelsql: %w", err)
