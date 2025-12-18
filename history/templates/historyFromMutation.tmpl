@@ -1,6 +1,7 @@
 {{/* gotype: entgo.io/ent/entc/gen.Graph */}}
 
 {{ define "historyFromMutation" }}
+	//go:build !codegen
 	{{ $pkg := base $.Config.Package }}
 	{{ template "header" $ }}
 	var (

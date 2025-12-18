@@ -106,8 +106,10 @@ func ValidateExportType(exportType string) error {
 `
 
 // Generate generates the exportable schemas validation code and ExportType enum.
-func (e *ExportableGenerator) Generate() error {
-	graph, err := entc.LoadGraph(e.SchemaPath, &gen.Config{})
+func (e *ExportableGenerator) Generate(flags ...string) error {
+	graph, err := entc.LoadGraph(e.SchemaPath, &gen.Config{
+		BuildFlags: flags,
+	})
 	if err != nil {
 		return fmt.Errorf("loading graph: %w", err)
 	}
