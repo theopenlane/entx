@@ -61,7 +61,7 @@ func NewExportableGenerator(schemaPath, outputDir string) *ExportableGenerator {
 		SchemaPath: schemaPath,
 		OutputDir:  outputDir,
 		Package:    "hooks",
-		ImportPath: "github.com/theopenlane/core/pkg/enums",
+		ImportPath: "github.com/theopenlane/core/common/enums",
 	}
 }
 
