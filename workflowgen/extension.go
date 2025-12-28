@@ -112,13 +112,14 @@ func (e Extension) Hook() gen.Hook {
 				EnumsPackageName:        e.config.EnumsPackageName,
 				EnumsImportPath:         e.config.EnumsImportPath,
 				WorkflowsImportPath:     e.config.WorkflowsImportPath,
-				GeneratedImportPath:     g.Config.Package,
-				WorkflowObjectRefImport: filepath.ToSlash(filepath.Join(g.Config.Package, "workflowobjectref")),
+				GeneratedImportPath:     g.Package,
+				WorkflowObjectRefImport: filepath.ToSlash(filepath.Join(g.Package, "workflowobjectref")),
 			}
 
 			if err := e.generateHooks(ctx); err != nil {
 				return err
 			}
+
 			if err := e.generateEnums(ctx); err != nil {
 				return err
 			}
@@ -214,7 +215,7 @@ func renderTemplates(files []templateFile, ctx templateContext) error {
 
 // writeTemplate renders and writes a template to the specified output directory and filename
 func writeTemplate(outputDir, filename, templateName string, tmpl *template.Template, data any) error {
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil { // nolint:mnd
 		return fmt.Errorf("create output dir %s: %w", outputDir, err)
 	}
 
@@ -224,12 +225,13 @@ func writeTemplate(outputDir, filename, templateName string, tmpl *template.Temp
 	}
 
 	outputPath := filepath.Join(outputDir, filename)
+
 	formatted, err := imports.Process(outputPath, buf.Bytes(), nil)
 	if err != nil {
 		return fmt.Errorf("format %s: %w", outputPath, err)
 	}
 
-	if err := os.WriteFile(outputPath, formatted, 0o644); err != nil {
+	if err := os.WriteFile(outputPath, formatted, 0o600); err != nil { // nolint:mnd
 		return fmt.Errorf("write %s: %w", outputPath, err)
 	}
 
