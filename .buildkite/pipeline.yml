@@ -20,7 +20,7 @@ steps:
         key: "go_test"
         plugins:
           - docker#v5.13.0:
-              image: golang:1.25.4
+              image: golang:1.25.5
               command: ["go", "test", "-coverprofile=coverage.out", "./..."]
         artifact_paths: ["coverage.out"]
       - label: ":github: upload PR reports"
@@ -35,7 +35,7 @@ steps:
               download: "coverage.out"
               step: "go_test"
           - docker#v5.13.0:
-              image: "sonarsource/sonar-scanner-cli:11.0"
+              image: "sonarsource/sonar-scanner-cli:11.5"
               environment:
                 - "SONAR_TOKEN"
                 - "SONAR_HOST_URL=$SONAR_HOST"
@@ -52,7 +52,7 @@ steps:
               download: coverage.out
               step: "go_test"
           - docker#v5.13.0:
-              image: "sonarsource/sonar-scanner-cli:11.0"
+              image: "sonarsource/sonar-scanner-cli:11.5"
               environment:
                 - "SONAR_TOKEN"
                 - "SONAR_HOST_URL=$SONAR_HOST"
