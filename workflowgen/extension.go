@@ -17,11 +17,17 @@ type ExtensionOption func(*Extension)
 
 // Config is the configuration for workflow code generation
 type Config struct {
-	HooksOutputDir      string
-	HooksPackageName    string
-	EnumsOutputDir      string
-	EnumsPackageName    string
-	EnumsImportPath     string
+	// HooksOutputDir is the output directory for workflow-generated hooks helpers
+	HooksOutputDir string
+	// HooksPackageName is the package name for workflow-generated hooks helpers
+	HooksPackageName string
+	// EnumsOutputDir is the output directory for workflow object type enums
+	EnumsOutputDir string
+	// EnumsPackageName is the package name for workflow object type enums
+	EnumsPackageName string
+	// EnumsImportPath is the import path for the enums package
+	EnumsImportPath string
+	// WorkflowsImportPath is the import path for the workflows package
 	WorkflowsImportPath string
 }
 
