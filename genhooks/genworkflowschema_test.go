@@ -20,14 +20,14 @@ func TestGenWorkflowSchema(t *testing.T) {
 		shouldModify        bool
 	}{
 		{
-			name: "adds workflow interface to entity with proposed_changes field",
+			name: "adds workflow interface to entity with workflow_eligible_marker field",
 			setupSchema: func() *gen.Graph {
 				return &gen.Graph{
 					Nodes: []*gen.Type{
 						{
 							Name: "TestEntity",
 							Fields: []*gen.Field{
-								{Name: "proposed_changes"},
+								{Name: "workflow_eligible_marker"},
 								{Name: "name"},
 							},
 						},
@@ -47,7 +47,7 @@ func TestGenWorkflowSchema(t *testing.T) {
 			shouldModify: true,
 		},
 		{
-			name: "skips entity without proposed_changes field",
+			name: "skips entity without workflow_eligible_marker field",
 			setupSchema: func() *gen.Graph {
 				return &gen.Graph{
 					Nodes: []*gen.Type{
@@ -80,7 +80,7 @@ func TestGenWorkflowSchema(t *testing.T) {
 						{
 							Name: "EntityHistory",
 							Fields: []*gen.Field{
-								{Name: "proposed_changes"},
+								{Name: "workflow_eligible_marker"},
 							},
 							Annotations: gen.Annotations{
 								"History": map[string]interface{}{
@@ -109,7 +109,7 @@ func TestGenWorkflowSchema(t *testing.T) {
 						{
 							Name: "ExistingEntity",
 							Fields: []*gen.Field{
-								{Name: "proposed_changes"},
+								{Name: "workflow_eligible_marker"},
 							},
 						},
 					},
@@ -140,13 +140,13 @@ extend type Query {
 						{
 							Name: "WorkflowEntity1",
 							Fields: []*gen.Field{
-								{Name: "proposed_changes"},
+								{Name: "workflow_eligible_marker"},
 							},
 						},
 						{
 							Name: "WorkflowEntity2",
 							Fields: []*gen.Field{
-								{Name: "proposed_changes"},
+								{Name: "workflow_eligible_marker"},
 							},
 						},
 						{
