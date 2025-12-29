@@ -28,7 +28,7 @@ func GenWorkflowSchema(graphSchemaDir string) gen.Hook {
 				hasWorkflowSupport := false
 
 				for _, field := range node.Fields {
-					if field.Name == "proposed_changes" {
+					if field.Name == "workflow_eligible_marker" {
 						hasWorkflowSupport = true
 						break
 					}
