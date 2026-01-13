@@ -451,7 +451,7 @@ func ExtractChangedEdges(m ent.Mutation) ([]string, map[string][]string, map[str
 	addedIDs := make(map[string][]string)
 	removedIDs := make(map[string][]string)
 
-	eligibleEdges := workflowEligibleEdges[m.Type()]
+	eligibleEdges := WorkflowEligibleEdges[m.Type()]
 	if len(eligibleEdges) == 0 {
 		return edgeNames, addedIDs, removedIDs
 	}
