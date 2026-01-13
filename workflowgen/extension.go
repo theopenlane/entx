@@ -421,7 +421,7 @@ import (
 	"github.com/theopenlane/core/internal/ent/generated"
 )
 
-var workflowEligibleEdges = map[string][]string{
+var WorkflowEligibleEdges = map[string][]string{
 {{- range $n := $.Nodes }}
 	{{- $isHistory := hasSuffix $n.Name "History" }}
 	{{- if not $isHistory }}
@@ -444,9 +444,9 @@ var workflowEligibleEdges = map[string][]string{
 {{- end }}
 }
 
-// extractChangedEdges inspects the mutation to determine which edge relationships were modified.
+// ExtractChangedEdges inspects the mutation to determine which edge relationships were modified.
 // It returns: edge names, added IDs per edge, removed IDs per edge.
-func extractChangedEdges(m ent.Mutation) ([]string, map[string][]string, map[string][]string) {
+func ExtractChangedEdges(m ent.Mutation) ([]string, map[string][]string, map[string][]string) {
 	var edgeNames []string
 	addedIDs := make(map[string][]string)
 	removedIDs := make(map[string][]string)
