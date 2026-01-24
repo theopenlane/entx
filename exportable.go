@@ -13,7 +13,40 @@ import "encoding/json"
 //			entx.Exportable{},
 //		}
 //	}
-type Exportable struct{}
+type Exportable struct {
+	orgOwned       bool
+	hasSystemOwned bool
+}
+
+// Options for the Exportable annotation.
+type ExportableOption func(*Exportable)
+
+// NewExportable creates a new Exportable annotation with the given options.
+func NewExportable(opts ...ExportableOption) Exportable {
+	e := Exportable{}
+
+	for _, opt := range opts {
+		opt(&e)
+	}
+
+	return e
+}
+
+// WithOrgOwned is an option for the Exportable annotation
+// that indicates the schema is owned by an organization.
+func WithOrgOwned() ExportableOption {
+	return func(e *Exportable) {
+		e.orgOwned = true
+	}
+}
+
+// WithSystemOwned is an option for the Exportable annotation
+// that indicates the schema is owned by the system.
+func WithSystemOwned() ExportableOption {
+	return func(e *Exportable) {
+		e.hasSystemOwned = true
+	}
+}
 
 // Name returns the name of the Exportable annotation.
 func (Exportable) Name() string {

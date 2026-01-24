@@ -41,7 +41,7 @@ import (
 //
 //	func (MySchema) Annotations() []schema.Annotation {
 //		return []schema.Annotation{
-//			entx.Exportable{}, // Marks this schema as exportable
+//			entx.NewExportable(), // Marks this schema as exportable
 //		}
 //	}
 type ExportableGenerator struct {
@@ -83,17 +83,48 @@ package {{.Package}}
 
 import (
 	"fmt"
-	"strings"
 )
 
+type info struct {
+	hasOwnerField       bool
+	hasSystemOwnedField bool
+}
+
 // ExportableSchemas contains all schemas that have Exportable annotation
-var ExportableSchemas = map[string]bool{
-{{range .Schemas}}	"{{.}}": true,
-{{end}}}
+var ExportableSchemas = map[string]info{
+{{range .Schemas}}
+{{- range $key, $val := .}}	"{{$key}}": info{
+        hasOwnerField: {{if $val.HasOwnerField}}true{{else}}false{{end}},
+        hasSystemOwnedField: {{if $val.HasSystemOwnedField}}true{{else}}false{{end}},
+    },
+}
+{{end}}
+{{end}}
 
 // IsSchemaExportable checks if a schema name is exportable
 func IsSchemaExportable(schemaName string) bool {
-	return ExportableSchemas[schemaName]
+	_, ok := ExportableSchemas[schemaName]
+	return ok
+}
+
+// HasOwnerField checks if a schema has an owner field
+func HasOwnerField(schemaName string) bool {
+	info, ok := ExportableSchemas[schemaName]
+	if !ok {
+		return false
+	}
+
+	return info.hasOwnerField
+}
+
+// HasSystemOwnedField checks if a schema has a system owned field
+func HasSystemOwnedField(schemaName string) bool {
+	info, ok := ExportableSchemas[schemaName]
+	if !ok {
+		return false
+	}
+
+	return info.hasSystemOwnedField
 }
 
 // ValidateExportType validates that an export type corresponds to an exportable schema
@@ -124,25 +155,47 @@ func (e *ExportableGenerator) Generate(flags ...string) error {
 	return nil
 }
 
-func (e *ExportableGenerator) findExportableSchemas(graph *gen.Graph) []string {
-	var exportableSchemas []string
+type Info struct {
+	HasOwnerField       bool
+	HasSystemOwnedField bool
+}
 
+func (e *ExportableGenerator) findExportableSchemas(graph *gen.Graph) []map[string]Info {
+	var exportableSchemas []map[string]Info
 	ant := &Exportable{}
 
 	for _, schema := range graph.Schemas {
 		if raw, ok := schema.Annotations[ant.Name()]; ok {
 			if err := ant.Decode(raw); err == nil {
-				exportableSchemas = append(exportableSchemas, strcase.UpperSnakeCase(schema.Name))
+				exportableSchemas = append(exportableSchemas, map[string]Info{
+					strcase.UpperSnakeCase(schema.Name): {
+						HasOwnerField:       ant.orgOwned,
+						HasSystemOwnedField: ant.hasSystemOwned,
+					},
+				})
 			}
 		}
 	}
 
-	sort.Strings(exportableSchemas)
+	// sort schemas for consistent output by the schema name which is a string comparison
+	exportableSchemas = sortExportableSchemas(exportableSchemas)
 
 	return exportableSchemas
 }
 
-func (e *ExportableGenerator) generateValidationFile(schemas []string) error {
+func sortExportableSchemas(schemas []map[string]Info) []map[string]Info {
+	sort.SliceStable(schemas, func(i, j int) bool {
+		for keyI := range schemas[i] {
+			for keyJ := range schemas[j] {
+				return keyI < keyJ
+			}
+		}
+		return false
+	})
+	return schemas
+}
+
+func (e *ExportableGenerator) generateValidationFile(schemas []map[string]Info) error {
 	tmpl, err := template.New("generated").Parse(exportableGeneratedFileTemplate)
 	if err != nil {
 		return err
@@ -160,7 +213,7 @@ func (e *ExportableGenerator) generateValidationFile(schemas []string) error {
 	data := struct {
 		Package    string
 		ImportPath string
-		Schemas    []string
+		Schemas    []map[string]Info
 	}{
 		Package:    e.Package,
 		ImportPath: e.ImportPath,
