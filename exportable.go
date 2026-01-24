@@ -14,8 +14,10 @@ import "encoding/json"
 //		}
 //	}
 type Exportable struct {
-	orgOwned       bool
-	hasSystemOwned bool
+	// OrgOwned indicates if the schema is owned by an organization and will automatically add the ownerID filter during export validation.
+	OrgOwned bool
+	// HasSystemOwned indicates if the schema has systemOwned field and will automatically add the systemOwned=false filter during export validation.
+	HasSystemOwned bool
 }
 
 // Options for the Exportable annotation.
@@ -36,7 +38,7 @@ func NewExportable(opts ...ExportableOption) Exportable {
 // that indicates the schema is owned by an organization.
 func WithOrgOwned() ExportableOption {
 	return func(e *Exportable) {
-		e.orgOwned = true
+		e.OrgOwned = true
 	}
 }
 
@@ -44,7 +46,7 @@ func WithOrgOwned() ExportableOption {
 // that indicates the schema is owned by the system.
 func WithSystemOwned() ExportableOption {
 	return func(e *Exportable) {
-		e.hasSystemOwned = true
+		e.HasSystemOwned = true
 	}
 }
 

@@ -92,14 +92,14 @@ type info struct {
 
 // ExportableSchemas contains all schemas that have Exportable annotation
 var ExportableSchemas = map[string]info{
-{{range .Schemas}}
+{{- range .Schemas}}
 {{- range $key, $val := .}}	"{{$key}}": info{
-        hasOwnerField: {{if $val.HasOwnerField}}true{{else}}false{{end}},
-        hasSystemOwnedField: {{if $val.HasSystemOwnedField}}true{{else}}false{{end}},
+        hasOwnerField: {{ $val.HasOwnerField}},
+        hasSystemOwnedField: {{ $val.HasSystemOwnedField}},
     },
+{{- end}}
+{{- end}}
 }
-{{end}}
-{{end}}
 
 // IsSchemaExportable checks if a schema name is exportable
 func IsSchemaExportable(schemaName string) bool {
@@ -162,6 +162,7 @@ type Info struct {
 
 func (e *ExportableGenerator) findExportableSchemas(graph *gen.Graph) []map[string]Info {
 	var exportableSchemas []map[string]Info
+
 	ant := &Exportable{}
 
 	for _, schema := range graph.Schemas {
@@ -169,8 +170,8 @@ func (e *ExportableGenerator) findExportableSchemas(graph *gen.Graph) []map[stri
 			if err := ant.Decode(raw); err == nil {
 				exportableSchemas = append(exportableSchemas, map[string]Info{
 					strcase.UpperSnakeCase(schema.Name): {
-						HasOwnerField:       ant.orgOwned,
-						HasSystemOwnedField: ant.hasSystemOwned,
+						HasOwnerField:       ant.OrgOwned,
+						HasSystemOwnedField: ant.HasSystemOwned,
 					},
 				})
 			}
@@ -190,8 +191,10 @@ func sortExportableSchemas(schemas []map[string]Info) []map[string]Info {
 				return keyI < keyJ
 			}
 		}
+
 		return false
 	})
+
 	return schemas
 }
 
