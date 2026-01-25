@@ -10,6 +10,8 @@ import (
 	"entgo.io/ent/entc"
 	"entgo.io/ent/entc/gen"
 	"golang.org/x/tools/imports"
+
+	"github.com/theopenlane/entx/genhooks"
 )
 
 // ExtensionOption is a function that modifies the Extension configuration
@@ -29,6 +31,9 @@ type Config struct {
 	EnumsImportPath string
 	// WorkflowsImportPath is the import path for the workflows package
 	WorkflowsImportPath string
+	// GraphResolverDir is the directory containing GraphQL resolver files to update
+	// If set, UpdateWorkflowResolvers will be called to replace panic stubs with implementations
+	GraphResolverDir string
 }
 
 // Extension implements entc.Extension for workflow-related generated helpers
@@ -99,6 +104,14 @@ func WithWorkflowsImportPath(path string) ExtensionOption {
 	}
 }
 
+// WithGraphResolverDir sets the directory containing GraphQL resolver files
+// When set, UpdateWorkflowResolvers will replace panic stubs with workflow helper implementations
+func WithGraphResolverDir(dir string) ExtensionOption {
+	return func(e *Extension) {
+		e.config.GraphResolverDir = dir
+	}
+}
+
 // Hooks satisfies the entc.Extension interface
 func (e Extension) Hooks() []gen.Hook {
 	return []gen.Hook{e.Hook()}
@@ -130,6 +143,12 @@ func (e Extension) Hook() gen.Hook {
 				return err
 			}
 
+			if e.config.GraphResolverDir != "" {
+				if err := genhooks.UpdateWorkflowResolvers(e.config.GraphResolverDir); err != nil {
+					return fmt.Errorf("update workflow resolvers: %w", err)
+				}
+			}
+
 			return nil
 		})
 	}
@@ -146,21 +165,32 @@ func (Extension) Templates() []*gen.Template { return nil }
 
 // templateContext holds data for rendering templates
 type templateContext struct {
+	// Graph is the ent code generation graph containing all schema information
 	*gen.Graph
-	HooksPackageName        string
-	EnumsPackageName        string
-	EnumsImportPath         string
-	WorkflowsImportPath     string
-	GeneratedImportPath     string
+	// HooksPackageName is the package name for generated workflow hooks
+	HooksPackageName string
+	// EnumsPackageName is the package name for generated enum types
+	EnumsPackageName string
+	// EnumsImportPath is the import path for the enums package
+	EnumsImportPath string
+	// WorkflowsImportPath is the import path for the workflows runtime package
+	WorkflowsImportPath string
+	// GeneratedImportPath is the import path for the ent generated package
+	GeneratedImportPath string
+	// WorkflowObjectRefImport is the import path for the workflowobjectref subpackage
 	WorkflowObjectRefImport string
 }
 
 // templateFile represents a template to be rendered and written to a file
 type templateFile struct {
-	name      string
-	filename  string
+	// name is the template name used for parsing and execution
+	name string
+	// filename is the output filename for the generated file
+	filename string
+	// outputDir is the directory where the generated file will be written
 	outputDir string
-	content   string
+	// content is the raw template string content
+	content string
 }
 
 // generateHooks generates the workflow registry hooks
@@ -254,6 +284,7 @@ package {{ .HooksPackageName }}
 
 import (
 	"context"
+	"encoding/json"
 
 	"{{ .GeneratedImportPath }}"
 	"{{ .WorkflowObjectRefImport }}"
@@ -313,6 +344,9 @@ func init() {
 	})
 
 	// Register CEL context builders so CEL expressions can work with typed objects.
+	// Objects are converted to map[string]any via JSON to ensure:
+	// - Field names match JSON tags (lowercase)
+	// - Enum types are converted to strings
 	{{- range $n := $.Nodes }}
 		{{- $hasWorkflowFields := false }}
 		{{- range $f := $n.Fields }}
@@ -327,8 +361,12 @@ func init() {
 		if !ok {
 			return nil
 		}
+		objectMap, err := entObjectToMap(entObj)
+		if err != nil {
+			return nil
+		}
 		return map[string]any{
-			"object":         entObj,
+			"object":         objectMap,
 			"changed_fields": changedFields,
 			"changed_edges":  changedEdges,
 			"added_ids":      addedIDs,
@@ -342,6 +380,20 @@ func init() {
 
 	// Register assignment context builder for workflow runtime state in CEL expressions.
 	wf.RegisterAssignmentContextBuilder(buildAssignmentContext)
+}
+
+// entObjectToMap converts an ent entity to a map[string]any via JSON marshaling.
+// This ensures field names match JSON tags (lowercase) and enums are converted to strings.
+func entObjectToMap(obj any) (map[string]any, error) {
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	var result map[string]any
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // buildAssignmentContext builds the workflow runtime context (assignments, instance, initiator) for CEL evaluation.

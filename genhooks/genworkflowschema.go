@@ -17,7 +17,7 @@ type workflowSchema struct {
 }
 
 // GenWorkflowSchema generates GraphQL schema extensions for entities with ApprovalRequiredMixin
-// This adds the WorkflowEnabled interface implementation with hasPendingWorkflow and activeWorkflowInstance fields
+// This adds workflow fields for pending and active/history workflow instances
 func GenWorkflowSchema(graphSchemaDir string) gen.Hook {
 	return func(next gen.Generator) gen.Generator {
 		return gen.GenerateFunc(func(g *gen.Graph) error {
@@ -58,52 +58,28 @@ func GenWorkflowSchema(graphSchemaDir string) gen.Hook {
 					continue
 				}
 
-				// Check if workflow fields are already present
-				existingContent := string(content)
-				if containsWorkflowFields(existingContent) {
-					continue
-				}
-
-				// Prepend workflow interface extension to the file
-				file, err := os.OpenFile(filePath, os.O_RDWR, 0600) // nolint:mnd
-				if err != nil {
-					log.Fatalf("Unable to open file: %v", err)
-				}
-
-				defer file.Close()
-
 				s := workflowSchema{
 					Name:        node.Name,
 					HasWorkflow: true,
 				}
 
-				// Create a temporary buffer for the new content
-				tmpFile, err := os.CreateTemp("", "workflow-schema-*")
+				newBlock, err := renderWorkflowSchemaTemplate(tmpl, s)
 				if err != nil {
-					log.Fatalf("Unable to create temp file: %v", err)
-				}
-
-				defer os.Remove(tmpFile.Name())
-
-				// Write the template to the temp file
-				if err = tmpl.Execute(tmpFile, s); err != nil {
 					log.Fatalf("Unable to execute template: %v", err)
 				}
 
-				// Append the original content
-				if _, err := tmpFile.Write(content); err != nil {
-					log.Fatalf("Unable to write original content: %v", err)
+				existingContent := string(content)
+
+				updatedContent, replaced := replaceWorkflowSchemaBlock(node.Name, existingContent, newBlock)
+				if !replaced {
+					updatedContent = newBlock + existingContent
 				}
 
-				tmpFile.Close()
-
-				// Replace the original file with the new content
-				tmpContent, err := os.ReadFile(tmpFile.Name())
-				if err != nil {
-					log.Fatalf("Unable to read temp file: %v", err)
+				if updatedContent == existingContent {
+					continue
 				}
 
-				if err := os.WriteFile(filePath, tmpContent, 0600); err != nil { // nolint:mnd
+				if err := os.WriteFile(filePath, []byte(updatedContent), 0600); err != nil { // nolint:mnd
 					log.Fatalf("Unable to write file: %v", err)
 				}
 			}
@@ -116,10 +92,82 @@ func GenWorkflowSchema(graphSchemaDir string) gen.Hook {
 // containsWorkflowFields checks if the schema already contains workflow fields
 func containsWorkflowFields(content string) bool {
 	return strings.Contains(content, "hasPendingWorkflow") ||
-		strings.Contains(content, "activeWorkflowInstance")
+		strings.Contains(content, "hasWorkflowHistory") ||
+		strings.Contains(content, "activeWorkflowInstances") ||
+		strings.Contains(content, "workflowTimeline")
 }
 
-// createWorkflowSchemaTemplate creates the template for workflow schema extensions
+func renderWorkflowSchemaTemplate(tmpl *template.Template, data workflowSchema) (string, error) {
+	var builder strings.Builder
+
+	if err := tmpl.Execute(&builder, data); err != nil {
+		return "", err
+	}
+
+	return builder.String(), nil
+}
+
+func replaceWorkflowSchemaBlock(typeName string, content string, newBlock string) (string, bool) {
+	start, end := findWorkflowSchemaBlock(typeName, content)
+	if start == -1 {
+		return content, false
+	}
+
+	return content[:start] + newBlock + content[end:], true
+}
+
+func findWorkflowSchemaBlock(typeName string, content string) (int, int) {
+	needle := "extend type " + typeName
+	searchFrom := 0
+
+	for {
+		index := strings.Index(content[searchFrom:], needle)
+		if index == -1 {
+			return -1, -1
+		}
+
+		index += searchFrom
+
+		openBrace := strings.Index(content[index:], "{")
+		if openBrace == -1 {
+			return -1, -1
+		}
+
+		openBrace += index
+
+		closeBrace := findMatchingBrace(content, openBrace)
+		if closeBrace == -1 {
+			return -1, -1
+		}
+
+		block := content[index : closeBrace+1]
+		if containsWorkflowFields(block) {
+			return index, closeBrace + 1
+		}
+
+		searchFrom = closeBrace + 1
+	}
+}
+
+func findMatchingBrace(content string, openBrace int) int {
+	depth := 0
+
+	for i := openBrace; i < len(content); i++ {
+		switch content[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+
+	return -1
+}
+
+// createWorkflowSchemaTemplate creates the template for workflow schema extensions.
 func createWorkflowSchemaTemplate() *template.Template {
 	fm := template.FuncMap{
 		"ToLowerCamel": templates.ToGoPrivate,
@@ -131,9 +179,25 @@ func createWorkflowSchemaTemplate() *template.Template {
     """
     hasPendingWorkflow: Boolean!
     """
-    Returns the active workflow instance for this {{ .Name | ToLowerCamel }} if one is running
+    Indicates if this {{ .Name | ToLowerCamel }} has any workflow history (completed or failed instances)
     """
-    activeWorkflowInstance: WorkflowInstance
+    hasWorkflowHistory: Boolean!
+    """
+    Returns active workflow instances for this {{ .Name | ToLowerCamel }} (RUNNING or PAUSED)
+    """
+    activeWorkflowInstances: [WorkflowInstance!]!
+    """
+    Returns the workflow event timeline for this {{ .Name | ToLowerCamel }} across all workflow instances
+    """
+    workflowTimeline(
+        after: Cursor
+        first: Int
+        before: Cursor
+        last: Int
+        orderBy: [WorkflowEventOrder!]
+        where: WorkflowEventWhereInput
+        includeEmitFailures: Boolean
+    ): WorkflowEventConnection!
 }
 
 `

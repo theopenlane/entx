@@ -41,7 +41,9 @@ func TestGenWorkflowSchema(t *testing.T) {
 			expectedContains: []string{
 				"extend type TestEntity {",
 				"hasPendingWorkflow: Boolean!",
-				"activeWorkflowInstance: WorkflowInstance",
+				"hasWorkflowHistory: Boolean!",
+				"activeWorkflowInstances: [WorkflowInstance!]!",
+				"workflowTimeline(",
 				"extend type Query",
 			},
 			shouldModify: true,
@@ -68,7 +70,9 @@ func TestGenWorkflowSchema(t *testing.T) {
 			expectedNotContains: []string{
 				"WorkflowEnabled",
 				"hasPendingWorkflow",
-				"activeWorkflowInstance",
+				"hasWorkflowHistory",
+				"activeWorkflowInstances",
+				"workflowTimeline",
 			},
 			shouldModify: false,
 		},
@@ -83,7 +87,7 @@ func TestGenWorkflowSchema(t *testing.T) {
 								{Name: "workflow_eligible_marker"},
 							},
 							Annotations: gen.Annotations{
-								"History": map[string]interface{}{
+								"History": map[string]any{
 									"isHistory": true,
 								},
 							},
@@ -98,11 +102,14 @@ func TestGenWorkflowSchema(t *testing.T) {
 			expectedNotContains: []string{
 				"WorkflowEnabled",
 				"hasPendingWorkflow",
+				"hasWorkflowHistory",
+				"activeWorkflowInstances",
+				"workflowTimeline",
 			},
 			shouldModify: false,
 		},
 		{
-			name: "skips if workflow fields already present",
+			name: "updates workflow fields if already present",
 			setupSchema: func() *gen.Graph {
 				return &gen.Graph{
 					Nodes: []*gen.Type{
@@ -117,7 +124,6 @@ func TestGenWorkflowSchema(t *testing.T) {
 			},
 			existingSchemaFile: `extend type ExistingEntity {
     hasPendingWorkflow: Boolean!
-    activeWorkflowInstance: WorkflowInstance
 }
 
 extend type Query {
@@ -126,11 +132,14 @@ extend type Query {
 `,
 			expectedContains: []string{
 				"extend type ExistingEntity {",
+				"hasWorkflowHistory: Boolean!",
+				"activeWorkflowInstances: [WorkflowInstance!]!",
+				"workflowTimeline(",
 			},
 			expectedNotContains: []string{
 				// Should not duplicate the interface
 			},
-			shouldModify: false,
+			shouldModify: true,
 		},
 		{
 			name: "handles multiple entities correctly",
@@ -237,8 +246,18 @@ func TestContainsWorkflowFields(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "contains activeWorkflowInstance",
-			content:  "activeWorkflowInstance: WorkflowInstance",
+			name:     "contains hasWorkflowHistory",
+			content:  "hasWorkflowHistory: Boolean!",
+			expected: true,
+		},
+		{
+			name:     "contains activeWorkflowInstances",
+			content:  "activeWorkflowInstances: [WorkflowInstance!]!",
+			expected: true,
+		},
+		{
+			name:     "contains workflowTimeline",
+			content:  "workflowTimeline(",
 			expected: true,
 		},
 		{
@@ -284,7 +303,9 @@ func TestCreateWorkflowSchemaTemplate(t *testing.T) {
 	output := buf.String()
 	assert.Contains(t, output, "extend type TestEntity {")
 	assert.Contains(t, output, "hasPendingWorkflow: Boolean!")
-	assert.Contains(t, output, "activeWorkflowInstance: WorkflowInstance")
+	assert.Contains(t, output, "hasWorkflowHistory: Boolean!")
+	assert.Contains(t, output, "activeWorkflowInstances: [WorkflowInstance!]!")
+	assert.Contains(t, output, "workflowTimeline(")
 	assert.Contains(t, output, "testEntity")
 }
 
