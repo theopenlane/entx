@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/entc/gen"
 	"golang.org/x/tools/imports"
 
-	"github.com/theopenlane/entx/genhooks"
 )
 
 // ExtensionOption is a function that modifies the Extension configuration
@@ -31,9 +30,6 @@ type Config struct {
 	EnumsImportPath string
 	// WorkflowsImportPath is the import path for the workflows package
 	WorkflowsImportPath string
-	// GraphResolverDir is the directory containing GraphQL resolver files to update
-	// If set, UpdateWorkflowResolvers will be called to replace panic stubs with implementations
-	GraphResolverDir string
 }
 
 // Extension implements entc.Extension for workflow-related generated helpers
@@ -104,14 +100,6 @@ func WithWorkflowsImportPath(path string) ExtensionOption {
 	}
 }
 
-// WithGraphResolverDir sets the directory containing GraphQL resolver files
-// When set, UpdateWorkflowResolvers will replace panic stubs with workflow helper implementations
-func WithGraphResolverDir(dir string) ExtensionOption {
-	return func(e *Extension) {
-		e.config.GraphResolverDir = dir
-	}
-}
-
 // Hooks satisfies the entc.Extension interface
 func (e Extension) Hooks() []gen.Hook {
 	return []gen.Hook{e.Hook()}
@@ -141,12 +129,6 @@ func (e Extension) Hook() gen.Hook {
 
 			if err := e.generateEnums(ctx); err != nil {
 				return err
-			}
-
-			if e.config.GraphResolverDir != "" {
-				if err := genhooks.UpdateWorkflowResolvers(e.config.GraphResolverDir); err != nil {
-					return fmt.Errorf("update workflow resolvers: %w", err)
-				}
 			}
 
 			return nil
