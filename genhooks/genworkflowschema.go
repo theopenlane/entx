@@ -72,7 +72,7 @@ func GenWorkflowSchema(graphSchemaDir string) gen.Hook {
 
 				updatedContent, replaced := replaceWorkflowSchemaBlock(node.Name, existingContent, newBlock)
 				if !replaced {
-					updatedContent = newBlock + existingContent
+					updatedContent = joinWorkflowSchemaBlocks(newBlock, existingContent)
 				}
 
 				if updatedContent == existingContent {
@@ -113,7 +113,10 @@ func replaceWorkflowSchemaBlock(typeName string, content string, newBlock string
 		return content, false
 	}
 
-	return content[:start] + newBlock + content[end:], true
+	prefix := content[:start]
+	suffix := content[end:]
+
+	return prefix + joinWorkflowSchemaBlocks(newBlock, suffix), true
 }
 
 func findWorkflowSchemaBlock(typeName string, content string) (int, int) {
@@ -167,6 +170,40 @@ func findMatchingBrace(content string, openBrace int) int {
 	return -1
 }
 
+func joinWorkflowSchemaBlocks(block string, suffix string) string {
+	block = strings.TrimRight(block, " \t\r\n")
+	suffix = trimLeadingBlankLines(suffix)
+
+	if suffix == "" {
+		return block + "\n"
+	}
+
+	return block + "\n\n" + suffix
+}
+
+func trimLeadingBlankLines(content string) string {
+	index := 0
+
+	for index < len(content) {
+		lineEnd := strings.IndexByte(content[index:], '\n')
+		if lineEnd == -1 {
+			if strings.TrimSpace(content[index:]) == "" {
+				return ""
+			}
+			return content[index:]
+		}
+
+		line := content[index : index+lineEnd]
+		if strings.TrimSpace(line) != "" {
+			return content[index:]
+		}
+
+		index += lineEnd + 1
+	}
+
+	return ""
+}
+
 // createWorkflowSchemaTemplate creates the template for workflow schema extensions.
 func createWorkflowSchemaTemplate() *template.Template {
 	fm := template.FuncMap{
@@ -199,7 +236,6 @@ func createWorkflowSchemaTemplate() *template.Template {
         includeEmitFailures: Boolean
     ): WorkflowEventConnection!
 }
-
 `
 
 	tmpl, err := template.New("workflow_schema.tpl").Funcs(fm).Parse(tmplStr)
