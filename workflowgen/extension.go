@@ -340,7 +340,7 @@ func init() {
 			{{- if $f.Annotations.OPENLANE_WORKFLOW_ELIGIBLE }}{{ $hasWorkflowFields = true }}{{ end }}
 		{{- end }}
 		{{- if $hasWorkflowFields }}
-	wf.RegisterCELContextBuilder(func(obj *wf.Object, changedFields []string, changedEdges []string, addedIDs, removedIDs map[string][]string, eventType, userID string) map[string]any {
+	wf.RegisterCELContextBuilder(func(obj *wf.Object, changedFields []string, changedEdges []string, addedIDs, removedIDs map[string][]string, eventType, userID string, proposedChanges map[string]any) map[string]any {
 		if obj == nil || obj.Node == nil {
 			return nil
 		}
@@ -360,6 +360,7 @@ func init() {
 			"removed_ids":    removedIDs,
 			"event_type":     eventType,
 			"user_id":        userID,
+			"proposed_changes": proposedChanges,
 		}
 	})
 		{{- end }}
