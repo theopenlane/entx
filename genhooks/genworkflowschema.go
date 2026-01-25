@@ -199,7 +199,6 @@ func createWorkflowSchemaTemplate() *template.Template {
         includeEmitFailures: Boolean
     ): WorkflowEventConnection!
 }
-
 `
 
 	tmpl, err := template.New("workflow_schema.tpl").Funcs(fm).Parse(tmplStr)
