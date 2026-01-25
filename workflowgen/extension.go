@@ -10,7 +10,6 @@ import (
 	"entgo.io/ent/entc"
 	"entgo.io/ent/entc/gen"
 	"golang.org/x/tools/imports"
-
 )
 
 // ExtensionOption is a function that modifies the Extension configuration
@@ -755,6 +754,11 @@ var (
 	{{- end }}
 {{- end }}
 )
+
+func init() {
+	// Ensure workflow-eligible fields are available to approval routing helpers.
+	workflows.RegisterEligibleFields(WorkflowEligibleFields)
+}
 
 // WorkflowEligibleFields maps object types to their workflow-eligible field names.
 // Use this to validate that fields in a domain are valid for the object type.
