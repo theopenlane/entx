@@ -142,6 +142,40 @@ extend type Query {
 			shouldModify: true,
 		},
 		{
+			name: "normalizes extra whitespace after workflow block",
+			setupSchema: func() *gen.Graph {
+				return &gen.Graph{
+					Nodes: []*gen.Type{
+						{
+							Name: "WhitespaceEntity",
+							Fields: []*gen.Field{
+								{Name: "workflow_eligible_marker"},
+							},
+						},
+					},
+				}
+			},
+			existingSchemaFile: `extend type WhitespaceEntity {
+    hasPendingWorkflow: Boolean!
+}
+
+
+
+extend type Query {
+    whitespaceEntity(id: ID!): WhitespaceEntity!
+}
+`,
+			expectedContains: []string{
+				"extend type WhitespaceEntity {",
+				"hasWorkflowHistory: Boolean!",
+				"}\n\nextend type Query",
+			},
+			expectedNotContains: []string{
+				"}\n\n\nextend type Query",
+			},
+			shouldModify: true,
+		},
+		{
 			name: "handles multiple entities correctly",
 			setupSchema: func() *gen.Graph {
 				return &gen.Graph{
