@@ -686,6 +686,7 @@ import (
 	"strings"
 
 	"{{ .EnumsImportPath }}"
+	wf "{{ .WorkflowsImportPath }}"
 )
 
 // WorkflowDomain represents a canonical approval domain for workflow proposals.
@@ -757,7 +758,7 @@ var (
 
 func init() {
 	// Ensure workflow-eligible fields are available to approval routing helpers.
-	workflows.RegisterEligibleFields(WorkflowEligibleFields)
+	wf.RegisterEligibleFields(WorkflowEligibleFields)
 }
 
 // WorkflowEligibleFields maps object types to their workflow-eligible field names.
