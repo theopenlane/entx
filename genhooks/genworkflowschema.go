@@ -190,6 +190,7 @@ func trimLeadingBlankLines(content string) string {
 			if strings.TrimSpace(content[index:]) == "" {
 				return ""
 			}
+
 			return content[index:]
 		}
 
