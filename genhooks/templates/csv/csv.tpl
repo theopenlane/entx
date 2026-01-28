@@ -3,12 +3,156 @@ package {{ .PackageName }}
 {{- if .EntPackage }}
 
 import (
+	"context"
+	"strings"
+
 	"{{ .EntPackage }}"
+	"{{ .EntPackage }}/predicate"
+{{- range $lookup := .Lookups }}
+	"{{ $.EntPackage }}/{{ $lookup.TargetEntity | toLower }}"
+{{- end }}
 )
+
+// CSVLookupFn is the function signature for CSV reference lookups.
+type CSVLookupFn func(ctx context.Context, client *generated.Client, orgID string, values []string) (map[string]string, error)
+
+// CSVCreateFn is the function signature for CSV reference auto-creation.
+type CSVCreateFn func(ctx context.Context, client *generated.Client, orgID string, values []string) (map[string]string, error)
+
+// CSVLookupEntry contains the lookup and optional create function for a target entity/match field pair.
+type CSVLookupEntry struct {
+	Lookup CSVLookupFn
+	Create CSVCreateFn
+}
+
+// CSVLookupRegistry maps (TargetEntity:MatchField) to lookup/create functions.
+var CSVLookupRegistry = map[string]CSVLookupEntry{
+{{- range $lookup := .Lookups }}
+	"{{ $lookup.TargetEntity }}:{{ $lookup.MatchField }}": {
+		Lookup: Lookup{{ $lookup.TargetEntity }}By{{ $lookup.MatchField | toUpperCamel }},
+{{- if $lookup.CreateIfMissing }}
+		Create: Create{{ $lookup.TargetEntity }}By{{ $lookup.MatchField | toUpperCamel }},
+{{- end }}
+	},
+{{- end }}
+}
+
+// GetCSVLookupEntry returns the lookup entry for a target entity and match field.
+func GetCSVLookupEntry(targetEntity, matchField string) (CSVLookupEntry, bool) {
+	key := targetEntity + ":" + matchField
+	entry, ok := CSVLookupRegistry[key]
+	return entry, ok
+}
+
+// normalizeCSVKey normalizes input values for lookup comparisons.
+func normalizeCSVKey(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+{{- range $lookup := .Lookups }}
+
+// Lookup{{ $lookup.TargetEntity }}By{{ $lookup.MatchField | toUpperCamel }} resolves {{ $lookup.TargetEntity }} {{ $lookup.MatchField }} values to IDs.
+func Lookup{{ $lookup.TargetEntity }}By{{ $lookup.MatchField | toUpperCamel }}(ctx context.Context, client *generated.Client, orgID string, values []string) (map[string]string, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+
+	unique := make(map[string]string)
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		key := normalizeCSVKey(v)
+		if _, exists := unique[key]; !exists {
+			unique[key] = v
+		}
+	}
+
+	if len(unique) == 0 {
+		return nil, nil
+	}
+
+	predicates := make([]predicate.{{ $lookup.TargetEntity }}, 0, len(unique))
+	for _, v := range unique {
+		predicates = append(predicates, {{ $lookup.TargetEntity | toLower }}.{{ $lookup.MatchField | toUpperCamel }}EqualFold(v))
+	}
+
+{{- if $lookup.OrgScoped }}
+	records, err := client.{{ $lookup.TargetEntity }}.Query().
+		Where({{ $lookup.TargetEntity | toLower }}.OwnerID(orgID), {{ $lookup.TargetEntity | toLower }}.Or(predicates...)).
+		All(ctx)
+{{- else }}
+	records, err := client.{{ $lookup.TargetEntity }}.Query().
+		Where({{ $lookup.TargetEntity | toLower }}.Or(predicates...)).
+		All(ctx)
+{{- end }}
+	if err != nil {
+		return nil, err
+	}
+
+	resolved := make(map[string]string, len(records))
+	for _, r := range records {
+		key := normalizeCSVKey(r.{{ $lookup.MatchField | toUpperCamel }})
+		resolved[key] = r.ID
+	}
+
+	return resolved, nil
+}
+{{- if $lookup.CreateIfMissing }}
+
+// Create{{ $lookup.TargetEntity }}By{{ $lookup.MatchField | toUpperCamel }} creates missing {{ $lookup.TargetEntity }} records and returns their IDs.
+func Create{{ $lookup.TargetEntity }}By{{ $lookup.MatchField | toUpperCamel }}(ctx context.Context, client *generated.Client, orgID string, values []string) (map[string]string, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+
+	unique := make(map[string]string)
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		key := normalizeCSVKey(v)
+		if _, exists := unique[key]; !exists {
+			unique[key] = v
+		}
+	}
+
+	if len(unique) == 0 {
+		return nil, nil
+	}
+
+	builders := make([]*generated.{{ $lookup.TargetEntity }}Create, 0, len(unique))
+	for _, v := range unique {
+{{- if $lookup.OrgScoped }}
+		builders = append(builders, client.{{ $lookup.TargetEntity }}.Create().
+			Set{{ $lookup.MatchField | toUpperCamel }}(v).
+			SetOwnerID(orgID))
+{{- else }}
+		builders = append(builders, client.{{ $lookup.TargetEntity }}.Create().
+			Set{{ $lookup.MatchField | toUpperCamel }}(v))
+{{- end }}
+	}
+
+	created, err := client.{{ $lookup.TargetEntity }}.CreateBulk(builders...).Save(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resolved := make(map[string]string, len(created))
+	for _, r := range created {
+		key := normalizeCSVKey(r.{{ $lookup.MatchField | toUpperCamel }})
+		resolved[key] = r.ID
+	}
+
+	return resolved, nil
+}
+{{- end }}
+{{- end }}
 {{- end }}
 
 // CSVReferenceRule describes how a CSV column maps to a target ID field.
-// All lookups are automatically scoped to the organization context from the request.
 type CSVReferenceRule struct {
 	// SourceColumn is the CSV column name containing friendly values
 	SourceColumn string
@@ -21,17 +165,6 @@ type CSVReferenceRule struct {
 	// IsSlice indicates if the target field is []string
 	IsSlice bool
 	// CreateIfMissing allows auto-creation during import
-	CreateIfMissing bool
-}
-
-// CSVLookup represents a unique lookup type for resolving CSV values to IDs.
-// All lookups are automatically scoped to the organization context from the request.
-type CSVLookup struct {
-	// TargetEntity is the entity type to query (e.g., User, Group)
-	TargetEntity string
-	// MatchField is the field to match on (e.g., email, name)
-	MatchField string
-	// CreateIfMissing indicates if this lookup supports auto-creation
 	CreateIfMissing bool
 }
 
@@ -64,19 +197,6 @@ var CSVReferenceRegistry = map[string]CSVSchemaInfo{
 {{- end }}
 }
 
-// CSVLookups returns all unique lookup types used across schemas.
-func CSVLookups() []CSVLookup {
-	return []CSVLookup{
-{{- range $lookup := .Lookups }}
-		{
-			TargetEntity:    "{{ $lookup.TargetEntity }}",
-			MatchField:      "{{ $lookup.MatchField }}",
-			CreateIfMissing: {{ $lookup.CreateIfMissing }},
-		},
-{{- end }}
-	}
-}
-
 // GetCSVReferenceRules returns the CSV reference rules for a schema.
 func GetCSVReferenceRules(schemaName string) []CSVReferenceRule {
 	info, ok := CSVReferenceRegistry[schemaName]
@@ -93,20 +213,8 @@ func HasCSVReferences(schemaName string) bool {
 	return ok && len(info.Rules) > 0
 }
 
-// CSVColumnsBySchema returns a map of schema names to their CSV column names.
-func CSVColumnsBySchema() map[string][]string {
-	result := make(map[string][]string, len(CSVReferenceRegistry))
-	for name, info := range CSVReferenceRegistry {
-		columns := make([]string, 0, len(info.Rules))
-		for _, rule := range info.Rules {
-			columns = append(columns, rule.SourceColumn)
-		}
-		result[name] = columns
-	}
-	return result
-}
-
 {{- range $schema := .Schemas }}
+{{- if $schema.HasCreateInput }}
 
 // {{ $schema.Name }}CSVInput wraps Create{{ $schema.Name }}Input with CSV reference columns.
 type {{ $schema.Name }}CSVInput struct {
@@ -127,18 +235,29 @@ type {{ $schema.Name }}CSVInput struct {
 
 // CSVInputWrapper marks {{ $schema.Name }}CSVInput for CSV header preprocessing.
 func ({{ $schema.Name }}CSVInput) CSVInputWrapper() {}
-
-// Get{{ $schema.Name }}CSVReferenceRules returns the CSV reference rules for {{ $schema.Name }}.
-func Get{{ $schema.Name }}CSVReferenceRules() []CSVReferenceRule {
-	return GetCSVReferenceRules("{{ $schema.Name }}")
-}
-
-// {{ $schema.Name }}CSVColumns returns the CSV column names for {{ $schema.Name }}.
-func {{ $schema.Name }}CSVColumns() []string {
-	return []string{
-{{- range $field := $schema.Fields }}
-		"{{ $field.CSVColumn }}",
 {{- end }}
-	}
+{{- if $schema.HasUpdateInput }}
+
+// {{ $schema.Name }}CSVUpdateInput wraps Update{{ $schema.Name }}Input with CSV reference columns for bulk updates.
+type {{ $schema.Name }}CSVUpdateInput struct {
+	// ID is the entity ID to update
+	ID string `csv:"ID"`
+{{- if $.EntPackage }}
+	Input generated.Update{{ $schema.Name }}Input
+{{- else }}
+	// Input field requires EntPackage to be configured
+	Input any
+{{- end }}
+{{- range $field := $schema.Fields }}
+{{- if $field.IsSlice }}
+	{{ $field.CSVColumn }} []string `csv:"{{ $field.CSVColumn }}"`
+{{- else }}
+	{{ $field.CSVColumn }} string `csv:"{{ $field.CSVColumn }}"`
+{{- end }}
+{{- end }}
 }
+
+// CSVInputWrapper marks {{ $schema.Name }}CSVUpdateInput for CSV header preprocessing.
+func ({{ $schema.Name }}CSVUpdateInput) CSVInputWrapper() {}
+{{- end }}
 {{- end }}

@@ -326,7 +326,8 @@ func TestGenerateCSVHelperFile(t *testing.T) {
 		EntPackage:  "github.com/example/ent/generated",
 		Schemas: []CSVSchema{
 			{
-				Name: "User",
+				Name:           "User",
+				HasCreateInput: true,
 				Fields: []CSVReferenceField{
 					{
 						FieldName:       "group_id",
@@ -361,7 +362,8 @@ func TestGenerateCSVHelperFile(t *testing.T) {
 	assert.Contains(t, contentStr, `"User":`)
 	assert.Contains(t, contentStr, "GroupName")
 	assert.Contains(t, contentStr, "UserCSVInput")
-	assert.Contains(t, contentStr, "CSVLookups()")
+	assert.Contains(t, contentStr, "LookupGroupByName")
+	assert.Contains(t, contentStr, "CSVLookupRegistry")
 }
 
 func TestGenerateCSVHelperFileWithoutEntPackage(t *testing.T) {
@@ -372,7 +374,8 @@ func TestGenerateCSVHelperFileWithoutEntPackage(t *testing.T) {
 		EntPackage:  "",
 		Schemas: []CSVSchema{
 			{
-				Name: "Simple",
+				Name:           "Simple",
+				HasCreateInput: true,
 				Fields: []CSVReferenceField{
 					{
 						FieldName:    "ref_id",
@@ -412,7 +415,8 @@ func TestGenerateCSVHelperFileWithSliceField(t *testing.T) {
 		EntPackage:  "github.com/example/ent/generated",
 		Schemas: []CSVSchema{
 			{
-				Name: "Control",
+				Name:           "Control",
+				HasCreateInput: true,
 				Fields: []CSVReferenceField{
 					{
 						FieldName:       "platform_ids",
@@ -491,9 +495,10 @@ func TestGetCSVReferenceFieldsWithEdgesSliceDetection(t *testing.T) {
 	var platformField, singleField CSVReferenceField
 
 	for _, f := range fields {
-		if f.FieldName == "platform_ids" {
+		switch f.FieldName {
+		case "platform_ids":
 			platformField = f
-		} else if f.FieldName == "single_id" {
+		case "single_id":
 			singleField = f
 		}
 	}

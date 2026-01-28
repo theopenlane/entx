@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/entc/load"
 	"github.com/99designs/gqlgen/codegen/templates"
@@ -21,9 +22,10 @@ const dirPermissions = 0755
 
 // CSVConfig holds configuration options for CSV reference generation
 type CSVConfig struct {
-	outputDir   string
-	packageName string
-	entPackage  string
+	outputDir           string
+	packageName         string
+	entPackage          string
+	generateAllWrappers bool
 }
 
 // CSVOption adds functional params for CSVConfig
@@ -50,6 +52,15 @@ func WithCSVEntPackage(pkg string) CSVOption {
 	}
 }
 
+// WithCSVGenerateAllWrappers enables wrapper type generation for all schemas,
+// not just those with CSV reference annotations. This allows all CSV bulk
+// resolvers to benefit from list preprocessing and header prefixing.
+func WithCSVGenerateAllWrappers(enabled bool) CSVOption {
+	return func(c *CSVConfig) {
+		c.generateAllWrappers = enabled
+	}
+}
+
 // CSVSchemaData holds the data for generating CSV helper files
 type CSVSchemaData struct {
 	// PackageName is the Go package name for generated files
@@ -63,7 +74,6 @@ type CSVSchemaData struct {
 }
 
 // CSVLookup represents a unique lookup type for resolving CSV values to IDs.
-// All lookups are automatically scoped to the organization context from the request.
 type CSVLookup struct {
 	// TargetEntity is the entity type to query (e.g., User, Group)
 	TargetEntity string
@@ -71,6 +81,8 @@ type CSVLookup struct {
 	MatchField string
 	// CreateIfMissing indicates if this lookup supports auto-creation
 	CreateIfMissing bool
+	// OrgScoped indicates if the entity has an OwnerID field for org filtering
+	OrgScoped bool
 }
 
 // CSVSchema represents a schema with CSV reference fields
@@ -79,6 +91,10 @@ type CSVSchema struct {
 	Name string
 	// Fields contains CSV reference field mappings
 	Fields []CSVReferenceField
+	// HasCreateInput indicates if the schema has a CreateInput type
+	HasCreateInput bool
+	// HasUpdateInput indicates if the schema has an UpdateInput type
+	HasUpdateInput bool
 }
 
 // CSVReferenceField represents a field that can be resolved from CSV references.
@@ -139,9 +155,19 @@ func getCSVInputData(g *gen.Graph, c *CSVConfig) CSVSchemaData {
 	}
 
 	lookupSet := make(map[string]CSVLookup)
+	orgScopedEntities := buildOrgScopedEntityMap(g)
 
 	for _, node := range g.Nodes {
 		if checkSchemaGenSkip(node) || checkQueryGenSkip(node) {
+			continue
+		}
+
+		// Check which mutation input types are available for this schema
+		hasCreate := !checkSkipMutationCreateInput(node)
+		hasUpdate := !checkSkipMutationUpdateInput(node)
+
+		// Skip schemas that don't have any mutation input types
+		if !hasCreate && !hasUpdate {
 			continue
 		}
 
@@ -153,7 +179,9 @@ func getCSVInputData(g *gen.Graph, c *CSVConfig) CSVSchemaData {
 		edgeTargets := buildEdgeTargetMap(node)
 		fields := getCSVReferenceFieldsWithEdges(schema, edgeTargets)
 
-		if len(fields) == 0 {
+		// When generateAllWrappers is enabled, include schemas even without CSV reference fields.
+		// This allows all CSV bulk resolvers to benefit from list preprocessing and header prefixing.
+		if len(fields) == 0 && !c.generateAllWrappers {
 			continue
 		}
 
@@ -164,6 +192,7 @@ func getCSVInputData(g *gen.Graph, c *CSVConfig) CSVSchemaData {
 					TargetEntity:    f.TargetEntity,
 					MatchField:      f.MatchField,
 					CreateIfMissing: f.CreateIfMissing,
+					OrgScoped:       orgScopedEntities[f.TargetEntity],
 				}
 			}
 		}
@@ -173,8 +202,10 @@ func getCSVInputData(g *gen.Graph, c *CSVConfig) CSVSchemaData {
 		})
 
 		data.Schemas = append(data.Schemas, CSVSchema{
-			Name:   node.Name,
-			Fields: fields,
+			Name:           node.Name,
+			Fields:         fields,
+			HasCreateInput: hasCreate,
+			HasUpdateInput: hasUpdate,
 		})
 	}
 
@@ -195,6 +226,101 @@ func getCSVInputData(g *gen.Graph, c *CSVConfig) CSVSchemaData {
 	})
 
 	return data
+}
+
+// checkSkipMutationCreateInput checks if the schema should be skipped for CSV create wrapper generation.
+// Returns true if no CreateInput type is generated for this schema, which can happen when:
+// 1. The schema has entgql.Skip(entgql.SkipMutationCreateInput) annotation
+// 2. The schema has no MutationInputs configured (no entgql.Mutations() annotation)
+// 3. The schema has MutationInputs but none are configured for create operations
+func checkSkipMutationCreateInput(node *gen.Type) bool {
+	entgqlAnt := &entgql.Annotation{}
+
+	ant, ok := node.Annotations[entgqlAnt.Name()]
+	if !ok {
+		// No entgql annotation means no mutations configured
+		return true
+	}
+
+	if err := entgqlAnt.Decode(ant); err != nil {
+		return true
+	}
+
+	// Check if explicitly skipped
+	if entgqlAnt.Skip.Is(entgql.SkipMutationCreateInput) {
+		return true
+	}
+
+	// Check if mutations are configured - if nil, no mutations are generated
+	if entgqlAnt.MutationInputs == nil {
+		return true
+	}
+
+	// Check if any mutation input is configured for create operations
+	for _, mi := range entgqlAnt.MutationInputs {
+		if mi.IsCreate {
+			return false
+		}
+	}
+
+	// No create mutation found
+	return true
+}
+
+// checkSkipMutationUpdateInput checks if the schema should be skipped for CSV update wrapper generation.
+// Returns true if no UpdateInput type is generated for this schema, which can happen when:
+// 1. The schema has entgql.Skip(entgql.SkipMutationUpdateInput) annotation
+// 2. The schema has no MutationInputs configured (no entgql.Mutations() annotation)
+// 3. The schema has MutationInputs but none are configured for update operations
+func checkSkipMutationUpdateInput(node *gen.Type) bool {
+	entgqlAnt := &entgql.Annotation{}
+
+	ant, ok := node.Annotations[entgqlAnt.Name()]
+	if !ok {
+		// No entgql annotation means no mutations configured
+		return true
+	}
+
+	if err := entgqlAnt.Decode(ant); err != nil {
+		return true
+	}
+
+	// Check if explicitly skipped
+	if entgqlAnt.Skip.Is(entgql.SkipMutationUpdateInput) {
+		return true
+	}
+
+	// Check if mutations are configured - if nil, no mutations are generated
+	if entgqlAnt.MutationInputs == nil {
+		return true
+	}
+
+	// Check if any mutation input is configured for update operations
+	for _, mi := range entgqlAnt.MutationInputs {
+		if !mi.IsCreate {
+			return false
+		}
+	}
+
+	// No update mutation found
+	return true
+}
+
+// buildOrgScopedEntityMap returns a map of entity names to whether they have an owner edge
+func buildOrgScopedEntityMap(g *gen.Graph) map[string]bool {
+	result := make(map[string]bool)
+
+	for _, node := range g.Nodes {
+		for _, edge := range node.Edges {
+			if edge.Name == "owner" {
+				result[node.Name] = true
+
+				break
+			}
+		}
+	}
+
+	return result
 }
 
 // buildEdgeTargetMap creates a map from field names to their edge target entity types

@@ -34,6 +34,34 @@ mutation Delete{{ .Name }}($delete{{ .Name }}Id: ID!) {
     deletedID
   }
 }
+
+mutation UpdateBulk{{ .Name }}($ids: [ID!]!, $input: Update{{ .Name }}Input!) {
+  updateBulk{{ .Name }}(ids: $ids, input: $input) {
+    {{ .Name | ToLowerCamel | ToPlural }} {
+      {{- range .Fields }}
+      {{.}}
+      {{- end}}
+    }
+    updatedIDs
+  }
+}
+
+mutation UpdateBulkCSV{{ .Name }}($input: Upload!) {
+  updateBulkCSV{{ .Name }}(input: $input) {
+    {{ .Name | ToLowerCamel | ToPlural }} {
+      {{- range .Fields }}
+      {{.}}
+      {{- end}}
+    }
+    updatedIDs
+  }
+}
+
+mutation DeleteBulk{{ .Name }}($ids: [ID!]!) {
+  deleteBulk{{ .Name }}(ids: $ids) {
+    deletedIDs
+  }
+}
 {{- end}}
 
 query GetAll{{ .Name | ToPlural }}($first: Int, $last: Int, $after: Cursor, $before: Cursor, $orderBy: [{{ .Name }}Order!]){
