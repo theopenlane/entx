@@ -9,6 +9,7 @@ import (
 	"entgo.io/ent/entc/load"
 	"entgo.io/ent/schema/field"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/theopenlane/entx"
 )
@@ -555,11 +556,19 @@ func TestCSVSchemaDataLookupDeduplication(t *testing.T) {
 }
 
 func TestGenerateCSVHelperFileInvalidPath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a file where we expect a directory - MkdirAll will fail
+	blockerFile := filepath.Join(tempDir, "blocker")
+	err := os.WriteFile(blockerFile, []byte("x"), 0600)
+	require.NoError(t, err)
+
 	data := CSVSchemaData{
 		PackageName: "test",
 		Schemas:     []CSVSchema{},
 	}
 
-	err := generateCSVHelperFile("/nonexistent/deeply/nested/path/that/should/fail", data)
+	// Attempt to create output inside the file (impossible)
+	err = generateCSVHelperFile(filepath.Join(blockerFile, "subdir"), data)
 	assert.Error(t, err)
 }
