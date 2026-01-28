@@ -17,12 +17,50 @@ type bulkSchema struct {
 	PluralName string
 }
 
+// BulkSchemaConfig holds configuration options for bulk schema generation
+type BulkSchemaConfig struct {
+	// injectIntoExisting controls whether to inject bulk mutations into existing schema files.
+	// When true (default), the hook will modify existing schemas that have at least one bulk
+	// update/delete mutation to add any missing ones. When false, only new schemas created
+	// by GenSchema will have bulk mutations (via the template). This allows running the
+	// injection once to migrate existing schemas, then disabling it for subsequent runs.
+	injectIntoExisting bool
+}
+
+// BulkSchemaOption is a functional option for configuring BulkSchemaConfig
+type BulkSchemaOption func(*BulkSchemaConfig)
+
+// WithBulkSchemaInjectExisting controls whether to inject bulk mutations into existing schemas.
+// When enabled (default), existing schemas with at least one bulk update/delete mutation will
+// have missing mutations injected. When disabled, only new schemas will get bulk mutations
+// via the template. Use this to run injection once, then disable for subsequent code generation.
+func WithBulkSchemaInjectExisting(enabled bool) BulkSchemaOption {
+	return func(c *BulkSchemaConfig) {
+		c.injectIntoExisting = enabled
+	}
+}
+
 // GenBulkSchema generates GraphQL schema extensions for bulk update and delete mutations.
 // This injects updateBulk, updateBulkCSV, and deleteBulk mutations into existing schemas
-// that already have createBulkCSV mutations.
-func GenBulkSchema(graphSchemaDir string) gen.Hook {
+// that already have createBulkCSV mutations AND at least one existing bulk update/delete mutation.
+// If a schema has createBulkCSV but no bulk update/delete mutations, it is assumed to be intentional.
+// Use WithBulkSchemaInjectExisting(false) to disable injection into existing schemas after initial migration.
+func GenBulkSchema(graphSchemaDir string, opts ...BulkSchemaOption) gen.Hook {
+	cfg := &BulkSchemaConfig{
+		injectIntoExisting: true, // default to enabled for backwards compatibility
+	}
+
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
 	return func(next gen.Generator) gen.Generator {
 		return gen.GenerateFunc(func(g *gen.Graph) error {
+			// Skip all processing if injection into existing schemas is disabled
+			if !cfg.injectIntoExisting {
+				return next.Generate(g)
+			}
+
 			pluralizer := pluralize.NewClient()
 
 			for _, node := range g.Nodes {
@@ -42,8 +80,18 @@ func GenBulkSchema(graphSchemaDir string) gen.Hook {
 
 				existingContent := string(content)
 
-				// Only inject if schema has createBulkCSV but missing updateBulkCSV or deleteBulk
+				// Only process schemas that have createBulkCSV
 				if !strings.Contains(existingContent, "createBulkCSV"+node.Name) {
+					continue
+				}
+
+				// Only inject missing mutations if at least one bulk update/delete mutation already exists.
+				// If none exist, assume it's intentional that this schema doesn't have bulk update/delete.
+				hasUpdateBulk := strings.Contains(existingContent, "updateBulk"+node.Name+"(")
+				hasUpdateBulkCSV := strings.Contains(existingContent, "updateBulkCSV"+node.Name+"(")
+				hasDeleteBulk := strings.Contains(existingContent, "deleteBulk"+node.Name+"(")
+
+				if !hasUpdateBulk && !hasUpdateBulkCSV && !hasDeleteBulk {
 					continue
 				}
 

@@ -20,7 +20,7 @@ func TestGenBulkSchema(t *testing.T) {
 		shouldModify        bool
 	}{
 		{
-			name: "adds bulk mutations to schema with createBulkCSV",
+			name: "adds missing bulk mutations when one already exists",
 			setupSchema: func() *gen.Graph {
 				return &gen.Graph{
 					Nodes: []*gen.Type{
@@ -40,6 +40,10 @@ func TestGenBulkSchema(t *testing.T) {
         """
         input: Upload!
     ): ControlBulkCreatePayload!
+    """
+    Delete multiple controls
+    """
+    deleteBulkControl(ids: [ID!]!): ControlBulkDeletePayload!
 }
 `,
 			expectedContains: []string{
@@ -52,6 +56,36 @@ func TestGenBulkSchema(t *testing.T) {
 				"deletedIDs: [ID!]!",
 			},
 			shouldModify: true,
+		},
+		{
+			name: "skips schema with createBulkCSV but no existing bulk update/delete mutations",
+			setupSchema: func() *gen.Graph {
+				return &gen.Graph{
+					Nodes: []*gen.Type{
+						{
+							Name: "Policy",
+						},
+					},
+				}
+			},
+			existingSchemaFile: `extend type Mutation {
+    """
+    Create multiple new policies via csv upload
+    """
+    createBulkCSVPolicy(
+        """
+        csv file containing values of the policy
+        """
+        input: Upload!
+    ): PolicyBulkCreatePayload!
+}
+`,
+			expectedNotContains: []string{
+				"updateBulkPolicy(",
+				"updateBulkCSVPolicy(",
+				"deleteBulkPolicy(",
+			},
+			shouldModify: false,
 		},
 		{
 			name: "skips schema without createBulkCSV",
@@ -241,6 +275,53 @@ type ActionPlanBulkDeletePayload {
 			}
 		})
 	}
+}
+
+func TestGenBulkSchemaWithInjectExistingDisabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	schemaDir := filepath.Join(tmpDir, "schema")
+	err := os.Mkdir(schemaDir, 0755)
+	assert.NoError(t, err)
+
+	// Create a schema file that would normally be modified (has createBulkCSV and deleteBulk)
+	existingContent := `extend type Mutation {
+    createBulkCSVControl(input: Upload!): ControlBulkCreatePayload!
+    deleteBulkControl(ids: [ID!]!): ControlBulkDeletePayload!
+}
+`
+
+	graph := &gen.Graph{
+		Nodes: []*gen.Type{
+			{Name: "Control"},
+		},
+	}
+
+	fileName := getFileName(schemaDir, "Control")
+	err = os.WriteFile(fileName, []byte(existingContent), 0600)
+	assert.NoError(t, err)
+
+	// Run the hook with injection disabled
+	hook := GenBulkSchema(schemaDir, WithBulkSchemaInjectExisting(false))
+	generator := hook(mockGenerator{})
+	err = generator.Generate(graph)
+	assert.NoError(t, err)
+
+	// Verify the file was NOT modified
+	content, err := os.ReadFile(fileName)
+	assert.NoError(t, err)
+	assert.Equal(t, existingContent, string(content), "content should not be modified when injection is disabled")
+
+	// Verify that with injection enabled (default), it WOULD modify
+	hook = GenBulkSchema(schemaDir)
+	generator = hook(mockGenerator{})
+	err = generator.Generate(graph)
+	assert.NoError(t, err)
+
+	content, err = os.ReadFile(fileName)
+	assert.NoError(t, err)
+	assert.NotEqual(t, existingContent, string(content), "content should be modified when injection is enabled")
+	assert.Contains(t, string(content), "updateBulkControl(")
+	assert.Contains(t, string(content), "updateBulkCSVControl(")
 }
 
 func TestInjectBulkMutations(t *testing.T) {
@@ -551,7 +632,8 @@ func TestBulkSchemaIntegration(t *testing.T) {
 	err := os.Mkdir(schemaDir, 0755)
 	assert.NoError(t, err)
 
-	// Create a schema file with createBulkCSV but missing other bulk mutations
+	// Create a schema file with createBulkCSV and one existing bulk mutation (deleteBulk)
+	// This should trigger injection of the missing bulk mutations (updateBulk, updateBulkCSV)
 	existingContent := `"""
 Control operations
 """
@@ -584,6 +666,10 @@ extend type Mutation {
     Delete an existing control
     """
     deleteControl(id: ID!): ControlDeletePayload!
+    """
+    Delete multiple controls
+    """
+    deleteBulkControl(ids: [ID!]!): ControlBulkDeletePayload!
 }
 
 """
