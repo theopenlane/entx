@@ -39,6 +39,28 @@ extend type Mutation{
         input: Upload!
     ): {{ .Name }}BulkCreatePayload!
     """
+    Update multiple existing {{ .Name | ToLowerCamel }}s
+    """
+    updateBulk{{ .Name }}(
+        """
+        IDs of the {{ .Name | ToLowerCamel }}s to update
+        """
+        ids: [ID!]!
+        """
+        values to update the {{ .Name | ToLowerCamel }}s with
+        """
+        input: Update{{ .Name }}Input!
+    ): {{ .Name }}BulkUpdatePayload!
+    """
+    Update multiple existing {{ .Name | ToLowerCamel }}s via file upload
+    """
+    updateBulkCSV{{ .Name }}(
+        """
+        csv file containing values of the {{ .Name | ToLowerCamel}}, must include ID column
+        """
+        input: Upload!
+    ): {{ .Name }}BulkUpdatePayload!
+    """
     Update an existing {{ .Name | ToLowerCamel }}
     """
     update{{ .Name }}(
@@ -60,6 +82,15 @@ extend type Mutation{
         """
         id: ID!
     ): {{ .Name }}DeletePayload!
+    """
+    Delete multiple {{ .Name | ToLowerCamel }}s
+    """
+    deleteBulk{{ .Name }}(
+        """
+        IDs of the {{ .Name | ToLowerCamel }}s to delete
+        """
+        ids: [ID!]!
+    ): {{ .Name }}BulkDeletePayload!
 }
 
 """
@@ -100,4 +131,28 @@ type {{ .Name }}BulkCreatePayload {
     Created {{ .Name | ToLowerCamel }}s
     """
     {{ .Name | ToLowerCamel | ToPlural }}: [{{ .Name }}!]
+}
+
+"""
+Return response for updateBulk{{ .Name }} mutation
+"""
+type {{ .Name }}BulkUpdatePayload {
+    """
+    Updated {{ .Name | ToLowerCamel }}s
+    """
+    {{ .Name | ToLowerCamel | ToPlural }}: [{{ .Name }}!]
+    """
+    IDs of the updated {{ .Name | ToLowerCamel }}s
+    """
+    updatedIDs: [ID!]
+}
+
+"""
+Return response for deleteBulk{{ .Name }} mutation
+"""
+type {{ .Name }}BulkDeletePayload {
+    """
+    Deleted {{ .Name | ToLowerCamel }} IDs
+    """
+    deletedIDs: [ID!]!
 }
