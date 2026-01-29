@@ -2,6 +2,7 @@ package genhooks
 
 import (
 	"cmp"
+	"encoding/json"
 	"html/template"
 	"os"
 	"path/filepath"
@@ -115,6 +116,21 @@ type CSVReferenceField struct {
 	// CreateIfMissing indicates if missing records should be created
 	CreateIfMissing bool
 }
+
+// CSVFieldMappingJSON is a simplified field mapping structure for JSON export.
+// This is consumed by bulkgen to generate sample CSV files with custom column headers.
+type CSVFieldMappingJSON struct {
+	// CSVColumn is the friendly CSV header name (e.g., AssignedToUserEmail)
+	CSVColumn string `json:"csvColumn"`
+	// TargetField is the Go field name this column maps to (e.g., AssignedToUserID)
+	TargetField string `json:"targetField"`
+	// IsSlice indicates if the field is a []string
+	IsSlice bool `json:"isSlice"`
+}
+
+// CSVFieldMappingsJSON is the top-level structure for the JSON export file.
+// Maps schema names to their CSV field mappings.
+type CSVFieldMappingsJSON map[string][]CSVFieldMappingJSON
 
 // GenCSVSchema generates CSV helper types and functions based on schema annotations
 func GenCSVSchema(opts ...CSVOption) gen.Hook {
@@ -418,6 +434,57 @@ func generateCSVHelperFile(outputDir string, data CSVSchemaData) error {
 
 		return err
 	}
+
+	if err := generateCSVFieldMappingsJSON(outputDir, data); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// generateCSVFieldMappingsJSON creates a JSON file with CSV field mappings for use by bulkgen.
+// This allows bulkgen to include custom CSV columns in generated sample files.
+func generateCSVFieldMappingsJSON(outputDir string, data CSVSchemaData) error {
+	mappings := make(CSVFieldMappingsJSON)
+
+	for _, schema := range data.Schemas {
+		if len(schema.Fields) == 0 {
+			continue
+		}
+
+		fields := make([]CSVFieldMappingJSON, 0, len(schema.Fields))
+		for _, f := range schema.Fields {
+			fields = append(fields, CSVFieldMappingJSON{
+				CSVColumn:   f.CSVColumn,
+				TargetField: f.GoFieldName,
+				IsSlice:     f.IsSlice,
+			})
+		}
+
+		mappings[schema.Name] = fields
+	}
+
+	filePath := filepath.Join(outputDir, "csv_field_mappings.json")
+
+	file, err := os.Create(filepath.Clean(filePath))
+	if err != nil {
+		log.Error().Err(err).Str("path", filePath).Msg("failed to create CSV field mappings JSON file")
+
+		return err
+	}
+
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+
+	if err := encoder.Encode(mappings); err != nil {
+		log.Error().Err(err).Msg("failed to encode CSV field mappings to JSON")
+
+		return err
+	}
+
+	log.Debug().Str("path", filePath).Msg("generated CSV field mappings JSON file")
 
 	return nil
 }
