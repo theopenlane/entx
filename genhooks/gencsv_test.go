@@ -577,3 +577,101 @@ func TestGenerateCSVHelperFileInvalidPath(t *testing.T) {
 	err = generateCSVHelperFile(filepath.Join(blockerFile, "subdir"), data)
 	assert.Error(t, err)
 }
+
+func TestGenerateCSVFieldMappingsJSON(t *testing.T) {
+	tempDir := t.TempDir()
+
+	data := CSVSchemaData{
+		PackageName: "testpkg",
+		Schemas: []CSVSchema{
+			{
+				Name: "ActionPlan",
+				Fields: []CSVReferenceField{
+					{
+						GoFieldName: "AssignedToUserID",
+						CSVColumn:   "AssignedToUserEmail",
+						IsSlice:     false,
+					},
+					{
+						GoFieldName: "BlockedGroupIds",
+						CSVColumn:   "BlockedGroupNames",
+						IsSlice:     true,
+					},
+				},
+			},
+			{
+				Name: "Control",
+				Fields: []CSVReferenceField{
+					{
+						GoFieldName: "PlatformIds",
+						CSVColumn:   "PlatformNames",
+						IsSlice:     true,
+					},
+				},
+			},
+			{
+				Name:   "Empty",
+				Fields: []CSVReferenceField{},
+			},
+		},
+	}
+
+	err := generateCSVFieldMappingsJSON(tempDir, data)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(tempDir, "csv_field_mappings.json"))
+	require.NoError(t, err)
+
+	contentStr := string(content)
+
+	assert.Contains(t, contentStr, `"ActionPlan"`)
+	assert.Contains(t, contentStr, `"csvColumn": "AssignedToUserEmail"`)
+	assert.Contains(t, contentStr, `"targetField": "AssignedToUserID"`)
+	assert.Contains(t, contentStr, `"isSlice": false`)
+	assert.Contains(t, contentStr, `"Control"`)
+	assert.Contains(t, contentStr, `"csvColumn": "PlatformNames"`)
+	assert.Contains(t, contentStr, `"isSlice": true`)
+	assert.NotContains(t, contentStr, `"Empty"`)
+}
+
+func TestGenerateCSVHelperFileCreatesJSONFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	data := CSVSchemaData{
+		PackageName: "testpkg",
+		EntPackage:  "github.com/example/ent/generated",
+		Schemas: []CSVSchema{
+			{
+				Name:           "User",
+				HasCreateInput: true,
+				Fields: []CSVReferenceField{
+					{
+						FieldName:    "group_id",
+						GoFieldName:  "GroupID",
+						CSVColumn:    "GroupName",
+						TargetEntity: "Group",
+						MatchField:   "name",
+					},
+				},
+			},
+		},
+		Lookups: []CSVLookup{
+			{
+				TargetEntity: "Group",
+				MatchField:   "name",
+			},
+		},
+	}
+
+	err := generateCSVHelperFile(tempDir, data)
+	require.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(tempDir, "csv_generated.go"))
+	assert.FileExists(t, filepath.Join(tempDir, "csv_field_mappings.json"))
+
+	jsonContent, err := os.ReadFile(filepath.Join(tempDir, "csv_field_mappings.json"))
+	require.NoError(t, err)
+
+	assert.Contains(t, string(jsonContent), `"User"`)
+	assert.Contains(t, string(jsonContent), `"csvColumn": "GroupName"`)
+}
