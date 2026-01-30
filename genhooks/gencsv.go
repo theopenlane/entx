@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/entc/load"
 	"github.com/99designs/gqlgen/codegen/templates"
+	"github.com/go-openapi/inflect"
 	"github.com/rs/zerolog/log"
 
 	"github.com/theopenlane/entx"
@@ -353,10 +354,12 @@ func buildEdgeTargetMap(node *gen.Type) map[string]string {
 }
 
 // getCSVReferenceFieldsWithEdges extracts CSV reference fields from a schema,
-// inferring target entities from edge definitions when not explicitly specified
+// inferring target entities from edge definitions when not explicitly specified.
+// It processes both field annotations and edge annotations.
 func getCSVReferenceFieldsWithEdges(schema *load.Schema, edgeTargets map[string]string) []CSVReferenceField {
 	var fields []CSVReferenceField
 
+	// Process field annotations
 	for _, field := range schema.Fields {
 		ann := getCSVReferenceAnnotation(field)
 		if ann == nil {
@@ -391,6 +394,60 @@ func getCSVReferenceFieldsWithEdges(schema *load.Schema, edgeTargets map[string]
 		})
 	}
 
+	// Process edge annotations for M2M/O2M edges that don't have backing fields
+	edgeFields := getCSVReferenceFieldsFromEdges(schema)
+	fields = append(fields, edgeFields...)
+
+	return fields
+}
+
+// getCSVReferenceFieldsFromEdges extracts CSV reference fields from edge annotations.
+// This supports edges like Controls where users can specify ControlRefCodes instead of ControlIDs.
+func getCSVReferenceFieldsFromEdges(schema *load.Schema) []CSVReferenceField {
+	var fields []CSVReferenceField
+
+	for _, edge := range schema.Edges {
+		// Skip edges that have a backing field - those are handled via field annotations
+		if edge.Field != "" {
+			continue
+		}
+
+		ann := getCSVReferenceAnnotationFromEdge(edge)
+		if ann == nil {
+			continue
+		}
+
+		if ann.MatchField == "" || ann.CSVColumn == "" {
+			continue
+		}
+
+		// For edges, the target entity is the edge type
+		targetEntity := ann.TargetEntity
+		if targetEntity == "" {
+			targetEntity = edge.Type
+		}
+
+		if targetEntity == "" {
+			log.Warn().Str("edge", edge.Name).Str("schema", schema.Name).Msg("CSV reference edge has no target entity")
+			continue
+		}
+
+		// Edge name → Go field name for IDs (e.g., "controls" → "ControlIDs")
+		// Singularize the edge name to match ent/entgql's naming convention
+		singular := inflect.Singularize(edge.Name)
+		goFieldName := templates.ToGo(singular) + "IDs"
+
+		fields = append(fields, CSVReferenceField{
+			FieldName:       edge.Name,
+			GoFieldName:     goFieldName,
+			CSVColumn:       ann.CSVColumn,
+			TargetEntity:    targetEntity,
+			MatchField:      ann.MatchField,
+			IsSlice:         true, // Edge ID fields are always slices
+			CreateIfMissing: ann.CreateIfMissing,
+		})
+	}
+
 	return fields
 }
 
@@ -398,6 +455,20 @@ func getCSVReferenceFieldsWithEdges(schema *load.Schema, edgeTargets map[string]
 func getCSVReferenceAnnotation(field *load.Field) *entx.CSVReferenceAnnotation {
 	ann := &entx.CSVReferenceAnnotation{}
 	if a, ok := field.Annotations[ann.Name()]; ok {
+		if err := ann.Decode(a); err != nil {
+			return nil
+		}
+
+		return ann
+	}
+
+	return nil
+}
+
+// getCSVReferenceAnnotationFromEdge retrieves the CSV reference annotation from an edge
+func getCSVReferenceAnnotationFromEdge(edge *load.Edge) *entx.CSVReferenceAnnotation {
+	ann := &entx.CSVReferenceAnnotation{}
+	if a, ok := edge.Annotations[ann.Name()]; ok {
 		if err := ann.Decode(a); err != nil {
 			return nil
 		}

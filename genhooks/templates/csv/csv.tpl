@@ -4,6 +4,7 @@ package {{ .PackageName }}
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"{{ .EntPackage }}"
@@ -94,6 +95,9 @@ func Lookup{{ $lookup.TargetEntity }}By{{ $lookup.MatchField | toUpperCamel }}(c
 	resolved := make(map[string]string, len(records))
 	for _, r := range records {
 		key := normalizeCSVKey(r.{{ $lookup.MatchField | toUpperCamel }})
+		if existingID, exists := resolved[key]; exists && existingID != r.ID {
+			return nil, fmt.Errorf("{{ $lookup.MatchField }} '%s' matched multiple {{ $lookup.TargetEntity }} records; use {{ $lookup.TargetEntity }}ID directly or add additional columns to scope the lookup", r.{{ $lookup.MatchField | toUpperCamel }})
+		}
 		resolved[key] = r.ID
 	}
 
