@@ -407,6 +407,57 @@ func TestGenerateCSVHelperFileWithoutEntPackage(t *testing.T) {
 	assert.Contains(t, contentStr, "Input any")
 }
 
+func TestGenerateCSVHelperFileDuplicateDetection(t *testing.T) {
+	tempDir := t.TempDir()
+
+	data := CSVSchemaData{
+		PackageName: "testpkg",
+		EntPackage:  "github.com/example/ent/generated",
+		Schemas: []CSVSchema{
+			{
+				Name:           "Evidence",
+				HasCreateInput: true,
+				Fields: []CSVReferenceField{
+					{
+						FieldName:    "controls",
+						GoFieldName:  "ControlIDs",
+						CSVColumn:    "ControlRefCodes",
+						TargetEntity: "Control",
+						MatchField:   "ref_code",
+						IsSlice:      true,
+					},
+				},
+			},
+		},
+		Lookups: []CSVLookup{
+			{
+				TargetEntity: "Control",
+				MatchField:   "ref_code",
+				OrgScoped:    true,
+			},
+		},
+	}
+
+	err := generateCSVHelperFile(tempDir, data)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(tempDir, "csv_generated.go"))
+	require.NoError(t, err)
+
+	contentStr := string(content)
+
+	// Verify the lookup function is generated
+	assert.Contains(t, contentStr, "LookupControlByRefCode")
+
+	// Verify duplicate detection logic is present
+	assert.Contains(t, contentStr, "existingID, exists := resolved[key]")
+	assert.Contains(t, contentStr, "existingID != r.ID")
+
+	// Verify error message guides user to use ID directly
+	assert.Contains(t, contentStr, "matched multiple Control records")
+	assert.Contains(t, contentStr, "use ControlID directly")
+}
+
 func TestGenerateCSVHelperFileWithSliceField(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -674,4 +725,316 @@ func TestGenerateCSVHelperFileCreatesJSONFile(t *testing.T) {
 
 	assert.Contains(t, string(jsonContent), `"User"`)
 	assert.Contains(t, string(jsonContent), `"csvColumn": "GroupName"`)
+}
+
+func TestGetCSVReferenceFieldsFromEdges(t *testing.T) {
+	tests := []struct {
+		name     string
+		schema   *load.Schema
+		expected []CSVReferenceField
+	}{
+		{
+			name: "edge with CSV reference annotation",
+			schema: &load.Schema{
+				Name: "Evidence",
+				Edges: []*load.Edge{
+					{
+						Name:  "controls",
+						Type:  "Control",
+						Field: "",
+						Annotations: map[string]any{
+							entx.CSVReferenceAnnotationName: map[string]any{
+								"MatchField": "ref_code",
+								"CSVColumn":  "ControlRefCodes",
+							},
+						},
+					},
+				},
+			},
+			expected: []CSVReferenceField{
+				{
+					FieldName:       "controls",
+					GoFieldName:     "ControlIDs", // "controls" → singularized "control" → "ControlIDs"
+					CSVColumn:       "ControlRefCodes",
+					TargetEntity:    "Control",
+					MatchField:      "ref_code",
+					IsSlice:         true,
+					CreateIfMissing: false,
+				},
+			},
+		},
+		{
+			name: "edge with backing field is skipped",
+			schema: &load.Schema{
+				Name: "Task",
+				Edges: []*load.Edge{
+					{
+						Name:  "assignee",
+						Type:  "User",
+						Field: "assignee_id",
+						Annotations: map[string]any{
+							entx.CSVReferenceAnnotationName: map[string]any{
+								"MatchField": "email",
+								"CSVColumn":  "AssigneeEmail",
+							},
+						},
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "edge without annotation is skipped",
+			schema: &load.Schema{
+				Name: "Control",
+				Edges: []*load.Edge{
+					{
+						Name:        "procedures",
+						Type:        "Procedure",
+						Field:       "",
+						Annotations: map[string]any{},
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "edge with explicit target entity",
+			schema: &load.Schema{
+				Name: "Risk",
+				Edges: []*load.Edge{
+					{
+						Name:  "mitigations",
+						Type:  "Control",
+						Field: "",
+						Annotations: map[string]any{
+							entx.CSVReferenceAnnotationName: map[string]any{
+								"MatchField":   "ref_code",
+								"CSVColumn":    "MitigationRefCodes",
+								"TargetEntity": "Control",
+							},
+						},
+					},
+				},
+			},
+			expected: []CSVReferenceField{
+				{
+					FieldName:       "mitigations",
+					GoFieldName:     "MitigationIDs", // "mitigations" → singularized "mitigation" → "MitigationIDs"
+					CSVColumn:       "MitigationRefCodes",
+					TargetEntity:    "Control",
+					MatchField:      "ref_code",
+					IsSlice:         true,
+					CreateIfMissing: false,
+				},
+			},
+		},
+		{
+			name: "edge with create if missing",
+			schema: &load.Schema{
+				Name: "Control",
+				Edges: []*load.Edge{
+					{
+						Name:  "tags",
+						Type:  "Tag",
+						Field: "",
+						Annotations: map[string]any{
+							entx.CSVReferenceAnnotationName: map[string]any{
+								"MatchField":      "name",
+								"CSVColumn":       "TagNames",
+								"CreateIfMissing": true,
+							},
+						},
+					},
+				},
+			},
+			expected: []CSVReferenceField{
+				{
+					FieldName:       "tags",
+					GoFieldName:     "TagIDs", // "tags" → singularized "tag" → "TagIDs"
+					CSVColumn:       "TagNames",
+					TargetEntity:    "Tag",
+					MatchField:      "name",
+					IsSlice:         true,
+					CreateIfMissing: true,
+				},
+			},
+		},
+		{
+			name: "edge with missing match field is skipped",
+			schema: &load.Schema{
+				Name: "Test",
+				Edges: []*load.Edge{
+					{
+						Name:  "items",
+						Type:  "Item",
+						Field: "",
+						Annotations: map[string]any{
+							entx.CSVReferenceAnnotationName: map[string]any{
+								"CSVColumn": "ItemNames",
+							},
+						},
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "edge with missing CSV column is skipped",
+			schema: &load.Schema{
+				Name: "Test",
+				Edges: []*load.Edge{
+					{
+						Name:  "items",
+						Type:  "Item",
+						Field: "",
+						Annotations: map[string]any{
+							entx.CSVReferenceAnnotationName: map[string]any{
+								"MatchField": "name",
+							},
+						},
+					},
+				},
+			},
+			expected: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fields := getCSVReferenceFieldsFromEdges(tc.schema)
+			assert.Equal(t, tc.expected, fields)
+		})
+	}
+}
+
+func TestGetCSVReferenceAnnotationFromEdge(t *testing.T) {
+	tests := []struct {
+		name     string
+		edge     *load.Edge
+		expected *entx.CSVReferenceAnnotation
+	}{
+		{
+			name: "edge with annotation",
+			edge: &load.Edge{
+				Name: "controls",
+				Type: "Control",
+				Annotations: map[string]any{
+					entx.CSVReferenceAnnotationName: map[string]any{
+						"MatchField":      "ref_code",
+						"CSVColumn":       "ControlRefCodes",
+						"TargetEntity":    "Control",
+						"CreateIfMissing": true,
+					},
+				},
+			},
+			expected: &entx.CSVReferenceAnnotation{
+				MatchField:      "ref_code",
+				CSVColumn:       "ControlRefCodes",
+				TargetEntity:    "Control",
+				CreateIfMissing: true,
+			},
+		},
+		{
+			name: "edge without annotation",
+			edge: &load.Edge{
+				Name:        "procedures",
+				Type:        "Procedure",
+				Annotations: map[string]any{},
+			},
+			expected: nil,
+		},
+		{
+			name: "edge with nil annotations",
+			edge: &load.Edge{
+				Name: "items",
+				Type: "Item",
+			},
+			expected: nil,
+		},
+		{
+			name: "edge with invalid annotation value",
+			edge: &load.Edge{
+				Name: "bad_edge",
+				Annotations: map[string]any{
+					entx.CSVReferenceAnnotationName: "invalid-not-a-map",
+				},
+			},
+			expected: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ann := getCSVReferenceAnnotationFromEdge(tc.edge)
+			if tc.expected == nil {
+				assert.Nil(t, ann)
+			} else {
+				assert.NotNil(t, ann)
+				assert.Equal(t, tc.expected.MatchField, ann.MatchField)
+				assert.Equal(t, tc.expected.CSVColumn, ann.CSVColumn)
+				assert.Equal(t, tc.expected.TargetEntity, ann.TargetEntity)
+				assert.Equal(t, tc.expected.CreateIfMissing, ann.CreateIfMissing)
+			}
+		})
+	}
+}
+
+func TestGetCSVReferenceFieldsWithEdgesIncludesEdgeAnnotations(t *testing.T) {
+	schema := &load.Schema{
+		Name: "Evidence",
+		Fields: []*load.Field{
+			{
+				Name: "assignee_id",
+				Info: &field.TypeInfo{Type: field.TypeString},
+				Annotations: map[string]any{
+					entx.CSVReferenceAnnotationName: map[string]any{
+						"MatchField": "email",
+						"CSVColumn":  "AssigneeEmail",
+					},
+				},
+			},
+		},
+		Edges: []*load.Edge{
+			{
+				Name:  "controls",
+				Type:  "Control",
+				Field: "",
+				Annotations: map[string]any{
+					entx.CSVReferenceAnnotationName: map[string]any{
+						"MatchField": "ref_code",
+						"CSVColumn":  "ControlRefCodes",
+					},
+				},
+			},
+		},
+	}
+
+	edgeTargets := map[string]string{
+		"assignee_id": "User",
+	}
+
+	fields := getCSVReferenceFieldsWithEdges(schema, edgeTargets)
+	assert.Len(t, fields, 2)
+
+	var assigneeField, controlsField CSVReferenceField
+
+	for _, f := range fields {
+		switch f.FieldName {
+		case "assignee_id":
+			assigneeField = f
+		case "controls":
+			controlsField = f
+		}
+	}
+
+	assert.Equal(t, "AssigneeID", assigneeField.GoFieldName)
+	assert.Equal(t, "AssigneeEmail", assigneeField.CSVColumn)
+	assert.Equal(t, "User", assigneeField.TargetEntity)
+	assert.False(t, assigneeField.IsSlice)
+
+	assert.Equal(t, "ControlIDs", controlsField.GoFieldName)
+	assert.Equal(t, "ControlRefCodes", controlsField.CSVColumn)
+	assert.Equal(t, "Control", controlsField.TargetEntity)
+	assert.True(t, controlsField.IsSlice)
 }
