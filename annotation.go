@@ -32,6 +32,12 @@ var WorkflowObjectConfigAnnotationName = "OPENLANE_WORKFLOW_OBJECT_CONFIG"
 // CSVReferenceAnnotationName is the annotation name for CSV reference field mappings
 var CSVReferenceAnnotationName = "OPENLANE_CSV_REFERENCE"
 
+// IntegrationMappingFieldAnnotationName is the annotation name for integration mapping fields
+var IntegrationMappingFieldAnnotationName = "OPENLANE_INTEGRATION_MAPPING_FIELD"
+
+// IntegrationMappingSchemaAnnotationName is the annotation name for integration mapping schemas
+var IntegrationMappingSchemaAnnotationName = "OPENLANE_INTEGRATION_MAPPING_SCHEMA"
+
 // CascadeAnnotation is an annotation used to indicate that an edge should be cascaded
 type CascadeAnnotation struct {
 	Field string
@@ -107,6 +113,27 @@ type CSVReferenceAnnotation struct {
 	CreateIfMissing bool
 }
 
+// IntegrationMappingFieldAnnotation marks a field as part of an integration mapping target.
+// Key is optional; when empty, generators should derive the GraphQL input field name
+// from the ent field name (lowerCamel, with initialisms preserved).
+type IntegrationMappingFieldAnnotation struct {
+	// Key is the mapping output key (GraphQL input field name).
+	Key string
+	// UpsertKey indicates the field participates in dedupe/upsert matching.
+	UpsertKey bool
+}
+
+// IntegrationMappingSchemaAnnotation marks a schema as an integration mapping target.
+// When present, generators should include all eligible fields by default.
+type IntegrationMappingSchemaAnnotation struct {
+	// Include restricts mapping to a specific set of ent field names (snake_case).
+	Include []string
+	// Exclude removes specific ent field names (snake_case) from mapping.
+	Exclude []string
+	// UpsertKeys lists ent field names (snake_case) used for dedupe/upsert matching.
+	UpsertKeys []string
+}
+
 // Name returns the name of the CascadeAnnotation
 func (a CascadeAnnotation) Name() string {
 	return CascadeAnnotationName
@@ -152,6 +179,16 @@ func (a CSVReferenceAnnotation) Name() string {
 	return CSVReferenceAnnotationName
 }
 
+// Name returns the name of the IntegrationMappingFieldAnnotation
+func (a IntegrationMappingFieldAnnotation) Name() string {
+	return IntegrationMappingFieldAnnotationName
+}
+
+// Name returns the name of the IntegrationMappingSchemaAnnotation
+func (a IntegrationMappingSchemaAnnotation) Name() string {
+	return IntegrationMappingSchemaAnnotationName
+}
+
 // CascadeAnnotationField sets the field name of the edge containing the ID of a record from the current schema
 func CascadeAnnotationField(fieldname string) *CascadeAnnotation {
 	return &CascadeAnnotation{
@@ -185,6 +222,83 @@ func QueryGenSkip(skip bool) *QueryGenAnnotation {
 	return &QueryGenAnnotation{
 		Skip: skip,
 	}
+}
+
+// IntegrationMappingFieldBuilder provides a fluent interface for IntegrationMappingFieldAnnotation.
+type IntegrationMappingFieldBuilder struct {
+	annotation IntegrationMappingFieldAnnotation
+}
+
+// IntegrationMappingSchemaBuilder provides a fluent interface for IntegrationMappingSchemaAnnotation.
+type IntegrationMappingSchemaBuilder struct {
+	annotation IntegrationMappingSchemaAnnotation
+}
+
+// IntegrationMappingField returns a builder for an integration mapping field annotation.
+// The mapping key is derived from the ent field name unless explicitly overridden.
+func IntegrationMappingField() *IntegrationMappingFieldBuilder {
+	return &IntegrationMappingFieldBuilder{
+		annotation: IntegrationMappingFieldAnnotation{},
+	}
+}
+
+// IntegrationMappingSchema returns a builder for an integration mapping schema annotation.
+func IntegrationMappingSchema() *IntegrationMappingSchemaBuilder {
+	return &IntegrationMappingSchemaBuilder{
+		annotation: IntegrationMappingSchemaAnnotation{},
+	}
+}
+
+// Key overrides the mapping output key (GraphQL input field name).
+func (b *IntegrationMappingFieldBuilder) Key(key string) *IntegrationMappingFieldBuilder {
+	b.annotation.Key = key
+	return b
+}
+
+// UpsertKey marks the field as part of the dedupe/upsert key.
+func (b *IntegrationMappingFieldBuilder) UpsertKey() *IntegrationMappingFieldBuilder {
+	b.annotation.UpsertKey = true
+	return b
+}
+
+// Include restricts mapping to a specific set of ent field names (snake_case).
+func (b *IntegrationMappingSchemaBuilder) Include(fields ...string) *IntegrationMappingSchemaBuilder {
+	b.annotation.Include = append(b.annotation.Include, fields...)
+	return b
+}
+
+// Exclude removes specific ent field names (snake_case) from mapping.
+func (b *IntegrationMappingSchemaBuilder) Exclude(fields ...string) *IntegrationMappingSchemaBuilder {
+	b.annotation.Exclude = append(b.annotation.Exclude, fields...)
+	return b
+}
+
+// UpsertKeys sets the ent field names (snake_case) used for dedupe/upsert matching.
+func (b *IntegrationMappingSchemaBuilder) UpsertKeys(fields ...string) *IntegrationMappingSchemaBuilder {
+	b.annotation.UpsertKeys = append(b.annotation.UpsertKeys, fields...)
+	return b
+}
+
+// Name returns the annotation name, implementing the ent Annotation interface.
+func (b *IntegrationMappingFieldBuilder) Name() string {
+	return b.annotation.Name()
+}
+
+// Name returns the annotation name, implementing the ent Annotation interface.
+func (b *IntegrationMappingSchemaBuilder) Name() string {
+	return b.annotation.Name()
+}
+
+// MarshalJSON serializes the builder as the underlying IntegrationMappingFieldAnnotation.
+// This ensures ent stores the annotation in the expected format for decoding.
+func (b *IntegrationMappingFieldBuilder) MarshalJSON() ([]byte, error) {
+	return json.Marshal(b.annotation)
+}
+
+// MarshalJSON serializes the builder as the underlying IntegrationMappingSchemaAnnotation.
+// This ensures ent stores the annotation in the expected format for decoding.
+func (b *IntegrationMappingSchemaBuilder) MarshalJSON() ([]byte, error) {
+	return json.Marshal(b.annotation)
 }
 
 // FieldJSONPathSearchable returns a new SearchFieldAnnotation with the searchable flag set and the JSONPath set
@@ -407,6 +521,26 @@ func (a *WorkflowObjectConfigAnnotation) Decode(annotation any) error {
 
 // Decode unmarshalls the CSVReferenceAnnotation
 func (a *CSVReferenceAnnotation) Decode(annotation any) error {
+	buf, err := json.Marshal(annotation)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(buf, a)
+}
+
+// Decode unmarshalls the IntegrationMappingFieldAnnotation
+func (a *IntegrationMappingFieldAnnotation) Decode(annotation any) error {
+	buf, err := json.Marshal(annotation)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(buf, a)
+}
+
+// Decode unmarshalls the IntegrationMappingSchemaAnnotation
+func (a *IntegrationMappingSchemaAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
