@@ -18,16 +18,16 @@ import (
 )
 
 var integrationSystemFieldNames = map[string]struct{}{
-	"id":              {},
-	"owner_id":        {},
-	"organization_id": {},
-	"org_id":          {},
-	"created_at":      {},
-	"updated_at":      {},
-	"created_by":      {},
-	"updated_by":      {},
-	"deleted_at":      {},
-	"deleted_by":      {},
+	"id":                       {},
+	"owner_id":                 {},
+	"organization_id":          {},
+	"org_id":                   {},
+	"created_at":               {},
+	"updated_at":               {},
+	"created_by":               {},
+	"updated_by":               {},
+	"deleted_at":               {},
+	"deleted_by":               {},
 	"workflow_eligible_marker": {},
 }
 
@@ -66,6 +66,8 @@ type IntegrationMappingData struct {
 type IntegrationMappingSchema struct {
 	// Name is the schema name (e.g., Vulnerability).
 	Name string
+	// ConstName is the generated Go constant name for the schema.
+	ConstName string
 	// Fields contains integration mapping field metadata.
 	Fields []IntegrationMappingField
 }
@@ -74,6 +76,8 @@ type IntegrationMappingSchema struct {
 type IntegrationMappingField struct {
 	// InputKey is the GraphQL input field name (lowerCamel).
 	InputKey string
+	// ConstName is the generated Go constant name for the input key.
+	ConstName string
 	// EntField is the ent field name (snake_case).
 	EntField string
 	// Type is the ent field type (string, time, json, etc).
@@ -141,14 +145,16 @@ func getIntegrationMappingData(g *gen.Graph, c *IntegrationMappingConfig) Integr
 			continue
 		}
 
-		fields := getIntegrationMappingFields(schema)
+		fields := getIntegrationMappingFields(schema, node.Name)
 		if len(fields) == 0 {
 			continue
 		}
 
+		schemaConst := mappingSchemaConstName(node.Name)
 		data.Schemas = append(data.Schemas, IntegrationMappingSchema{
-			Name:   node.Name,
-			Fields: fields,
+			Name:      node.Name,
+			ConstName: schemaConst,
+			Fields:    fields,
 		})
 	}
 
@@ -160,8 +166,24 @@ func getIntegrationMappingData(g *gen.Graph, c *IntegrationMappingConfig) Integr
 	return data
 }
 
+func mappingSchemaConstName(schemaName string) string {
+	if schemaName == "" {
+		return ""
+	}
+
+	return "IntegrationMappingSchema" + templates.ToGo(schemaName)
+}
+
+func mappingFieldConstName(schemaName, inputKey string) string {
+	if schemaName == "" || inputKey == "" {
+		return ""
+	}
+
+	return "IntegrationMapping" + templates.ToGo(schemaName) + templates.ToGo(inputKey)
+}
+
 // getIntegrationMappingFields returns integration mapping fields for a schema.
-func getIntegrationMappingFields(schema *load.Schema) []IntegrationMappingField {
+func getIntegrationMappingFields(schema *load.Schema, schemaName string) []IntegrationMappingField {
 	if schema == nil {
 		return nil
 	}
@@ -228,11 +250,12 @@ func getIntegrationMappingFields(schema *load.Schema) []IntegrationMappingField 
 		}
 
 		fields = append(fields, IntegrationMappingField{
-			InputKey:    key,
-			EntField:    field.Name,
-			Type:        field.Info.Type.String(),
-			Required:    !field.Optional,
-			UpsertKey:   upsert,
+			InputKey:  key,
+			ConstName: mappingFieldConstName(schemaName, key),
+			EntField:  field.Name,
+			Type:      field.Info.Type.String(),
+			Required:  !field.Optional,
+			UpsertKey: upsert,
 		})
 	}
 
@@ -362,24 +385,43 @@ package {{ .PackageName }}
 
 // IntegrationMappingField describes an integration mapping target field.
 type IntegrationMappingField struct {
-	InputKey    string
-	EntField    string
-	Type        string
-	Required    bool
-	UpsertKey   bool
+	InputKey string
+	EntField string
+	Type string
+	Required bool
+	UpsertKey bool
 }
 
 // IntegrationMappingSchema describes a schema with integration mapping fields.
 type IntegrationMappingSchema struct {
-	Name   string
+	Name string
 	Fields []IntegrationMappingField
+	AllowedKeys map[string]struct{}
+	RequiredKeys []string
+	UpsertKeys []string
 }
+
+const (
+{{- range .Schemas }}
+	{{ .ConstName }} = {{ printf "%q" .Name }}
+{{- end }}
+)
+
+{{- range .Schemas }}
+
+// Integration mapping keys for {{ .Name }}.
+const (
+{{- range .Fields }}
+	{{ .ConstName }} = {{ printf "%q" .InputKey }}
+{{- end }}
+)
+{{- end }}
 
 // IntegrationMappingSchemas maps schema names to their mapping metadata.
 var IntegrationMappingSchemas = map[string]IntegrationMappingSchema{
 {{- range .Schemas }}
-	"{{ .Name }}": {
-		Name: "{{ .Name }}",
+	{{ printf "%q" .Name }}: {
+		Name: {{ printf "%q" .Name }},
 		Fields: []IntegrationMappingField{
 		{{- range .Fields }}
 			{
@@ -389,6 +431,25 @@ var IntegrationMappingSchemas = map[string]IntegrationMappingSchema{
 				Required: {{ .Required }},
 				UpsertKey: {{ .UpsertKey }},
 			},
+		{{- end }}
+		},
+		AllowedKeys: map[string]struct{}{
+		{{- range .Fields }}
+			{{ printf "%q" .InputKey }}: {},
+		{{- end }}
+		},
+		RequiredKeys: []string{
+		{{- range .Fields }}
+			{{- if .Required }}
+			{{ printf "%q" .InputKey }},
+			{{- end }}
+		{{- end }}
+		},
+		UpsertKeys: []string{
+		{{- range .Fields }}
+			{{- if .UpsertKey }}
+			{{ printf "%q" .InputKey }},
+			{{- end }}
 		{{- end }}
 		},
 	},
