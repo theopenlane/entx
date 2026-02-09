@@ -1,6 +1,6 @@
 module github.com/theopenlane/entx
 
-go 1.25.5
+go 1.25.7
 
 require (
 	entgo.io/contrib v0.7.0
@@ -12,7 +12,7 @@ require (
 	github.com/rs/zerolog v1.34.0
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.11.1
-	github.com/theopenlane/iam v0.23.5
+	github.com/theopenlane/iam v0.24.0
 	github.com/theopenlane/utils v0.6.2
 	github.com/vektah/gqlparser/v2 v2.5.31
 	go.opentelemetry.io/otel v1.40.0
@@ -22,7 +22,7 @@ require (
 require (
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
-	github.com/lestrrat-go/httprc/v3 v3.0.3 // indirect
+	github.com/lestrrat-go/httprc/v3 v3.0.4 // indirect
 	github.com/lestrrat-go/jwx/v3 v3.0.13 // indirect
 	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
 )
@@ -41,7 +41,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/inflect v0.21.5
 	github.com/goccy/go-json v0.10.5 // indirect
-	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
@@ -54,7 +54,7 @@ require (
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/redis/go-redis/v9 v9.17.2 // indirect
+	github.com/redis/go-redis/v9 v9.17.3 // indirect
 	github.com/samber/lo v1.52.0
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/sosodev/duration v1.3.1 // indirect
@@ -70,7 +70,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.40.0 // indirect
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
 	golang.org/x/mod v0.32.0 // indirect
-	golang.org/x/oauth2 v0.34.0 // indirect
+	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
