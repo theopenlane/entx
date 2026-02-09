@@ -135,6 +135,7 @@ func getIntegrationMappingData(g *gen.Graph, c *IntegrationMappingConfig) Integr
 		}
 
 		hasCreate := !checkSkipMutationCreateInput(node)
+
 		hasUpdate := !checkSkipMutationUpdateInput(node)
 		if !hasCreate && !hasUpdate {
 			continue
@@ -195,14 +196,18 @@ func getIntegrationMappingFields(schema *load.Schema, schemaName string) []Integ
 	excludeSet := make(map[string]struct{})
 	upsertSet := make(map[string]struct{})
 	hasInclude := false
+
 	if schemaAnt != nil {
 		for _, name := range schemaAnt.Include {
 			includeSet[name] = struct{}{}
 		}
+
 		hasInclude = len(includeSet) > 0
+
 		for _, name := range schemaAnt.Exclude {
 			excludeSet[name] = struct{}{}
 		}
+
 		for _, name := range schemaAnt.UpsertKeys {
 			upsertSet[name] = struct{}{}
 		}
@@ -214,6 +219,7 @@ func getIntegrationMappingFields(schema *load.Schema, schemaName string) []Integ
 				continue
 			}
 		}
+
 		if _, ok := excludeSet[field.Name]; ok {
 			continue
 		}
@@ -236,6 +242,7 @@ func getIntegrationMappingFields(schema *load.Schema, schemaName string) []Integ
 		if ant != nil {
 			key = ant.Key
 		}
+
 		if key == "" {
 			goName := templates.ToGo(field.Name)
 			key = templates.ToGoPrivate(goName)
@@ -245,6 +252,7 @@ func getIntegrationMappingFields(schema *load.Schema, schemaName string) []Integ
 		if ant != nil && ant.UpsertKey {
 			upsert = true
 		}
+
 		if _, ok := upsertSet[field.Name]; ok {
 			upsert = true
 		}
@@ -360,6 +368,7 @@ func generateIntegrationMappingFile(outputDir string, data IntegrationMappingDat
 	}
 
 	filePath := filepath.Join(outputDir, "integration_mapping_generated.go")
+
 	file, err := os.Create(filepath.Clean(filePath))
 	if err != nil {
 		log.Error().Err(err).Str("path", filePath).Msg("failed to create integration mapping file")

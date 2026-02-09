@@ -272,11 +272,14 @@ func buildCreatableNodes(g *gen.Graph) []*gen.Type {
 		if checkSkipMutationCreateInput(node) {
 			continue
 		}
+
 		result = append(result, node)
 	}
+
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Name < result[j].Name
 	})
+
 	return result
 }
 
