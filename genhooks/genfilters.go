@@ -40,7 +40,7 @@ func WithStringSliceWhereOps() entgql.SchemaHook {
 					continue
 				}
 
-				fieldName := strcase.UpperCamelCase(f.Name)
+				fieldName := strcase.LowerCamelCase(f.Name)
 
 				addInputField(whereDef, existing, fieldName+"Has", ast.NamedType("String", nil))
 			}
