@@ -6,6 +6,7 @@ import (
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/entc/load"
+	"github.com/stoewer/go-strcase"
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
@@ -39,7 +40,9 @@ func WithStringSliceWhereOps() entgql.SchemaHook {
 					continue
 				}
 
-				addInputField(whereDef, existing, f.Name+"Has", ast.NamedType("String", nil))
+				fieldName := strcase.UpperCamelCase(f.Name)
+
+				addInputField(whereDef, existing, fieldName+"Has", ast.NamedType("String", nil))
 			}
 		}
 		return nil
