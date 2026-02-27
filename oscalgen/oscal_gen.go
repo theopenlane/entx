@@ -234,7 +234,7 @@ func (o *OSCALGenerator) generateRegistryFile(schemas []oscalSchemaInfo) error {
 		return err
 	}
 
-	if err := os.MkdirAll(o.OutputDir, 0o755); err != nil {
+	if err := os.MkdirAll(o.OutputDir, 0o755); err != nil { //nolint:mnd
 		return err
 	}
 
