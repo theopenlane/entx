@@ -25,6 +25,7 @@ require (
 	github.com/lestrrat-go/httprc/v3 v3.0.4 // indirect
 	github.com/lestrrat-go/jwx/v3 v3.0.13 // indirect
 	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
+	github.com/theopenlane/oscalot v0.1.0 // indirect
 )
 
 require (

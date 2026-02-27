@@ -145,6 +145,8 @@ github.com/theopenlane/echox v0.3.0 h1:uwOKEw+r1utGQoOR6dZQqAVuY5j8TcasqnTwO5+rM
 github.com/theopenlane/echox v0.3.0/go.mod h1:yTrXnj7s3VNIg0FCvB7Dut2Elr+LqJKU/nruxx1E1cM=
 github.com/theopenlane/iam v0.24.0 h1:Rgz64zDtSfAIBlwDyJV9uFo6HqpriBIwD+LPjgU4pk4=
 github.com/theopenlane/iam v0.24.0/go.mod h1:RfiDIjsnQyy20XqT54nbwhAuj9GH7W9q1mn8vYurCIs=
+github.com/theopenlane/oscalot v0.1.0 h1:ExYiMU4Q1ezbGq77sxkgahmfmc46L+2NqB39fg0HXjU=
+github.com/theopenlane/oscalot v0.1.0/go.mod h1:L7XzkqdBATqF2Du0uMTxoRr+eSfOHAwB6/ogwdwM0XE=
 github.com/theopenlane/utils v0.6.2 h1:7TgABVt0rb+Dhph3N7DEBAO3jcB/J+wgVv47F2Nry7c=
 github.com/theopenlane/utils v0.6.2/go.mod h1:7STP+gs2LAYYKLS7blxq8FTY5jvL7R0riLiUQJfTeM0=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
