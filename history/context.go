@@ -7,18 +7,20 @@ import (
 	"github.com/theopenlane/utils/contextx"
 )
 
-// ContextKey is the context key name for the history context
-// it is used to bypass auth checks during the creation of history records
-type ContextKey struct{}
+// HistoryRequestMarker marks an internal history write/read context.
+// It is used to bypass auth checks during creation/query of history records.
+type HistoryRequestMarker struct{}
+
+var historyContextKey = contextx.NewKey[HistoryRequestMarker]()
 
 // WithContext sets the history context in the context
 func WithContext(ctx context.Context) context.Context {
-	return contextx.With(ctx, ContextKey{})
+	return historyContextKey.Set(ctx, HistoryRequestMarker{})
 }
 
 // FromContext retrieves the history context from the context
-func FromContext(ctx context.Context) (ContextKey, bool) {
-	return contextx.From[ContextKey](ctx)
+func FromContext(ctx context.Context) (HistoryRequestMarker, bool) {
+	return historyContextKey.Get(ctx)
 }
 
 // IsHistoryRequest checks if the context has a history request key
