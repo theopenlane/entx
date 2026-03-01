@@ -7,19 +7,19 @@ import (
 	"github.com/theopenlane/utils/contextx"
 )
 
-// HistoryRequestMarker marks an internal history write/read context.
+// RequestMarker marks an internal history write/read context.
 // It is used to bypass auth checks during creation/query of history records.
-type HistoryRequestMarker struct{}
+type RequestMarker struct{}
 
-var historyContextKey = contextx.NewKey[HistoryRequestMarker]()
+var historyContextKey = contextx.NewKey[RequestMarker]()
 
 // WithContext sets the history context in the context
 func WithContext(ctx context.Context) context.Context {
-	return historyContextKey.Set(ctx, HistoryRequestMarker{})
+	return historyContextKey.Set(ctx, RequestMarker{})
 }
 
 // FromContext retrieves the history context from the context
-func FromContext(ctx context.Context) (HistoryRequestMarker, bool) {
+func FromContext(ctx context.Context) (RequestMarker, bool) {
 	return historyContextKey.Get(ctx)
 }
 
