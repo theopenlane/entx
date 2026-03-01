@@ -13,6 +13,7 @@ require (
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.11.1
 	github.com/theopenlane/iam v0.24.0
+	github.com/theopenlane/oscalot v0.1.0
 	github.com/theopenlane/utils v0.7.0
 	github.com/vektah/gqlparser/v2 v2.5.31
 	go.opentelemetry.io/otel v1.40.0
@@ -25,7 +26,6 @@ require (
 	github.com/lestrrat-go/httprc/v3 v3.0.4 // indirect
 	github.com/lestrrat-go/jwx/v3 v3.0.13 // indirect
 	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
-	github.com/theopenlane/oscalot v0.1.0 // indirect
 )
 
 require (
