@@ -467,6 +467,7 @@ var IntegrationMappingSchemas = map[string]IntegrationMappingSchema{
 `
 
 	tmpl, err := template.New("integration_mapping").Parse(mappingTemplate)
+
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to parse integration mapping template")
 	}
