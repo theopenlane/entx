@@ -50,7 +50,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/redis/go-redis/v9 v9.18.0 // indirect
-	github.com/samber/lo v1.52.0
+	github.com/samber/lo v1.53.0
 	github.com/sosodev/duration v1.3.1 // indirect
 	github.com/theopenlane/echox v0.3.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
