@@ -132,6 +132,8 @@ type IntegrationMappingSchemaAnnotation struct {
 	Exclude []string
 	// UpsertKeys lists ent field names (snake_case) used for dedupe/upsert matching.
 	UpsertKeys []string
+	// DefaultOperation is the operation name used when a webhook payload does not carry an explicit operation identifier.
+	DefaultOperation string
 }
 
 // Name returns the name of the CascadeAnnotation
@@ -276,6 +278,12 @@ func (b *IntegrationMappingSchemaBuilder) Exclude(fields ...string) *Integration
 // UpsertKeys sets the ent field names (snake_case) used for dedupe/upsert matching.
 func (b *IntegrationMappingSchemaBuilder) UpsertKeys(fields ...string) *IntegrationMappingSchemaBuilder {
 	b.annotation.UpsertKeys = append(b.annotation.UpsertKeys, fields...)
+	return b
+}
+
+// DefaultOperation sets the operation name used when a webhook payload does not carry an explicit operation identifier.
+func (b *IntegrationMappingSchemaBuilder) DefaultOperation(op string) *IntegrationMappingSchemaBuilder {
+	b.annotation.DefaultOperation = op
 	return b
 }
 
@@ -440,7 +448,7 @@ func (b *CSVRefBuilder) MarshalJSON() ([]byte, error) {
 }
 
 // Decode unmarshalls the CascadeAnnotation
-func (a *CascadeAnnotation) Decode(annotation interface{}) error {
+func (a *CascadeAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
@@ -450,7 +458,7 @@ func (a *CascadeAnnotation) Decode(annotation interface{}) error {
 }
 
 // Decode unmarshalls the CascadeThroughAnnotation
-func (a *CascadeThroughAnnotation) Decode(annotation interface{}) error {
+func (a *CascadeThroughAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
@@ -460,7 +468,7 @@ func (a *CascadeThroughAnnotation) Decode(annotation interface{}) error {
 }
 
 // Decode unmarshalls the SchemaGenAnnotation
-func (a *SchemaGenAnnotation) Decode(annotation interface{}) error {
+func (a *SchemaGenAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
@@ -470,7 +478,7 @@ func (a *SchemaGenAnnotation) Decode(annotation interface{}) error {
 }
 
 // Decode unmarshalls the QueryGenAnnotation
-func (a *QueryGenAnnotation) Decode(annotation interface{}) error {
+func (a *QueryGenAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
@@ -480,7 +488,7 @@ func (a *QueryGenAnnotation) Decode(annotation interface{}) error {
 }
 
 // Decode unmarshalls the SearchFieldAnnotation
-func (a *SearchFieldAnnotation) Decode(annotation interface{}) error {
+func (a *SearchFieldAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
@@ -490,7 +498,7 @@ func (a *SearchFieldAnnotation) Decode(annotation interface{}) error {
 }
 
 // Decode unmarshalls the WorkflowEligibleAnnotation
-func (a *WorkflowEligibleAnnotation) Decode(annotation interface{}) error {
+func (a *WorkflowEligibleAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err

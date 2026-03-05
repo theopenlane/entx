@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/entc/load"
 	"github.com/99designs/gqlgen/codegen/templates"
 	"github.com/rs/zerolog/log"
+	"github.com/stoewer/go-strcase"
 
 	"github.com/theopenlane/entx"
 )
@@ -68,6 +69,16 @@ type IntegrationMappingSchema struct {
 	Name string
 	// ConstName is the generated Go constant name for the schema.
 	ConstName string
+	// IngestTopicConstName is the generated Go constant name for the schema ingest topic.
+	IngestTopicConstName string
+	// IngestTopic is the schema-scoped ingest topic name.
+	IngestTopic string
+	// IngestListenerConstName is the generated Go constant name for the schema listener name.
+	IngestListenerConstName string
+	// IngestListener is the schema-scoped ingest listener name.
+	IngestListener string
+	// DefaultOperation is the operation name used when a webhook payload does not carry an explicit operation identifier
+	DefaultOperation string
 	// Fields contains integration mapping field metadata.
 	Fields []IntegrationMappingField
 }
@@ -152,10 +163,20 @@ func getIntegrationMappingData(g *gen.Graph, c *IntegrationMappingConfig) Integr
 		}
 
 		schemaConst := mappingSchemaConstName(node.Name)
+		ingestTopic := mappingSchemaIngestTopicName(node.Name)
+		defaultOp := ""
+		if schemaAnt := getIntegrationMappingSchemaAnnotation(schema); schemaAnt != nil {
+			defaultOp = schemaAnt.DefaultOperation
+		}
 		data.Schemas = append(data.Schemas, IntegrationMappingSchema{
-			Name:      node.Name,
-			ConstName: schemaConst,
-			Fields:    fields,
+			Name:                    node.Name,
+			ConstName:               schemaConst,
+			IngestTopicConstName:    mappingSchemaIngestTopicConstName(node.Name),
+			IngestTopic:             ingestTopic,
+			IngestListenerConstName: mappingSchemaIngestListenerConstName(node.Name),
+			IngestListener:          ingestTopic,
+			DefaultOperation:        defaultOp,
+			Fields:                  fields,
 		})
 	}
 
@@ -167,6 +188,7 @@ func getIntegrationMappingData(g *gen.Graph, c *IntegrationMappingConfig) Integr
 	return data
 }
 
+// mappingSchemaConstName returns the generated Go constant name for a schema mapping identifier
 func mappingSchemaConstName(schemaName string) string {
 	if schemaName == "" {
 		return ""
@@ -175,12 +197,40 @@ func mappingSchemaConstName(schemaName string) string {
 	return "IntegrationMappingSchema" + templates.ToGo(schemaName)
 }
 
+// mappingFieldConstName returns the generated Go constant name for a field mapping key within a schema
 func mappingFieldConstName(schemaName, inputKey string) string {
 	if schemaName == "" || inputKey == "" {
 		return ""
 	}
 
 	return "IntegrationMapping" + templates.ToGo(schemaName) + templates.ToGo(inputKey)
+}
+
+// mappingSchemaIngestTopicConstName returns the generated Go constant name for a schema's ingest topic
+func mappingSchemaIngestTopicConstName(schemaName string) string {
+	if schemaName == "" {
+		return ""
+	}
+
+	return "IntegrationIngestTopic" + templates.ToGo(schemaName) + "Requested"
+}
+
+// mappingSchemaIngestListenerConstName returns the generated Go constant name for a schema's ingest listener
+func mappingSchemaIngestListenerConstName(schemaName string) string {
+	if schemaName == "" {
+		return ""
+	}
+
+	return "IntegrationIngestListener" + templates.ToGo(schemaName) + "Requested"
+}
+
+// mappingSchemaIngestTopicName returns the ingest topic string value for a schema.
+func mappingSchemaIngestTopicName(schemaName string) string {
+	if schemaName == "" {
+		return ""
+	}
+
+	return "integration.ingest." + strcase.SnakeCase(schemaName) + ".requested"
 }
 
 // getIntegrationMappingFields returns integration mapping fields for a schema.
@@ -353,8 +403,10 @@ func entSkipMutationInputs(field *load.Field) bool {
 	return false
 }
 
+// isIntegrationSystemField reports whether a field name is a system-managed field excluded from integration mapping
 func isIntegrationSystemField(name string) bool {
 	_, ok := integrationSystemFieldNames[name]
+
 	return ok
 }
 
@@ -410,9 +462,25 @@ type IntegrationMappingSchema struct {
 	UpsertKeys []string
 }
 
+// IntegrationIngestSchema describes schema-scoped ingest event contracts.
+type IntegrationIngestSchema struct {
+	Name string
+	Topic string
+	Listener string
+	DefaultOperation string
+}
+
 const (
 {{- range .Schemas }}
 	{{ .ConstName }} = {{ printf "%q" .Name }}
+{{- end }}
+)
+
+// Integration ingest topics and listener names by schema.
+const (
+{{- range .Schemas }}
+	{{ .IngestTopicConstName }} = {{ printf "%q" .IngestTopic }}
+	{{ .IngestListenerConstName }} = {{ printf "%q" .IngestListener }}
 {{- end }}
 )
 
@@ -461,6 +529,18 @@ var IntegrationMappingSchemas = map[string]IntegrationMappingSchema{
 			{{- end }}
 		{{- end }}
 		},
+	},
+{{- end }}
+}
+
+// IntegrationIngestSchemas maps schema names to schema-scoped ingest event contracts.
+var IntegrationIngestSchemas = map[string]IntegrationIngestSchema{
+{{- range .Schemas }}
+	{{ printf "%q" .Name }}: {
+		Name: {{ printf "%q" .Name }},
+		Topic: {{ printf "%q" .IngestTopic }},
+		Listener: {{ printf "%q" .IngestListener }},
+		DefaultOperation: {{ printf "%q" .DefaultOperation }},
 	},
 {{- end }}
 }
