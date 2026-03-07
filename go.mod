@@ -7,12 +7,12 @@ require (
 	entgo.io/ent v0.14.6-0.20260218064135-ab0540611e15
 	github.com/99designs/gqlgen v0.17.87
 	github.com/XSAM/otelsql v0.41.0
-	github.com/brianvoe/gofakeit/v7 v7.14.0
+	github.com/brianvoe/gofakeit/v7 v7.14.1
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/rs/zerolog v1.34.0
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.11.1
-	github.com/theopenlane/iam v0.26.0
+	github.com/theopenlane/iam v0.27.1
 	github.com/theopenlane/oscalot v0.1.0
 	github.com/theopenlane/utils v0.7.0
 	github.com/vektah/gqlparser/v2 v2.5.32
@@ -50,7 +50,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/redis/go-redis/v9 v9.18.0 // indirect
-	github.com/samber/lo v1.52.0
+	github.com/samber/lo v1.53.0
 	github.com/sosodev/duration v1.3.1 // indirect
 	github.com/theopenlane/echox v0.3.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
