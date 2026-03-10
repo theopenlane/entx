@@ -120,7 +120,7 @@ func GenBulkSchema(graphSchemaDir string, opts ...BulkSchemaOption) gen.Hook {
 					continue
 				}
 
-				if err := os.WriteFile(filePath, []byte(updatedContent), 0600); err != nil { //nolint:mnd
+				if err := os.WriteFile(filePath, []byte(updatedContent), 0600); err != nil { //nolint:mnd,gosec
 					log.Fatalf("Unable to write file: %v", err)
 				}
 			}
