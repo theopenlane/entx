@@ -121,7 +121,6 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) {
 	newDoc, err := parser.ParseQuery(&ast.Source{
 		Input: buf.String(),
 	})
-
 	if err != nil {
 		log.Fatalf("Unable to parse new query: %v", err)
 	}
