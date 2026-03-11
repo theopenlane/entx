@@ -157,8 +157,8 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) {
 	sort.Strings(newQueryKeys)
 
 	const filePerm = 0644
+	
 	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC, filePerm) //nolint: gosec
-
 	if err != nil {
 		log.Fatalf("Unable to open file for writing: %v", err)
 	}
