@@ -82,14 +82,15 @@ func generateQuery(node *gen.Type, tmpl *template.Template, graphSchemaDir strin
 	}
 }
 
-func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) {
+func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error {
 	// Read file contents and parses for comparison and updating
 	srcFile, err := os.ReadFile(filePath)
 	if err != nil {
-		log.Fatalf("Unable to read existing file: %v", err)
+		return. fmt.Errorf("unable to read existing file: %w", err)
 	}
 
 	doc, err := parser.ParseQuery(&ast.Source{
+	....
 		Name:  filePath,
 		Input: string(srcFile),
 	})
