@@ -86,7 +86,7 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 	// Read file contents and parses for comparison and updating
 	srcFile, err := os.ReadFile(filePath)
 	if err != nil {
-		return. fmt.Errorf("unable to read existing file: %w", err)
+		return fmt.Errorf("unable to read existing file: %w", err)
 	}
 
 	doc, err := parser.ParseQuery(&ast.Source{
