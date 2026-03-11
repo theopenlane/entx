@@ -93,7 +93,6 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) {
 		Name:  filePath,
 		Input: string(srcFile),
 	})
-
 	if err != nil {
 		log.Fatalf("Unable to parse existing query file: %v", err)
 	}
