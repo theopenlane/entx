@@ -201,7 +201,7 @@ func writeMissingEdges(oldSel ast.SelectionSet, newSel *ast.SelectionSet) {
 	}
 }
 
-// Goes through the fields and checks field by name, returns if found
+// findFieldInSelectionSet goes through the fields and checks field by name, returns if found
 func findFieldInSelectionSet(sel ast.SelectionSet, name string) *ast.Field {
 	for _, s := range sel {
 
