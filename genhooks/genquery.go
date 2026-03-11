@@ -172,7 +172,6 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) {
 	}
 
 	formatter.NewFormatter(f).FormatQueryDocument(updatedDoc)
-
 }
 
 func writeMissingEdges(oldSel ast.SelectionSet, newSel *ast.SelectionSet) {
