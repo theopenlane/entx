@@ -134,10 +134,9 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 	}
 
 	for queryName, oldQuery := range oldQuerySelections {
-
 		newQuery, ok := newQuerySelections[queryName]
 
-		//if query doesn't exist in nw queries, we add the old query to the newly created document
+		// if query doesn't exist in new queries, we add the old query to the newly created document
 		if !ok {
 			newDoc.Operations = append(newDoc.Operations, oldQuery)
 			continue
@@ -147,8 +146,7 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 		writeMissingEdges(oldQuery.SelectionSet, &newQuery.SelectionSet)
 	}
 
-	//sort keys for consitency in output file, this prevents code from thinking file has changed.
-
+	// sort keys for consistency in output file, this prevents code from thinking file has changed.
 	newQueryKeys := make([]string, 0, len(newQuerySelections))
 
 	for key := range newQuerySelections {
