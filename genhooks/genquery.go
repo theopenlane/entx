@@ -174,7 +174,6 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 }
 
 func writeMissingEdges(oldSel ast.SelectionSet, newSel *ast.SelectionSet) {
-
 	for _, oldSelection := range oldSel {
 
 		oldField, ok := oldSelection.(*ast.Field)
