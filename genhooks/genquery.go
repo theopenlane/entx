@@ -90,7 +90,6 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 	}
 
 	doc, err := parser.ParseQuery(&ast.Source{
-	....
 		Name:  filePath,
 		Input: string(srcFile),
 	})
