@@ -82,11 +82,11 @@ func generateQuery(node *gen.Type, tmpl *template.Template, graphSchemaDir strin
 	}
 }
 
-func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error {
+func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) {
 	// Read file contents and parses for comparison and updating
 	srcFile, err := os.ReadFile(filePath)
 	if err != nil {
-		return fmt.Errorf("unable to read existing file: %w", err)
+		log.Fatalf("Unable to read existing file: %v", err)
 	}
 
 	doc, err := parser.ParseQuery(&ast.Source{
@@ -104,7 +104,7 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 		oldQuerySelections[op.Name] = op
 	}
 
-	//load new query  into memory for comparison
+	// Load new query  into memory for comparison
 	var buf bytes.Buffer
 
 	s := query{
@@ -135,7 +135,7 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 	for queryName, oldQuery := range oldQuerySelections {
 		newQuery, ok := newQuerySelections[queryName]
 
-		// if query doesn't exist in new queries, we add the old query to the newly created document
+		// if query doesn't exist in nw queries, we add the old query to the newly created document
 		if !ok {
 			newDoc.Operations = append(newDoc.Operations, oldQuery)
 			continue
@@ -145,7 +145,7 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 		writeMissingEdges(oldQuery.SelectionSet, &newQuery.SelectionSet)
 	}
 
-	// sort keys for consistency in output file, this prevents code from thinking file has changed.
+	// sort keys for consitency in output file, this prevents code from thinking file has changed.
 	newQueryKeys := make([]string, 0, len(newQuerySelections))
 
 	for key := range newQuerySelections {
@@ -155,7 +155,7 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 	sort.Strings(newQueryKeys)
 
 	const filePerm = 0644
-	
+
 	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC, filePerm) //nolint: gosec
 	if err != nil {
 		log.Fatalf("Unable to open file for writing: %v", err)
@@ -201,7 +201,6 @@ func writeMissingEdges(oldSel ast.SelectionSet, newSel *ast.SelectionSet) {
 // findFieldInSelectionSet goes through the fields and checks field by name, returns if found
 func findFieldInSelectionSet(sel ast.SelectionSet, name string) *ast.Field {
 	for _, s := range sel {
-
 		if f, ok := s.(*ast.Field); ok {
 			if f.Name == name {
 				return f
@@ -211,7 +210,7 @@ func findFieldInSelectionSet(sel ast.SelectionSet, name string) *ast.Field {
 	return nil
 }
 
-// checks if field is an edge
+// isEdge checks if field is an edge
 func isEdge(f *ast.Field) bool {
 	return len(f.SelectionSet) > 0
 }
