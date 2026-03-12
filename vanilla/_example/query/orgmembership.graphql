@@ -1,97 +1,118 @@
-
-mutation CreateBulkCSVOrgMembership($input: Upload!) {
-  createBulkCSVOrgMembership(input: $input) {
-    orgMemberships {
-      id
-      organizationID
-      role
-      userID
-    }
-  }
+mutation CreateBulkCSVOrgMembership ($input: Upload!) {
+	createBulkCSVOrgMembership(input: $input) {
+		orgMemberships {
+			id
+			organizationID
+			role
+			userID
+		}
+	}
 }
-
-mutation CreateBulkOrgMembership($input: [CreateOrgMembershipInput!]) {
-  createBulkOrgMembership(input: $input) {
-    orgMemberships {
-      id
-      organizationID
-      role
-      userID
-    }
-  }
+mutation CreateBulkOrgMembership ($input: [CreateOrgMembershipInput!]) {
+	createBulkOrgMembership(input: $input) {
+		orgMemberships {
+			id
+			organizationID
+			role
+			userID
+		}
+	}
 }
-
-mutation CreateOrgMembership($input: CreateOrgMembershipInput!) {
-  createOrgMembership(input: $input) {
-    orgMembership {
-      id
-      organizationID
-      role
-      userID
-    }
-  }
+mutation CreateOrgMembership ($input: CreateOrgMembershipInput!) {
+	createOrgMembership(input: $input) {
+		orgMembership {
+			id
+			organizationID
+			role
+			userID
+		}
+	}
 }
-
-mutation DeleteOrgMembership($deleteOrgMembershipId: ID!) {
-  deleteOrgMembership(id: $deleteOrgMembershipId) {
-    deletedID
-  }
+mutation DeleteBulkOrgMembership ($ids: [ID!]!) {
+	deleteBulkOrgMembership(ids: $ids) {
+		deletedIDs
+	}
 }
-
-query GetAllOrgMemberships {
-  orgMemberships {
-    totalCount
-    pageInfo {
-      startCursor
-      endCursor
-      hasPreviousPage
-      hasNextPage
-    }
-    edges {
-      node {
-        id
-        organizationID
-        role
-        userID
-      }
-    }
-  }
+mutation DeleteOrgMembership ($deleteOrgMembershipId: ID!) {
+	deleteOrgMembership(id: $deleteOrgMembershipId) {
+		deletedID
+	}
 }
-query GetOrgMembershipByID($orgMembershipId: ID!) {
-  orgMembership(id: $orgMembershipId) {
-    id
-    organizationID
-    role
-    userID
-  }
+query GetAllOrgMemberships ($first: Int, $last: Int, $after: Cursor, $before: Cursor, $orderBy: [OrgMembershipOrder!]) {
+	orgMemberships(first: $first, last: $last, after: $after, before: $before, orderBy: $orderBy) {
+		totalCount
+		pageInfo {
+			startCursor
+			endCursor
+			hasPreviousPage
+			hasNextPage
+		}
+		edges {
+			node {
+				id
+				organizationID
+				role
+				userID
+			}
+		}
+	}
 }
-
-query GetOrgMemberships($first: Int, $last: Int, $where: OrgMembershipWhereInput) {
-  orgMemberships(first: $first, last: $last, where: $where) {
-    totalCount
-    pageInfo {
-      startCursor
-      endCursor
-      hasPreviousPage
-      hasNextPage
-    }
-    edges {
-      node {
-        id
-        organizationID
-        role
-        userID
-      }
-    }
-  }
+query GetOrgMembershipByID ($orgMembershipId: ID!) {
+	orgMembership(id: $orgMembershipId) {
+		id
+		organizationID
+		role
+		userID
+	}
 }
-mutation UpdateOrgMembership($updateOrgMembershipId: ID!, $input: UpdateOrgMembershipInput!) {
-  updateOrgMembership(id: $updateOrgMembershipId, input: $input) {
-    orgMembership {
-      id
-      organizationID
-      role
-      userID
-    }
-  }
+query GetOrgMemberships ($first: Int, $last: Int, $after: Cursor, $before: Cursor, $orderBy: [OrgMembershipOrder!], $where: OrgMembershipWhereInput) {
+	orgMemberships(first: $first, last: $last, after: $after, before: $before, orderBy: $orderBy, where: $where) {
+		totalCount
+		pageInfo {
+			startCursor
+			endCursor
+			hasPreviousPage
+			hasNextPage
+		}
+		edges {
+			node {
+				id
+				organizationID
+				role
+				userID
+			}
+		}
+	}
+}
+mutation UpdateBulkCSVOrgMembership ($input: Upload!) {
+	updateBulkCSVOrgMembership(input: $input) {
+		orgMemberships {
+			id
+			organizationID
+			role
+			userID
+		}
+		updatedIDs
+	}
+}
+mutation UpdateBulkOrgMembership ($ids: [ID!]!, $input: UpdateOrgMembershipInput!) {
+	updateBulkOrgMembership(ids: $ids, input: $input) {
+		orgMemberships {
+			id
+			organizationID
+			role
+			userID
+		}
+		updatedIDs
+	}
+}
+mutation UpdateOrgMembership ($updateOrgMembershipId: ID!, $input: UpdateOrgMembershipInput!) {
+	updateOrgMembership(id: $updateOrgMembershipId, input: $input) {
+		orgMembership {
+			id
+			organizationID
+			role
+			userID
+		}
+	}
 }
