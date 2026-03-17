@@ -121,6 +121,10 @@ type IntegrationMappingFieldAnnotation struct {
 	Key string
 	// UpsertKey indicates the field participates in dedupe/upsert matching.
 	UpsertKey bool
+	// LookupKey indicates the field participates in stock ingest lookup matching.
+	LookupKey bool
+	// RuntimeDefault identifies the runtime source that injects this field during stock ingest preparation
+	RuntimeDefault string
 }
 
 // IntegrationMappingSchemaAnnotation marks a schema as an integration mapping target.
@@ -130,10 +134,8 @@ type IntegrationMappingSchemaAnnotation struct {
 	Include []string
 	// Exclude removes specific ent field names (snake_case) from mapping.
 	Exclude []string
-	// UpsertKeys lists ent field names (snake_case) used for dedupe/upsert matching.
-	UpsertKeys []string
-	// DefaultOperation is the operation name used when a webhook payload does not carry an explicit operation identifier.
-	DefaultOperation string
+	// StockPersist indicates the schema can use the generated stock ingest persistence path
+	StockPersist bool
 }
 
 // Name returns the name of the CascadeAnnotation
@@ -263,6 +265,19 @@ func (b *IntegrationMappingFieldBuilder) UpsertKey() *IntegrationMappingFieldBui
 	return b
 }
 
+// LookupKey marks the field as part of the stock ingest lookup key.
+func (b *IntegrationMappingFieldBuilder) LookupKey() *IntegrationMappingFieldBuilder {
+	b.annotation.LookupKey = true
+	return b
+}
+
+// RuntimeDefault sets the runtime source identifier for this field during stock ingest preparation.
+// The source string is matched by core's stock persister to determine which runtime value to inject.
+func (b *IntegrationMappingFieldBuilder) RuntimeDefault(src string) *IntegrationMappingFieldBuilder {
+	b.annotation.RuntimeDefault = src
+	return b
+}
+
 // Include restricts mapping to a specific set of ent field names (snake_case).
 func (b *IntegrationMappingSchemaBuilder) Include(fields ...string) *IntegrationMappingSchemaBuilder {
 	b.annotation.Include = append(b.annotation.Include, fields...)
@@ -275,15 +290,9 @@ func (b *IntegrationMappingSchemaBuilder) Exclude(fields ...string) *Integration
 	return b
 }
 
-// UpsertKeys sets the ent field names (snake_case) used for dedupe/upsert matching.
-func (b *IntegrationMappingSchemaBuilder) UpsertKeys(fields ...string) *IntegrationMappingSchemaBuilder {
-	b.annotation.UpsertKeys = append(b.annotation.UpsertKeys, fields...)
-	return b
-}
-
-// DefaultOperation sets the operation name used when a webhook payload does not carry an explicit operation identifier.
-func (b *IntegrationMappingSchemaBuilder) DefaultOperation(op string) *IntegrationMappingSchemaBuilder {
-	b.annotation.DefaultOperation = op
+// StockPersist enables the generated stock ingest persistence path for this schema.
+func (b *IntegrationMappingSchemaBuilder) StockPersist() *IntegrationMappingSchemaBuilder {
+	b.annotation.StockPersist = true
 	return b
 }
 
