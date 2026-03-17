@@ -195,7 +195,7 @@ func emit{{ .Name }}(ctx context.Context, runtime *gala.Gala, integration *ent.I
 		input.DirectorySyncRunID = &dirSyncRunID
 	}
 {{ end -}}
-{{ end -}}
+{{ end }}
 	receipt := runtime.EmitWithHeaders(ctx, integrationgenerated.{{ .IngestTopicVarName }}.Name, integrationgenerated.{{ .IngestRequestTypeName }}{
 		Metadata: metadata,
 		Input:    input,
@@ -244,7 +244,7 @@ func persist{{ .Name }}(ctx context.Context, db *ent.Client, integration *ent.In
 		input.DirectorySyncRunID = &dirSyncRunID
 	}
 {{ end -}}
-{{ end -}}
+{{ end }}
 	return persist{{ .Name }}Input(ctx, db, integration, input)
 }
 {{ end -}}
