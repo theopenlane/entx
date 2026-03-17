@@ -15,44 +15,40 @@ import (
 // persist{{ .Schema.Name }}Input upserts one {{ .Schema.Name }} record using the ingest lookup key fields
 func persist{{ .Schema.Name }}Input(ctx context.Context, db *ent.Client, integration *ent.Integration, createInput ent.{{ .Schema.InputTypeName }}) error {
 {{ if .Schema.StockPersist -}}
-	hasKey := false
-{{ if .Schema.ScopeByIntegrationID }}
-	q := db.{{ .Schema.Name }}.Query().Where({{ .Schema.EntSchemaPackageAlias }}.IntegrationID(integration.ID))
-{{ else }}
-	q := db.{{ .Schema.Name }}.Query().Where({{ .Schema.EntSchemaPackageAlias }}.OwnerID(integration.OwnerID))
-{{ end -}}
-{{- range .Schema.LookupFields -}}
-{{ if .Required }}
-	if createInput.{{ .GoField }} != "" {
-		q = q.Where({{ $.Schema.EntSchemaPackageAlias }}.{{ .GoField }}(createInput.{{ .GoField }}))
-		hasKey = true
-	}
-{{ else }}
-	if createInput.{{ .GoField }} != nil && *createInput.{{ .GoField }} != "" {
-		q = q.Where({{ $.Schema.EntSchemaPackageAlias }}.{{ .GoField }}(*createInput.{{ .GoField }}))
-		hasKey = true
-	}
-{{ end -}}
-{{- end }}
-	if !hasKey {
+{{- range .Schema.LookupFields }}
+{{ if .Required -}}
+	if createInput.{{ .GoField }} == "" {
 		return ErrIngestUpsertKeyMissing
 	}
+{{- else -}}
+	if createInput.{{ .GoField }} == nil || *createInput.{{ .GoField }} == "" {
+		return ErrIngestUpsertKeyMissing
+	}
+{{- end }}
+{{ end }}
+{{ if .Schema.ScopeByIntegrationID -}}
+	existing, err := db.{{ .Schema.Name }}.Query().
+		Where({{ .Schema.EntSchemaPackageAlias }}.IntegrationID(integration.ID)).
+{{- else -}}
+	existing, err := db.{{ .Schema.Name }}.Query().
+		Where({{ .Schema.EntSchemaPackageAlias }}.OwnerID(integration.OwnerID)).
+{{- end }}
+{{- range .Schema.LookupFields }}
+{{ if .Required -}}
+		Where({{ $.Schema.EntSchemaPackageAlias }}.{{ .GoField }}(createInput.{{ .GoField }})).
+{{- else -}}
+		Where({{ $.Schema.EntSchemaPackageAlias }}.{{ .GoField }}(*createInput.{{ .GoField }})).
+{{- end }}
+{{ end -}}
+		Only(ctx)
 
-	existing, err := q.Only(ctx)
-	if err != nil {
-		if !ent.IsNotFound(err) {
-			if ent.IsNotSingular(err) {
-				return ErrIngestUpsertConflict
-			}
-
-			return ErrIngestPersistFailed
-		}
-
-		if _, err := db.{{ .Schema.Name }}.Create().SetInput(createInput).Save(ctx); err != nil {
-			return wrapIngestPersistError(err)
-		}
-
-		return nil
+	switch {
+	case err == nil:
+		// update existing record
+	case ent.IsNotFound(err):
+		return wrapIngestPersistError(db.{{ .Schema.Name }}.Create().SetInput(createInput).Exec(ctx))
+	default:
+		return wrapIngestPersistError(err)
 	}
 
 	var updateInput ent.{{ .Schema.UpdateInputTypeName }}
@@ -60,11 +56,7 @@ func persist{{ .Schema.Name }}Input(ctx context.Context, db *ent.Client, integra
 		return ErrIngestMappedDocumentInvalid
 	}
 
-	if _, err := db.{{ .Schema.Name }}.UpdateOneID(existing.ID).SetInput(updateInput).Save(ctx); err != nil {
-		return wrapIngestPersistError(err)
-	}
-
-	return nil
+	return wrapIngestPersistError(db.{{ .Schema.Name }}.UpdateOneID(existing.ID).SetInput(updateInput).Exec(ctx))
 {{ else -}}
 	// Custom persistence logic required for {{ .Schema.Name }}.
 	// Implement lookup and upsert logic below using the createInput fields.
