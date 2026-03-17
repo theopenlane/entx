@@ -123,8 +123,9 @@ type IntegrationMappingFieldAnnotation struct {
 	UpsertKey bool
 	// LookupKey indicates the field participates in stock ingest lookup matching.
 	LookupKey bool
-	// RuntimeDefault identifies the runtime source that injects this field during stock ingest preparation
-	RuntimeDefault string
+	// FromIntegration indicates the field value is injected from the integration record at ingest time.
+	// The integration field is derived from the ent field name: integration_id→ID, owner_id→OwnerID, platform_id→PlatformID.
+	FromIntegration bool
 }
 
 // IntegrationMappingSchemaAnnotation marks a schema as an integration mapping target.
@@ -271,10 +272,10 @@ func (b *IntegrationMappingFieldBuilder) LookupKey() *IntegrationMappingFieldBui
 	return b
 }
 
-// RuntimeDefault sets the runtime source identifier for this field during stock ingest preparation.
-// The source string is matched by core's stock persister to determine which runtime value to inject.
-func (b *IntegrationMappingFieldBuilder) RuntimeDefault(src string) *IntegrationMappingFieldBuilder {
-	b.annotation.RuntimeDefault = src
+// FromIntegration marks the field as integration-injected during stock ingest preparation.
+// The integration field is derived from the ent field name at code generation time.
+func (b *IntegrationMappingFieldBuilder) FromIntegration() *IntegrationMappingFieldBuilder {
+	b.annotation.FromIntegration = true
 	return b
 }
 

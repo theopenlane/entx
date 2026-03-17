@@ -27,20 +27,19 @@ func TestBuildMappingTemplate_GeneratesTypedIngestContracts(t *testing.T) {
 				InputTypeName:         "CreateDirectoryAccountInput",
 				Fields: []MappingField{
 					{
-						InputKey:       "externalID",
-						ConstName:      "IntegrationMappingDirectoryAccountExternalID",
-						EntField:       "external_id",
-						Type:           "string",
-						Required:       true,
-						UpsertKey:      true,
-						RuntimeDefault: "",
+						InputKey:  "externalID",
+						ConstName: "IntegrationMappingDirectoryAccountExternalID",
+						EntField:  "external_id",
+						Type:      "string",
+						Required:  true,
+						UpsertKey: true,
 					},
 				},
 				RuntimeDefaults: []IngestRuntimeDefault{
 					{
-						Field:   "owner_id",
-						GoField: "OwnerID",
-						Source:  "installation_owner_id",
+						Field:             "owner_id",
+						GoField:           "OwnerID",
+						IntegrationField: "OwnerID",
 					},
 				},
 				StockPersist: true,
@@ -60,7 +59,7 @@ func TestBuildMappingTemplate_GeneratesTypedIngestContracts(t *testing.T) {
 	assert.Contains(t, generated, "type IntegrationIngestDirectoryAccountRequested struct")
 	assert.Contains(t, generated, "Input generated.CreateDirectoryAccountInput")
 	assert.Contains(t, generated, "var IntegrationIngestDirectoryAccountRequestedTopic = gala.Topic[IntegrationIngestDirectoryAccountRequested]")
-	assert.Contains(t, generated, `Source: "installation_owner_id"`)
+	assert.Contains(t, generated, "PrepareDirectoryAccountInput")
 	assert.NotContains(t, generated, "DefaultOperation")
 }
 
@@ -90,21 +89,27 @@ func TestBuildMappingTemplate_OmitsTypedIngestContractsWhenDisabled(t *testing.T
 	assert.NotContains(t, generated, "DefaultOperation")
 }
 
-func TestBuildMappingTemplate_RuntimeDefaultsInIngestSchema(t *testing.T) {
+func TestBuildMappingTemplate_FromIntegrationGeneratesPrepareFunc(t *testing.T) {
 	tmpl := buildMappingTemplate()
 
 	data := MappingData{
-		PackageName: "integrationgenerated",
+		PackageName:             "integrationgenerated",
+		EntPackage:              "github.com/example/project/internal/ent/generated",
+		GalaPackage:             "github.com/example/project/pkg/gala",
+		GenerateIngestContracts: true,
 		Schemas: []MappingSchema{
 			{
-				Name:                 "DirectoryGroup",
-				ConstName:            "IntegrationMappingSchemaDirectoryGroup",
-				IngestTopicConstName: "IntegrationIngestTopicDirectoryGroupRequested",
-				IngestTopic:          "integration.ingest.directory_group.requested",
-				StockPersist:         true,
+				Name:                  "DirectoryGroup",
+				ConstName:             "IntegrationMappingSchemaDirectoryGroup",
+				IngestTopicConstName:  "IntegrationIngestTopicDirectoryGroupRequested",
+				IngestTopic:           "integration.ingest.directory_group.requested",
+				IngestRequestTypeName: "IntegrationIngestDirectoryGroupRequested",
+				IngestTopicVarName:    "IntegrationIngestDirectoryGroupRequestedTopic",
+				InputTypeName:         "CreateDirectoryGroupInput",
+				StockPersist:          true,
 				RuntimeDefaults: []IngestRuntimeDefault{
-					{Field: "owner_id", GoField: "OwnerID", Source: "installation_owner_id"},
-					{Field: "integration_id", GoField: "IntegrationID", Source: "installation_id"},
+					{Field: "owner_id", GoField: "OwnerID", IntegrationField: "OwnerID"},
+					{Field: "integration_id", GoField: "IntegrationID", IntegrationField: "ID"},
 				},
 			},
 		},
@@ -115,7 +120,9 @@ func TestBuildMappingTemplate_RuntimeDefaultsInIngestSchema(t *testing.T) {
 	assert.NoError(t, err)
 
 	generated := out.String()
-	assert.Contains(t, generated, `Source: "installation_owner_id"`)
-	assert.Contains(t, generated, `Source: "installation_id"`)
+	assert.Contains(t, generated, "PrepareDirectoryGroupInput")
+	assert.Contains(t, generated, "integration.OwnerID")
+	assert.Contains(t, generated, "integration.ID")
 	assert.Contains(t, generated, "StockPersist: true")
+	assert.NotContains(t, generated, "DefaultOperation")
 }

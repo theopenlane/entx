@@ -18,6 +18,20 @@ type Config struct {
 	EntPackage string
 	// GalaPackage is the gala package import path used for typed ingest topics
 	GalaPackage string
+	// IngestOutputDir is the directory where generated ingest operation files are written
+	IngestOutputDir string
+	// IngestPackageName is the Go package name for generated ingest operation files
+	IngestPackageName string
+	// IntegrationGeneratedPackage is the integrationgenerated package import path
+	IntegrationGeneratedPackage string
+	// ContextxPackage is the contextx package import path
+	ContextxPackage string
+	// DoPackage is the samber/do package import path
+	DoPackage string
+	// LoPackage is the samber/lo package import path
+	LoPackage string
+	// JsonxPackage is the jsonx package import path
+	JsonxPackage string
 }
 
 // Extension implements entc.Extension for integration mapping generation
@@ -69,6 +83,55 @@ func WithGalaPackage(path string) ExtensionOption {
 	}
 }
 
+// WithIngestOutputDir sets the directory where generated ingest operation files are written
+func WithIngestOutputDir(dir string) ExtensionOption {
+	return func(c *Config) {
+		c.IngestOutputDir = dir
+	}
+}
+
+// WithIngestPackageName sets the Go package name for generated ingest operation files
+func WithIngestPackageName(name string) ExtensionOption {
+	return func(c *Config) {
+		c.IngestPackageName = name
+	}
+}
+
+// WithIntegrationGeneratedPackage sets the integrationgenerated package import path
+func WithIntegrationGeneratedPackage(path string) ExtensionOption {
+	return func(c *Config) {
+		c.IntegrationGeneratedPackage = path
+	}
+}
+
+// WithContextxPackage sets the contextx package import path
+func WithContextxPackage(path string) ExtensionOption {
+	return func(c *Config) {
+		c.ContextxPackage = path
+	}
+}
+
+// WithDoPackage sets the samber/do package import path
+func WithDoPackage(path string) ExtensionOption {
+	return func(c *Config) {
+		c.DoPackage = path
+	}
+}
+
+// WithLoPackage sets the samber/lo package import path
+func WithLoPackage(path string) ExtensionOption {
+	return func(c *Config) {
+		c.LoPackage = path
+	}
+}
+
+// WithJsonxPackage sets the jsonx package import path
+func WithJsonxPackage(path string) ExtensionOption {
+	return func(c *Config) {
+		c.JsonxPackage = path
+	}
+}
+
 // Hooks satisfies the entc.Extension interface
 func (e Extension) Hooks() []gen.Hook {
 	return []gen.Hook{e.Hook()}
@@ -89,6 +152,18 @@ func (e Extension) Hook() gen.Hook {
 
 			if err := writeMappingFile(e.config.OutputDir, data); err != nil {
 				return err
+			}
+
+			if e.config.IngestOutputDir != "" {
+				ingestData := buildIngestData(e.config, data.Schemas)
+
+				if err := writeIngestListenersFile(e.config.IngestOutputDir, ingestData); err != nil {
+					return err
+				}
+
+				if err := writeIngestPersistFiles(e.config.IngestOutputDir, ingestData); err != nil {
+					return err
+				}
 			}
 
 			return next.Generate(g)

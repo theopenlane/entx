@@ -9,6 +9,7 @@ import (
 )
 {{- end }}
 
+
 // IntegrationMappingField describes an integration mapping target field
 type IntegrationMappingField struct {
 	InputKey string
@@ -45,11 +46,10 @@ type IntegrationIngestLookupField struct {
 	GoField string
 }
 
-// IntegrationIngestRuntimeDefault describes one runtime-injected field for stock ingest persistence
+// IntegrationIngestRuntimeDefault describes one integration-injected field for stock ingest persistence
 type IntegrationIngestRuntimeDefault struct {
 	Field string
 	GoField string
-	Source string
 }
 
 {{- if .GenerateIngestContracts }}
@@ -184,7 +184,6 @@ var IntegrationIngestSchemas = map[string]IntegrationIngestSchema{
 			{
 				Field: {{ printf "%q" .Field }},
 				GoField: {{ printf "%q" .GoField }},
-				Source: {{ printf "%q" .Source }},
 			},
 		{{- end }}
 		},
@@ -192,3 +191,30 @@ var IntegrationIngestSchemas = map[string]IntegrationIngestSchema{
 	},
 {{- end }}
 }
+
+{{- if .GenerateIngestContracts }}
+{{- range .Schemas }}
+{{- if and .StockPersist .RuntimeDefaults }}
+
+// Prepare{{ .Name }}Input stamps integration-scoped values onto a {{ .InputTypeName }} before persistence.
+// Fields are only overwritten when the input value is already zero/nil.
+func Prepare{{ .Name }}Input(input generated.{{ .InputTypeName }}, integration *generated.Integration) generated.{{ .InputTypeName }} {
+	if integration == nil {
+		return input
+	}
+{{- range .RuntimeDefaults }}
+{{- if .Required }}
+	if input.{{ .GoField }} == "" {
+		input.{{ .GoField }} = integration.{{ .IntegrationField }}
+	}
+{{- else }}
+	if input.{{ .GoField }} == nil && integration.{{ .IntegrationField }} != "" {
+		input.{{ .GoField }} = &integration.{{ .IntegrationField }}
+	}
+{{- end }}
+{{- end }}
+	return input
+}
+{{- end }}
+{{- end }}
+{{- end }}

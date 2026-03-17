@@ -70,29 +70,69 @@ type MappingSchema struct {
 	IngestRequestTypeName string
 	// IngestTopicVarName is the generated Go variable name for the typed ingest topic
 	IngestTopicVarName string
-	// InputTypeName is the ent-generated input type carried by the ingest request payload
+	// InputTypeName is the ent-generated Create input type name
 	InputTypeName string
+	// UpdateInputTypeName is the ent-generated Update input type name
+	UpdateInputTypeName string
+	// EntSchemaPackageAlias is the Go identifier for the ent schema predicate package
+	EntSchemaPackageAlias string
+	// EntSchemaPackagePath is the import path of the ent schema predicate package
+	EntSchemaPackagePath string
 	// LookupFields are the ent/go field pairs used for stock ingest lookup matching
 	LookupFields []IngestLookupField
 	// RuntimeDefaults are the runtime-injected values applied during stock ingest preparation
 	RuntimeDefaults []IngestRuntimeDefault
 	// StockPersist indicates the schema can use the generated stock ingest persistence path
 	StockPersist bool
+	// ScopeByIntegrationID indicates the persist query should scope by integration_id rather than owner_id
+	ScopeByIntegrationID bool
+	// HasDirectorySyncRunID indicates the schema has a directory_sync_run_id field
+	HasDirectorySyncRunID bool
+	// DirectorySyncRunIDRequired indicates directory_sync_run_id is a required (non-pointer) field
+	DirectorySyncRunIDRequired bool
+	// NeedsManualOwnerID indicates owner_id must be injected from the integration at emit/persist time
+	NeedsManualOwnerID bool
+	// HasPrepareInput indicates the integrationgenerated package exports a Prepare*Input function
+	HasPrepareInput bool
 	// Fields contains integration mapping field metadata
 	Fields []MappingField
 }
 
-// IngestRuntimeDefault represents one runtime-injected field used by stock ingest persistence
+// IngestRuntimeDefault represents one integration-injected field used by stock ingest persistence
 type IngestRuntimeDefault struct {
-	Field   string
-	GoField string
-	Source  string
+	Field             string
+	GoField           string
+	Required          bool
+	IntegrationField string
 }
 
 // IngestLookupField represents one stock ingest lookup field
 type IngestLookupField struct {
-	Field   string
-	GoField string
+	Field    string
+	GoField  string
+	Required bool
+}
+
+// IngestData holds the data for generating ingest operation files
+type IngestData struct {
+	// PackageName is the Go package name for generated ingest operation files
+	PackageName string
+	// EntPackage is the ent generated package import path
+	EntPackage string
+	// IntegrationGeneratedPackage is the integrationgenerated package import path
+	IntegrationGeneratedPackage string
+	// ContextxPackage is the contextx package import path
+	ContextxPackage string
+	// DoPackage is the samber/do package import path
+	DoPackage string
+	// LoPackage is the samber/lo package import path
+	LoPackage string
+	// GalaPackage is the gala package import path
+	GalaPackage string
+	// JsonxPackage is the jsonx package import path
+	JsonxPackage string
+	// Schemas contains all schemas participating in ingest
+	Schemas []MappingSchema
 }
 
 // MappingField represents a field that can be targeted by integration mappings
@@ -113,8 +153,8 @@ type MappingField struct {
 	UpsertKey bool
 	// LookupKey indicates the field participates in stock ingest lookup matching
 	LookupKey bool
-	// RuntimeDefault identifies the runtime source that injects this field during stock ingest
-	RuntimeDefault string
+	// FromIntegration indicates the field value is injected from the integration record at ingest time
+	FromIntegration bool
 }
 
 // collectMappingData collects mapping data from all schemas in the graph
@@ -171,19 +211,43 @@ func collectMappingData(g *gen.Graph, c *Config) MappingData {
 			runtimeDefaults = collectRuntimeDefaults(fields)
 		}
 
+		scopeByIntID := integrationIDIsUpsertKey(fields)
+		hasDirSyncRun, dirSyncRunRequired := schemaDirectorySyncRunInfo(schema)
+		needsManualOwnerID := schemaHasFieldName(schema, "owner_id") && !hasRuntimeDefaultForEntField(runtimeDefaults, "owner_id")
+		hasPrepareInput := stockPersist && len(runtimeDefaults) > 0
+
+		entAlias := strings.ToLower(node.Name)
+		entPkg := ""
+		if c.EntPackage != "" {
+			entPkg = c.EntPackage + "/" + entAlias
+		}
+
+		updateInputTypeName := ""
+		if hasUpdate {
+			updateInputTypeName = "Update" + node.Name + "Input"
+		}
+
 		data.Schemas = append(data.Schemas, MappingSchema{
-			Name:                  node.Name,
-			ConstName:             schemaConstName(node.Name),
-			TableName:             schemaTableName(schema),
-			IngestTopicConstName:  schemaIngestTopicConstName(node.Name),
-			IngestTopic:           schemaIngestTopicName(node.Name),
-			IngestRequestTypeName: schemaIngestRequestTypeName(node.Name),
-			IngestTopicVarName:    schemaIngestTopicVarName(node.Name),
-			InputTypeName:         inputTypeName,
-			LookupFields:          lookupFields,
-			RuntimeDefaults:       runtimeDefaults,
-			StockPersist:          stockPersist,
-			Fields:                fields,
+			Name:                       node.Name,
+			ConstName:                  schemaConstName(node.Name),
+			TableName:                  schemaTableName(schema),
+			IngestTopicConstName:       schemaIngestTopicConstName(node.Name),
+			IngestTopic:                schemaIngestTopicName(node.Name),
+			IngestRequestTypeName:      schemaIngestRequestTypeName(node.Name),
+			IngestTopicVarName:         schemaIngestTopicVarName(node.Name),
+			InputTypeName:              inputTypeName,
+			UpdateInputTypeName:        updateInputTypeName,
+			EntSchemaPackageAlias:      entAlias,
+			EntSchemaPackagePath:       entPkg,
+			LookupFields:               lookupFields,
+			RuntimeDefaults:            runtimeDefaults,
+			StockPersist:               stockPersist,
+			ScopeByIntegrationID:       scopeByIntID,
+			HasDirectorySyncRunID:      hasDirSyncRun,
+			DirectorySyncRunIDRequired: dirSyncRunRequired,
+			NeedsManualOwnerID:         needsManualOwnerID,
+			HasPrepareInput:            hasPrepareInput,
+			Fields:                     fields,
 		})
 	}
 
@@ -314,22 +378,18 @@ func collectMappingFields(schema *load.Schema, schemaName string) []MappingField
 
 		upsert := ant != nil && ant.UpsertKey
 		lookup := ant != nil && ant.LookupKey
-		runtimeDefault := ""
-
-		if ant != nil {
-			runtimeDefault = ant.RuntimeDefault
-		}
+		fromIntegration := ant != nil && ant.FromIntegration
 
 		fields = append(fields, MappingField{
-			InputKey:       key,
-			GoField:        templates.ToGo(key),
-			ConstName:      fieldConstName(schemaName, key),
-			EntField:       field.Name,
-			Type:           field.Info.Type.String(),
-			Required:       !field.Optional,
-			UpsertKey:      upsert,
-			LookupKey:      lookup,
-			RuntimeDefault: runtimeDefault,
+			InputKey:        key,
+			GoField:         templates.ToGo(key),
+			ConstName:       fieldConstName(schemaName, key),
+			EntField:        field.Name,
+			Type:            field.Info.Type.String(),
+			Required:        !field.Optional,
+			UpsertKey:       upsert,
+			LookupKey:       lookup,
+			FromIntegration: fromIntegration,
 		})
 	}
 
@@ -347,8 +407,9 @@ func collectLookupFields(fields []MappingField) []IngestLookupField {
 	for _, field := range fields {
 		if field.LookupKey {
 			keys = append(keys, IngestLookupField{
-				Field:   field.EntField,
-				GoField: field.GoField,
+				Field:    field.EntField,
+				GoField:  field.GoField,
+				Required: field.Required,
 			})
 		}
 	}
@@ -356,21 +417,103 @@ func collectLookupFields(fields []MappingField) []IngestLookupField {
 	return keys
 }
 
-// collectRuntimeDefaults returns the subset of fields that carry a RuntimeDefault source
+// integrationIDIsUpsertKey reports whether the integration_id field is both an upsert key and sourced from the integration
+func integrationIDIsUpsertKey(fields []MappingField) bool {
+	for _, f := range fields {
+		if f.EntField == "integration_id" && f.UpsertKey && f.FromIntegration {
+			return true
+		}
+	}
+
+	return false
+}
+
+// hasRuntimeDefaultForEntField reports whether runtimeDefaults contains an entry for the given ent field name
+func hasRuntimeDefaultForEntField(defaults []IngestRuntimeDefault, entField string) bool {
+	for _, d := range defaults {
+		if d.Field == entField {
+			return true
+		}
+	}
+
+	return false
+}
+
+// schemaHasFieldName reports whether the schema declares a field with the given name (including mixin fields)
+func schemaHasFieldName(schema *load.Schema, name string) bool {
+	for _, f := range schema.Fields {
+		if f.Name == name {
+			return true
+		}
+	}
+
+	return false
+}
+
+// schemaDirectorySyncRunInfo returns whether the schema has a directory_sync_run_id field and whether it is required
+func schemaDirectorySyncRunInfo(schema *load.Schema) (has bool, required bool) {
+	for _, f := range schema.Fields {
+		if f.Name == "directory_sync_run_id" {
+			return true, !f.Optional
+		}
+	}
+
+	return false, false
+}
+
+// buildIngestData constructs IngestData for the ingest templates from config and collected schemas
+func buildIngestData(c *Config, schemas []MappingSchema) IngestData {
+	return IngestData{
+		PackageName:                 c.IngestPackageName,
+		EntPackage:                  c.EntPackage,
+		IntegrationGeneratedPackage: c.IntegrationGeneratedPackage,
+		ContextxPackage:             c.ContextxPackage,
+		DoPackage:                   c.DoPackage,
+		LoPackage:                   c.LoPackage,
+		GalaPackage:                 c.GalaPackage,
+		JsonxPackage:                c.JsonxPackage,
+		Schemas:                     schemas,
+	}
+}
+
+// collectRuntimeDefaults returns fields marked FromIntegration for stock ingest preparation
 func collectRuntimeDefaults(fields []MappingField) []IngestRuntimeDefault {
 	defaults := make([]IngestRuntimeDefault, 0)
 
 	for _, field := range fields {
-		if field.RuntimeDefault != "" {
-			defaults = append(defaults, IngestRuntimeDefault{
-				Field:   field.EntField,
-				GoField: field.GoField,
-				Source:  field.RuntimeDefault,
-			})
+		if !field.FromIntegration {
+			continue
 		}
+
+		instField := integrationFieldForEntField(field.EntField)
+		if instField == "" {
+			log.Warn().Str("field", field.EntField).Msg("FromIntegration set on field with no known integration mapping; skipping")
+			continue
+		}
+
+		defaults = append(defaults, IngestRuntimeDefault{
+			Field:             field.EntField,
+			GoField:           field.GoField,
+			Required:          field.Required,
+			IntegrationField: instField,
+		})
 	}
 
 	return defaults
+}
+
+// integrationFieldForEntField maps an ent field name to the Go field name on *ent.Integration
+func integrationFieldForEntField(entField string) string {
+	switch entField {
+	case "integration_id":
+		return "ID"
+	case "owner_id":
+		return "OwnerID"
+	case "platform_id":
+		return "PlatformID"
+	default:
+		return ""
+	}
 }
 
 // getFieldAnnotation retrieves the IntegrationMappingFieldAnnotation from a field
@@ -616,4 +759,92 @@ func buildMappingTemplate() *template.Template {
 	}
 
 	return tmpl
+}
+
+// writeIngestListenersFile creates the always-overwritten ingest_generated.go in the ingest output directory
+func writeIngestListenersFile(outputDir string, data IngestData) error {
+	tmpl, err := template.New("ingest_listeners.tpl").ParseFS(_templates, "templates/ingest_listeners.tpl")
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to parse ingest listeners template")
+	}
+
+	if err := os.MkdirAll(outputDir, dirPermissions); err != nil {
+		log.Error().Err(err).Str("path", outputDir).Msg("failed to create ingest output directory")
+
+		return err
+	}
+
+	filePath := filepath.Join(outputDir, "ingest_generated.go")
+
+	file, err := os.Create(filepath.Clean(filePath))
+	if err != nil {
+		log.Error().Err(err).Str("path", filePath).Msg("failed to create ingest generated file")
+
+		return err
+	}
+
+	defer file.Close()
+
+	if err := tmpl.Execute(file, data); err != nil {
+		log.Error().Err(err).Msg("failed to execute ingest listeners template")
+
+		return err
+	}
+
+	log.Debug().Str("path", filePath).Msg("generated ingest listeners file")
+
+	return nil
+}
+
+// writeIngestPersistFiles creates one per-schema persist file for each schema, skipping existing files
+func writeIngestPersistFiles(outputDir string, data IngestData) error {
+	tmpl, err := template.New("ingest_persist_schema.tpl").ParseFS(_templates, "templates/ingest_persist_schema.tpl")
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to parse ingest persist schema template")
+	}
+
+	if err := os.MkdirAll(outputDir, dirPermissions); err != nil {
+		log.Error().Err(err).Str("path", outputDir).Msg("failed to create ingest output directory")
+
+		return err
+	}
+
+	for _, schema := range data.Schemas {
+		fileName := "ingest_" + strings.ToLower(schema.Name) + "_persist.go"
+		filePath := filepath.Join(outputDir, fileName)
+
+		if _, statErr := os.Stat(filePath); statErr == nil {
+			log.Debug().Str("path", filePath).Msg("skipping existing ingest persist file")
+
+			continue
+		}
+
+		persistData := struct {
+			IngestData
+			Schema MappingSchema
+		}{
+			IngestData: data,
+			Schema:     schema,
+		}
+
+		file, err := os.Create(filepath.Clean(filePath))
+		if err != nil {
+			log.Error().Err(err).Str("path", filePath).Msg("failed to create ingest persist file")
+
+			return err
+		}
+
+		if err := tmpl.Execute(file, persistData); err != nil {
+			file.Close()
+			log.Error().Err(err).Str("schema", schema.Name).Msg("failed to execute ingest persist schema template")
+
+			return err
+		}
+
+		file.Close()
+
+		log.Debug().Str("path", filePath).Msg("generated ingest persist file")
+	}
+
+	return nil
 }
