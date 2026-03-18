@@ -4,7 +4,7 @@ go 1.25.7
 
 require (
 	entgo.io/contrib v0.7.0
-	entgo.io/ent v0.14.6-0.20260218064135-ab0540611e15
+	entgo.io/ent v0.14.6-0.20260317212542-e0ba79d911cc
 	github.com/99designs/gqlgen v0.17.87
 	github.com/XSAM/otelsql v0.41.0
 	github.com/brianvoe/gofakeit/v7 v7.14.0
