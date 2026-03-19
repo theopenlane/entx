@@ -121,10 +121,9 @@ type IntegrationMappingFieldAnnotation struct {
 	Key string
 	// UpsertKey indicates the field participates in dedupe/upsert matching.
 	UpsertKey bool
-	// LookupKey indicates the field participates in stock ingest lookup matching.
+	// LookupKey indicates the field participates in stock ingest lookup matching
 	LookupKey bool
-	// FromIntegration indicates the field value is injected from the integration record at ingest time.
-	// The integration field is derived from the ent field name: integration_id→ID, owner_id→OwnerID, platform_id→PlatformID.
+	// FromIntegration indicates the field value is injected from the integration record at ingest time
 	FromIntegration bool
 }
 
@@ -254,46 +253,52 @@ func IntegrationMappingSchema() *IntegrationMappingSchemaBuilder {
 	}
 }
 
-// Key overrides the mapping output key (GraphQL input field name).
+// Key overrides the mapping output key (GraphQL input field name)
 func (b *IntegrationMappingFieldBuilder) Key(key string) *IntegrationMappingFieldBuilder {
 	b.annotation.Key = key
+
 	return b
 }
 
-// UpsertKey marks the field as part of the dedupe/upsert key.
+// UpsertKey marks the field as part of the dedupe/upsert key
 func (b *IntegrationMappingFieldBuilder) UpsertKey() *IntegrationMappingFieldBuilder {
 	b.annotation.UpsertKey = true
+
 	return b
 }
 
-// LookupKey marks the field as part of the stock ingest lookup key.
+// LookupKey marks the field as part of the stock ingest lookup key
 func (b *IntegrationMappingFieldBuilder) LookupKey() *IntegrationMappingFieldBuilder {
 	b.annotation.LookupKey = true
+
 	return b
 }
 
-// FromIntegration marks the field as integration-injected during stock ingest preparation.
-// The integration field is derived from the ent field name at code generation time.
+// FromIntegration marks the field as integration-injected during stock ingest preparation
 func (b *IntegrationMappingFieldBuilder) FromIntegration() *IntegrationMappingFieldBuilder {
 	b.annotation.FromIntegration = true
+
 	return b
 }
 
-// Include restricts mapping to a specific set of ent field names (snake_case).
+// Include restricts mapping to a specific set of ent field names (snake_case)
 func (b *IntegrationMappingSchemaBuilder) Include(fields ...string) *IntegrationMappingSchemaBuilder {
 	b.annotation.Include = append(b.annotation.Include, fields...)
+
 	return b
 }
 
-// Exclude removes specific ent field names (snake_case) from mapping.
+// Exclude removes specific ent field names (snake_case) from mapping
 func (b *IntegrationMappingSchemaBuilder) Exclude(fields ...string) *IntegrationMappingSchemaBuilder {
 	b.annotation.Exclude = append(b.annotation.Exclude, fields...)
+
 	return b
 }
 
-// StockPersist enables the generated stock ingest persistence path for this schema.
+// StockPersist enables the generated stock ingest persistence path for this schema
 func (b *IntegrationMappingSchemaBuilder) StockPersist() *IntegrationMappingSchemaBuilder {
 	b.annotation.StockPersist = true
+
 	return b
 }
 
@@ -307,14 +312,12 @@ func (b *IntegrationMappingSchemaBuilder) Name() string {
 	return b.annotation.Name()
 }
 
-// MarshalJSON serializes the builder as the underlying IntegrationMappingFieldAnnotation.
-// This ensures ent stores the annotation in the expected format for decoding.
+// MarshalJSON serializes the builder as the underlying IntegrationMappingFieldAnnotation
 func (b *IntegrationMappingFieldBuilder) MarshalJSON() ([]byte, error) {
 	return json.Marshal(b.annotation)
 }
 
-// MarshalJSON serializes the builder as the underlying IntegrationMappingSchemaAnnotation.
-// This ensures ent stores the annotation in the expected format for decoding.
+// MarshalJSON serializes the builder as the underlying IntegrationMappingSchemaAnnotation
 func (b *IntegrationMappingSchemaBuilder) MarshalJSON() ([]byte, error) {
 	return json.Marshal(b.annotation)
 }
