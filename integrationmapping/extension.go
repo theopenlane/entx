@@ -3,6 +3,7 @@ package integrationmapping
 import (
 	"entgo.io/ent/entc"
 	"entgo.io/ent/entc/gen"
+	"github.com/rs/zerolog/log"
 )
 
 // ExtensionOption modifies Extension configuration
@@ -145,16 +146,24 @@ func (e Extension) Hook() gen.Hook {
 				return next.Generate(g)
 			}
 
-			data := collectMappingData(g, e.config)
+			data, err := collectMappingData(g, e.config)
+			if err != nil {
+				return err
+			}
+
 			if len(data.Schemas) == 0 {
 				return next.Generate(g)
+			}
+
+			if e.config.IngestOutputDir != "" && !data.GenerateIngestContracts {
+				log.Warn().Msg("IngestOutputDir is set but EntPackage or GalaPackage is missing; skipping ingest generation")
 			}
 
 			if err := writeMappingFile(e.config.OutputDir, data); err != nil {
 				return err
 			}
 
-			if e.config.IngestOutputDir != "" {
+			if e.config.IngestOutputDir != "" && data.GenerateIngestContracts {
 				ingestData := buildIngestData(e.config, data.Schemas)
 
 				if err := writeIngestListenersFile(e.config.IngestOutputDir, ingestData); err != nil {

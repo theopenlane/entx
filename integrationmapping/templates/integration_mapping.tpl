@@ -30,28 +30,6 @@ type IntegrationMappingSchema struct {
 	UpsertKeys []string
 }
 
-// IntegrationIngestSchema describes schema-scoped ingest event contracts
-type IntegrationIngestSchema struct {
-	Name string
-	Topic string
-	Table string
-	LookupFields []IntegrationIngestLookupField
-	RuntimeDefaults []IntegrationIngestRuntimeDefault
-	StockPersist bool
-}
-
-// IntegrationIngestLookupField describes one stock ingest lookup field
-type IntegrationIngestLookupField struct {
-	Field string
-	GoField string
-}
-
-// IntegrationIngestRuntimeDefault describes one integration-injected field for stock ingest persistence
-type IntegrationIngestRuntimeDefault struct {
-	Field string
-	GoField string
-}
-
 {{- if .GenerateIngestContracts }}
 
 // IntegrationIngestSource identifies how a typed ingest request entered the ingest pipeline
@@ -89,13 +67,6 @@ const (
 {{- end }}
 )
 
-// Integration ingest topics by schema.
-const (
-{{- range .Schemas }}
-	{{ .IngestTopicConstName }} = {{ printf "%q" .IngestTopic }}
-{{- end }}
-)
-
 {{- if .GenerateIngestContracts }}
 
 {{- range .Schemas }}
@@ -108,7 +79,7 @@ type {{ .IngestRequestTypeName }} struct {
 
 // {{ .IngestTopicVarName }} is the typed Gala topic for {{ .Name }} ingest requests
 var {{ .IngestTopicVarName }} = gala.Topic[{{ .IngestRequestTypeName }}]{
-	Name: {{ .IngestTopicConstName }},
+	Name: {{ printf "%q" .IngestTopic }},
 }
 {{- end }}
 {{- end }}
@@ -160,34 +131,6 @@ var IntegrationMappingSchemas = map[string]IntegrationMappingSchema{
 			{{- end }}
 		{{- end }}
 		},
-	},
-{{- end }}
-}
-
-// IntegrationIngestSchemas maps schema names to schema-scoped ingest event contracts
-var IntegrationIngestSchemas = map[string]IntegrationIngestSchema{
-{{- range .Schemas }}
-	{{ printf "%q" .Name }}: {
-		Name: {{ printf "%q" .Name }},
-		Topic: {{ printf "%q" .IngestTopic }},
-		Table: {{ printf "%q" .TableName }},
-		LookupFields: []IntegrationIngestLookupField{
-		{{- range .LookupFields }}
-			{
-				Field: {{ printf "%q" .Field }},
-				GoField: {{ printf "%q" .GoField }},
-			},
-		{{- end }}
-		},
-		RuntimeDefaults: []IntegrationIngestRuntimeDefault{
-		{{- range .RuntimeDefaults }}
-			{
-				Field: {{ printf "%q" .Field }},
-				GoField: {{ printf "%q" .GoField }},
-			},
-		{{- end }}
-		},
-		StockPersist: {{ .StockPersist }},
 	},
 {{- end }}
 }

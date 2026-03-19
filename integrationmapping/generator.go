@@ -3,6 +3,7 @@ package integrationmapping
 import (
 	"cmp"
 	"embed"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -60,10 +61,6 @@ type MappingSchema struct {
 	Name string
 	// ConstName is the generated Go constant name for the schema
 	ConstName string
-	// TableName is the SQL table name for the schema
-	TableName string
-	// IngestTopicConstName is the generated Go constant name for the schema ingest topic
-	IngestTopicConstName string
 	// IngestTopic is the schema-scoped ingest topic name
 	IngestTopic string
 	// IngestRequestTypeName is the generated Go type name for the typed ingest request payload
@@ -100,37 +97,29 @@ type MappingSchema struct {
 
 // IngestRuntimeDefault represents one integration-injected field used by stock ingest persistence
 type IngestRuntimeDefault struct {
-	Field             string
-	GoField           string
-	Required          bool
+	// Field is the ent field name for this runtime default
+	Field string
+	// GoField is the Go struct field name for this runtime default on ent input types
+	GoField string
+	// Required indicates the field is required (non-pointer) on the ent input type, which determines whether the zero value or nil is checked at ingest time before injection
+	Required bool
+	// IntegrationField is the Go struct field name on *ent.Integration that serves as the source value for this runtime default
 	IntegrationField string
 }
 
 // IngestLookupField represents one stock ingest lookup field
 type IngestLookupField struct {
-	Field    string
-	GoField  string
+	// Field is the ent field name for this lookup key
+	Field string
+	// GoField is the Go struct field name for this lookup key on ent input types
+	GoField string
+	// Required indicates the field is required (non-pointer) on the ent input type, which determines whether the zero value or nil is checked at ingest time before including the field in lookup matching
 	Required bool
 }
 
 // IngestData holds the data for generating ingest operation files
 type IngestData struct {
-	// PackageName is the Go package name for generated ingest operation files
-	PackageName string
-	// EntPackage is the ent generated package import path
-	EntPackage string
-	// IntegrationGeneratedPackage is the integrationgenerated package import path
-	IntegrationGeneratedPackage string
-	// ContextxPackage is the contextx package import path
-	ContextxPackage string
-	// DoPackage is the samber/do package import path
-	DoPackage string
-	// LoPackage is the samber/lo package import path
-	LoPackage string
-	// GalaPackage is the gala package import path
-	GalaPackage string
-	// JsonxPackage is the jsonx package import path
-	JsonxPackage string
+	*Config
 	// Schemas contains all schemas participating in ingest
 	Schemas []MappingSchema
 }
@@ -158,7 +147,7 @@ type MappingField struct {
 }
 
 // collectMappingData collects mapping data from all schemas in the graph
-func collectMappingData(g *gen.Graph, c *Config) MappingData {
+func collectMappingData(g *gen.Graph, c *Config) (MappingData, error) {
 	data := MappingData{
 		PackageName:             c.PackageName,
 		EntPackage:              c.EntPackage,
@@ -208,7 +197,12 @@ func collectMappingData(g *gen.Graph, c *Config) MappingData {
 		runtimeDefaults := []IngestRuntimeDefault{}
 
 		if stockPersist {
-			runtimeDefaults = collectRuntimeDefaults(fields)
+			var err error
+
+			runtimeDefaults, err = collectRuntimeDefaults(fields)
+			if err != nil {
+				return MappingData{}, fmt.Errorf("schema %s: %w", node.Name, err)
+			}
 		}
 
 		scopeByIntID := integrationIDIsUpsertKey(fields)
@@ -230,8 +224,6 @@ func collectMappingData(g *gen.Graph, c *Config) MappingData {
 		data.Schemas = append(data.Schemas, MappingSchema{
 			Name:                       node.Name,
 			ConstName:                  schemaConstName(node.Name),
-			TableName:                  schemaTableName(schema),
-			IngestTopicConstName:       schemaIngestTopicConstName(node.Name),
 			IngestTopic:                schemaIngestTopicName(node.Name),
 			IngestRequestTypeName:      schemaIngestRequestTypeName(node.Name),
 			IngestTopicVarName:         schemaIngestTopicVarName(node.Name),
@@ -255,7 +247,7 @@ func collectMappingData(g *gen.Graph, c *Config) MappingData {
 		return cmp.Compare(a.Name, b.Name)
 	})
 
-	return data
+	return data, nil
 }
 
 // schemaConstName returns the generated Go constant name for a schema mapping identifier
@@ -274,15 +266,6 @@ func fieldConstName(schemaName, inputKey string) string {
 	}
 
 	return "IntegrationMapping" + templates.ToGo(schemaName) + templates.ToGo(inputKey)
-}
-
-// schemaIngestTopicConstName returns the generated Go constant name for a schema's ingest topic
-func schemaIngestTopicConstName(schemaName string) string {
-	if schemaName == "" {
-		return ""
-	}
-
-	return "IntegrationIngestTopic" + templates.ToGo(schemaName) + "Requested"
 }
 
 // schemaIngestTopicName returns the ingest topic string value for a schema
@@ -312,6 +295,27 @@ func schemaIngestTopicVarName(schemaName string) string {
 	return "IntegrationIngest" + templates.ToGo(schemaName) + "RequestedTopic"
 }
 
+// fieldIsIncluded reports whether a field should be collected given the schema's include/exclude/system-field rules.
+// The include list takes full precedence: when present, only listed fields are included and the exclude list
+// and system-field defaults do not apply. When no include list is set, excluded fields and system-managed
+// fields are skipped unless the schema uses stock persistence and the field carries an explicit annotation.
+func fieldIsIncluded(fieldName string, includeSet, excludeSet map[string]struct{}, hasInclude, stockPersist bool, ant *entx.IntegrationMappingFieldAnnotation) bool {
+	if hasInclude {
+		_, ok := includeSet[fieldName]
+		return ok
+	}
+
+	if _, ok := excludeSet[fieldName]; ok {
+		return false
+	}
+
+	if isSystemField(fieldName) {
+		return stockPersist && ant != nil
+	}
+
+	return true
+}
+
 // collectMappingFields returns integration mapping fields for a schema.
 func collectMappingFields(schema *load.Schema, schemaName string) []MappingField {
 	if schema == nil {
@@ -320,6 +324,7 @@ func collectMappingFields(schema *load.Schema, schemaName string) []MappingField
 
 	fields := make([]MappingField, 0)
 	schemaAnt := getSchemaAnnotation(schema)
+	stockPersist := schemaAnt != nil && schemaAnt.StockPersist
 
 	includeSet := make(map[string]struct{})
 	excludeSet := make(map[string]struct{})
@@ -338,28 +343,14 @@ func collectMappingFields(schema *load.Schema, schemaName string) []MappingField
 	}
 
 	for _, field := range schema.Fields {
-		if hasInclude {
-			if _, ok := includeSet[field.Name]; !ok {
-				continue
-			}
-		}
-
-		if _, ok := excludeSet[field.Name]; ok {
-			continue
-		}
-
 		if !isFieldMappingEligible(field) {
 			continue
 		}
 
 		ant := getFieldAnnotation(field)
 
-		// system fields are excluded unless the schema opts into stock persistence
-		// and the field carries an explicit annotation (typically with RuntimeDefault)
-		if !hasInclude && isSystemField(field.Name) {
-			if schemaAnt == nil || !schemaAnt.StockPersist || ant == nil {
-				continue
-			}
+		if !fieldIsIncluded(field.Name, includeSet, excludeSet, hasInclude, stockPersist, ant) {
+			continue
 		}
 
 		if schemaAnt == nil && ant == nil {
@@ -464,20 +455,13 @@ func schemaDirectorySyncRunInfo(schema *load.Schema) (has bool, required bool) {
 // buildIngestData constructs IngestData for the ingest templates from config and collected schemas
 func buildIngestData(c *Config, schemas []MappingSchema) IngestData {
 	return IngestData{
-		PackageName:                 c.IngestPackageName,
-		EntPackage:                  c.EntPackage,
-		IntegrationGeneratedPackage: c.IntegrationGeneratedPackage,
-		ContextxPackage:             c.ContextxPackage,
-		DoPackage:                   c.DoPackage,
-		LoPackage:                   c.LoPackage,
-		GalaPackage:                 c.GalaPackage,
-		JsonxPackage:                c.JsonxPackage,
-		Schemas:                     schemas,
+		Config:  c,
+		Schemas: schemas,
 	}
 }
 
 // collectRuntimeDefaults returns fields marked FromIntegration for stock ingest preparation
-func collectRuntimeDefaults(fields []MappingField) []IngestRuntimeDefault {
+func collectRuntimeDefaults(fields []MappingField) ([]IngestRuntimeDefault, error) {
 	defaults := make([]IngestRuntimeDefault, 0)
 
 	for _, field := range fields {
@@ -485,34 +469,33 @@ func collectRuntimeDefaults(fields []MappingField) []IngestRuntimeDefault {
 			continue
 		}
 
-		instField := integrationFieldForEntField(field.EntField)
-		if instField == "" {
-			log.Warn().Str("field", field.EntField).Msg("FromIntegration set on field with no known integration mapping; skipping")
-			continue
+		instField, err := integrationFieldForEntField(field.EntField)
+		if err != nil {
+			return nil, err
 		}
 
 		defaults = append(defaults, IngestRuntimeDefault{
-			Field:             field.EntField,
-			GoField:           field.GoField,
-			Required:          field.Required,
+			Field:            field.EntField,
+			GoField:          field.GoField,
+			Required:         field.Required,
 			IntegrationField: instField,
 		})
 	}
 
-	return defaults
+	return defaults, nil
 }
 
 // integrationFieldForEntField maps an ent field name to the Go field name on *ent.Integration
-func integrationFieldForEntField(entField string) string {
+func integrationFieldForEntField(entField string) (string, error) {
 	switch entField {
 	case "integration_id":
-		return "ID"
+		return "ID", nil
 	case "owner_id":
-		return "OwnerID"
+		return "OwnerID", nil
 	case "platform_id":
-		return "PlatformID"
+		return "PlatformID", nil
 	default:
-		return ""
+		return "", fmt.Errorf("field %q annotated FromIntegration has no known Integration field mapping", entField)
 	}
 }
 
@@ -601,21 +584,6 @@ func isSystemField(name string) bool {
 	_, ok := integrationSystemFieldNames[name]
 
 	return ok
-}
-
-// schemaTableName returns the SQL table name for a schema
-func schemaTableName(schema *load.Schema) string {
-	if schema == nil {
-		return ""
-	}
-
-	if entSQLMap, ok := schema.Annotations["EntSQL"].(map[string]any); ok {
-		if table, ok := entSQLMap["table"].(string); ok && table != "" {
-			return table
-		}
-	}
-
-	return strcase.SnakeCase(schema.Name)
 }
 
 // getEntSchema returns the schema for a given name from the graph's schema list
@@ -746,7 +714,7 @@ func writeMappingFile(outputDir string, data MappingData) error {
 		return err
 	}
 
-	log.Debug().Str("path", filePath).Msg("generated integration mapping file")
+	log.Info().Str("path", filePath).Msg("generated integration mapping file")
 
 	return nil
 }
@@ -791,7 +759,7 @@ func writeIngestListenersFile(outputDir string, data IngestData) error {
 		return err
 	}
 
-	log.Debug().Str("path", filePath).Msg("generated ingest listeners file")
+	log.Info().Str("path", filePath).Msg("generated ingest listeners file")
 
 	return nil
 }
@@ -814,7 +782,7 @@ func writeIngestPersistFiles(outputDir string, data IngestData) error {
 		filePath := filepath.Join(outputDir, fileName)
 
 		if _, statErr := os.Stat(filePath); statErr == nil {
-			log.Debug().Str("path", filePath).Msg("skipping existing ingest persist file")
+			log.Info().Str("path", filePath).Msg("skipping existing ingest persist file")
 
 			continue
 		}
@@ -836,6 +804,7 @@ func writeIngestPersistFiles(outputDir string, data IngestData) error {
 
 		if err := tmpl.Execute(file, persistData); err != nil {
 			file.Close()
+
 			log.Error().Err(err).Str("schema", schema.Name).Msg("failed to execute ingest persist schema template")
 
 			return err
@@ -843,7 +812,7 @@ func writeIngestPersistFiles(outputDir string, data IngestData) error {
 
 		file.Close()
 
-		log.Debug().Str("path", filePath).Msg("generated ingest persist file")
+		log.Info().Str("path", filePath).Msg("generated ingest persist file")
 	}
 
 	return nil
