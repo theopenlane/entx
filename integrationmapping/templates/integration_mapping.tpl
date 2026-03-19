@@ -28,6 +28,7 @@ type IntegrationMappingSchema struct {
 	AllowedKeys map[string]struct{}
 	RequiredKeys []string
 	UpsertKeys []string
+	StockPersist bool
 }
 
 {{- if .GenerateIngestContracts }}
@@ -131,6 +132,7 @@ var IntegrationMappingSchemas = map[string]IntegrationMappingSchema{
 			{{- end }}
 		{{- end }}
 		},
+		StockPersist: {{ .StockPersist }},
 	},
 {{- end }}
 }

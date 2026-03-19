@@ -495,7 +495,7 @@ func integrationFieldForEntField(entField string) (string, error) {
 	case "platform_id":
 		return "PlatformID", nil
 	default:
-		return "", fmt.Errorf("field %q annotated FromIntegration has no known Integration field mapping", entField)
+		return "", fmt.Errorf("field %q: %w", entField, ErrNoIntegrationFieldMapping)
 	}
 }
 
