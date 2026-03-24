@@ -62,7 +62,10 @@ func generateQuery(node *gen.Type, tmpl *template.Template, graphSchemaDir strin
 
 	// check if schema already exists,update query to include manual changes to flat fields
 	if _, err := os.Stat(filePath); err == nil {
-		updateQuery(filePath, node, tmpl)
+		err := updateQuery(filePath, node, tmpl)
+		if err != nil {
+			log.Fatalf("unable to update file: %v", err)
+		}
 		return
 	}
 
