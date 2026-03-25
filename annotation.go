@@ -121,6 +121,10 @@ type IntegrationMappingFieldAnnotation struct {
 	Key string
 	// UpsertKey indicates the field participates in dedupe/upsert matching.
 	UpsertKey bool
+	// LookupKey indicates the field participates in stock ingest lookup matching
+	LookupKey bool
+	// FromIntegration indicates the field value is injected from the integration record at ingest time
+	FromIntegration bool
 }
 
 // IntegrationMappingSchemaAnnotation marks a schema as an integration mapping target.
@@ -130,8 +134,8 @@ type IntegrationMappingSchemaAnnotation struct {
 	Include []string
 	// Exclude removes specific ent field names (snake_case) from mapping.
 	Exclude []string
-	// UpsertKeys lists ent field names (snake_case) used for dedupe/upsert matching.
-	UpsertKeys []string
+	// StockPersist indicates the schema can use the generated stock ingest persistence path
+	StockPersist bool
 }
 
 // Name returns the name of the CascadeAnnotation
@@ -249,33 +253,52 @@ func IntegrationMappingSchema() *IntegrationMappingSchemaBuilder {
 	}
 }
 
-// Key overrides the mapping output key (GraphQL input field name).
+// Key overrides the mapping output key (GraphQL input field name)
 func (b *IntegrationMappingFieldBuilder) Key(key string) *IntegrationMappingFieldBuilder {
 	b.annotation.Key = key
+
 	return b
 }
 
-// UpsertKey marks the field as part of the dedupe/upsert key.
+// UpsertKey marks the field as part of the dedupe/upsert key
 func (b *IntegrationMappingFieldBuilder) UpsertKey() *IntegrationMappingFieldBuilder {
 	b.annotation.UpsertKey = true
+
 	return b
 }
 
-// Include restricts mapping to a specific set of ent field names (snake_case).
+// LookupKey marks the field as part of the stock ingest lookup key
+func (b *IntegrationMappingFieldBuilder) LookupKey() *IntegrationMappingFieldBuilder {
+	b.annotation.LookupKey = true
+
+	return b
+}
+
+// FromIntegration marks the field as integration-injected during stock ingest preparation
+func (b *IntegrationMappingFieldBuilder) FromIntegration() *IntegrationMappingFieldBuilder {
+	b.annotation.FromIntegration = true
+
+	return b
+}
+
+// Include restricts mapping to a specific set of ent field names (snake_case)
 func (b *IntegrationMappingSchemaBuilder) Include(fields ...string) *IntegrationMappingSchemaBuilder {
 	b.annotation.Include = append(b.annotation.Include, fields...)
+
 	return b
 }
 
-// Exclude removes specific ent field names (snake_case) from mapping.
+// Exclude removes specific ent field names (snake_case) from mapping
 func (b *IntegrationMappingSchemaBuilder) Exclude(fields ...string) *IntegrationMappingSchemaBuilder {
 	b.annotation.Exclude = append(b.annotation.Exclude, fields...)
+
 	return b
 }
 
-// UpsertKeys sets the ent field names (snake_case) used for dedupe/upsert matching.
-func (b *IntegrationMappingSchemaBuilder) UpsertKeys(fields ...string) *IntegrationMappingSchemaBuilder {
-	b.annotation.UpsertKeys = append(b.annotation.UpsertKeys, fields...)
+// StockPersist enables the generated stock ingest persistence path for this schema
+func (b *IntegrationMappingSchemaBuilder) StockPersist() *IntegrationMappingSchemaBuilder {
+	b.annotation.StockPersist = true
+
 	return b
 }
 
@@ -289,14 +312,12 @@ func (b *IntegrationMappingSchemaBuilder) Name() string {
 	return b.annotation.Name()
 }
 
-// MarshalJSON serializes the builder as the underlying IntegrationMappingFieldAnnotation.
-// This ensures ent stores the annotation in the expected format for decoding.
+// MarshalJSON serializes the builder as the underlying IntegrationMappingFieldAnnotation
 func (b *IntegrationMappingFieldBuilder) MarshalJSON() ([]byte, error) {
 	return json.Marshal(b.annotation)
 }
 
-// MarshalJSON serializes the builder as the underlying IntegrationMappingSchemaAnnotation.
-// This ensures ent stores the annotation in the expected format for decoding.
+// MarshalJSON serializes the builder as the underlying IntegrationMappingSchemaAnnotation
 func (b *IntegrationMappingSchemaBuilder) MarshalJSON() ([]byte, error) {
 	return json.Marshal(b.annotation)
 }
@@ -440,7 +461,7 @@ func (b *CSVRefBuilder) MarshalJSON() ([]byte, error) {
 }
 
 // Decode unmarshalls the CascadeAnnotation
-func (a *CascadeAnnotation) Decode(annotation interface{}) error {
+func (a *CascadeAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
@@ -450,7 +471,7 @@ func (a *CascadeAnnotation) Decode(annotation interface{}) error {
 }
 
 // Decode unmarshalls the CascadeThroughAnnotation
-func (a *CascadeThroughAnnotation) Decode(annotation interface{}) error {
+func (a *CascadeThroughAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
@@ -460,7 +481,7 @@ func (a *CascadeThroughAnnotation) Decode(annotation interface{}) error {
 }
 
 // Decode unmarshalls the SchemaGenAnnotation
-func (a *SchemaGenAnnotation) Decode(annotation interface{}) error {
+func (a *SchemaGenAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
@@ -470,7 +491,7 @@ func (a *SchemaGenAnnotation) Decode(annotation interface{}) error {
 }
 
 // Decode unmarshalls the QueryGenAnnotation
-func (a *QueryGenAnnotation) Decode(annotation interface{}) error {
+func (a *QueryGenAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
@@ -480,7 +501,7 @@ func (a *QueryGenAnnotation) Decode(annotation interface{}) error {
 }
 
 // Decode unmarshalls the SearchFieldAnnotation
-func (a *SearchFieldAnnotation) Decode(annotation interface{}) error {
+func (a *SearchFieldAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
@@ -490,7 +511,7 @@ func (a *SearchFieldAnnotation) Decode(annotation interface{}) error {
 }
 
 // Decode unmarshalls the WorkflowEligibleAnnotation
-func (a *WorkflowEligibleAnnotation) Decode(annotation interface{}) error {
+func (a *WorkflowEligibleAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
