@@ -108,7 +108,7 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 		oldQuerySelections[op.Name] = op
 	}
 
-	// Load new query  into memory for comparison
+	// Load new query into memory for comparison
 	var buf bytes.Buffer
 
 	s := query{
@@ -270,9 +270,9 @@ func getFieldNames(fields []*gen.Field) []string {
 			continue
 		}
 
-		var firstWord = GetFirstWord(f.Name)
+		firstWord := GetFirstWord(f.Name)
 
-		var filteredName = f.StructField()
+		filteredName := f.StructField()
 
 		fieldNames = append(fieldNames, lowerSubstring(filteredName, len(firstWord)))
 	}
@@ -294,8 +294,7 @@ func isSeparator(r rune) bool {
 	return r == '_' || r == '-' || unicode.IsSpace(r)
 }
 
-// filterSubnames replaces subnames in the field names with the correct case to prevent gqlgen from thinking they are different fields and breaking the generated code.
-// For example, sSo becomes sso
+// getFirstWord returns the first work of the string before the seperator
 func GetFirstWord(name string) string {
 	words := strings.FieldsFunc(name, isSeparator)
 	return words[0]
