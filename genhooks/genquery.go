@@ -1,11 +1,14 @@
 package genhooks
 
 import (
+	"bytes"
+	"fmt"
 	"html/template"
 	"log"
 	"os"
 	"sort"
 	"strings"
+	"unicode"
 
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
@@ -13,6 +16,10 @@ import (
 	"github.com/gertd/go-pluralize"
 
 	"github.com/theopenlane/entx"
+
+	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/formatter"
+	"github.com/vektah/gqlparser/v2/parser"
 )
 
 // query data for template
@@ -53,8 +60,11 @@ func generateQuery(node *gen.Type, tmpl *template.Template, graphSchemaDir strin
 
 	filePath := getFileName(graphSchemaDir, node.Name)
 
-	// check if schema already exists, skip generation so we don't overwrite manual changes
+	// check if schema already exists,update query to include manual changes to flat fields
 	if _, err := os.Stat(filePath); err == nil {
+		if err := updateQuery(filePath, node, tmpl); err != nil {
+			log.Fatalf("unable to update file: %v", err)
+		}
 		return
 	}
 
@@ -74,6 +84,169 @@ func generateQuery(node *gen.Type, tmpl *template.Template, graphSchemaDir strin
 	if err = tmpl.Execute(file, s); err != nil {
 		log.Fatalf("Unable to execute template: %v", err)
 	}
+}
+
+func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error {
+	// Read file contents and parses for comparison and updating
+	srcFile, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("unable to read existing file: %w", err)
+	}
+
+	oldDoc, err := parser.ParseQuery(&ast.Source{
+		Name:  filePath,
+		Input: string(srcFile),
+	})
+	if err != nil {
+		return fmt.Errorf("unable to parse existing query file: %w", err)
+	}
+
+	// Load query selections into a map for easy access
+	oldQuerySelections := make(map[string]*ast.OperationDefinition)
+
+	for _, op := range oldDoc.Operations {
+		oldQuerySelections[op.Name] = op
+	}
+
+	// Load new query into memory for comparison
+	var buf bytes.Buffer
+
+	s := query{
+		Name:             node.Name,
+		Fields:           getFieldNames(node.Fields),
+		IncludeMutations: checkEntqlMutation(node),
+		IsHistory:        isHistorySchema(node),
+	}
+
+	if err = tmpl.Execute(&buf, s); err != nil {
+		return fmt.Errorf("unable to execute query template: %w", err)
+	}
+
+	newDoc, err := parser.ParseQuery(&ast.Source{
+		Input: buf.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("unable to parse new query file: %w", err)
+	}
+
+	// Load new query selections into a map for easy access
+	newQuerySelections := make(map[string]*ast.OperationDefinition)
+
+	for _, op := range newDoc.Operations {
+		newQuerySelections[op.Name] = op
+	}
+
+	// track query names we care about.
+	newQueryKeys := make([]string, 0, len(newQuerySelections))
+
+	for queryName, oldQuery := range oldQuerySelections {
+		newQuery, ok := newQuerySelections[queryName]
+
+		newQueryKeys = append(newQueryKeys, queryName)
+
+		// if query doesn't exist in new queries, we add the old query to the newly created document
+		if !ok {
+			newQuerySelections[queryName] = oldQuery
+			continue
+		}
+
+		// if the new query signature parameters differ from the old query's, keep the old query.
+		if compareSignatureParams(oldQuery.VariableDefinitions, newQuery.VariableDefinitions) == false {
+			newQuerySelections[queryName] = oldQuery
+			continue
+		}
+
+		// merge edges recursively
+		writeMissingFields(oldQuery.SelectionSet, &newQuery.SelectionSet)
+	}
+
+	// sort keys for consitency in output file, this prevents code from thinking file has changed.
+	sort.Strings(newQueryKeys)
+
+	const filePerm = 0644
+
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC, filePerm) //nolint: gosec
+	if err != nil {
+		return fmt.Errorf("unable to open file for writing: %w", err)
+	}
+	defer f.Close()
+
+	updatedDoc := &ast.QueryDocument{Operations: ast.OperationList{}}
+
+	// add all new and updated queries to the document
+	for _, keyName := range newQueryKeys {
+		updatedDoc.Operations = append(updatedDoc.Operations, newQuerySelections[keyName])
+	}
+
+	formatter.NewFormatter(f).FormatQueryDocument(updatedDoc)
+
+	return nil
+}
+
+// compareSelectionSets compares the parameters between two querys, returns true if equal, false otherwise
+func compareSignatureParams(list1 ast.VariableDefinitionList, list2 ast.VariableDefinitionList) bool {
+	if len(list1) != len(list2) {
+		return false
+	}
+
+	m := make(map[string]string)
+
+	for _, v := range list1 {
+		m[v.Variable] = v.Type.String()
+	}
+
+	for _, v := range list2 {
+		if typ, ok := m[v.Variable]; !ok || typ != v.Type.String() {
+			return false
+		}
+	}
+
+	return true
+}
+
+// writeMissingFields adds edges and flat fields from oldSel into newSel
+func writeMissingFields(oldSel ast.SelectionSet, newSel *ast.SelectionSet) {
+	for _, oldSelection := range oldSel {
+
+		oldField, ok := oldSelection.(*ast.Field)
+		if !ok {
+			continue
+		}
+
+		newField := findFieldInSelectionSet(*newSel, oldField.Name)
+
+		fieldCopy := *oldField
+
+		// if missing entirely, add it
+		if newField == nil {
+			*newSel = append(*newSel, &fieldCopy)
+			continue
+		}
+		newField.Name = oldField.Name
+		newField.Alias = oldField.Alias
+
+		// only recurse if it's actually an edge
+		if isEdge(oldField) {
+			writeMissingFields(oldField.SelectionSet, &newField.SelectionSet)
+		}
+	}
+}
+
+// findFieldInSelectionSet goes through the fields and checks field by name, returns if found
+func findFieldInSelectionSet(sel ast.SelectionSet, name string) *ast.Field {
+	for _, s := range sel {
+		if f, ok := s.(*ast.Field); ok {
+			if strings.EqualFold(f.Name, name) {
+				return f
+			}
+		}
+	}
+	return nil
+}
+
+// isEdge checks if field is an edge
+func isEdge(f *ast.Field) bool {
+	return len(f.SelectionSet) > 0
 }
 
 // getFieldNames returns a list of field names from a list of fields in alphabetical order
@@ -97,13 +270,34 @@ func getFieldNames(fields []*gen.Field) []string {
 			continue
 		}
 
-		fieldNames = append(fieldNames, templates.ToGoPrivate(f.StructField()))
+		firstWord := GetFirstWord(f.Name)
+
+		filteredName := f.StructField()
+
+		fieldNames = append(fieldNames, lowerSubstring(filteredName, len(firstWord)))
 	}
 
 	// sort field names
 	sort.Strings(fieldNames)
 
 	return fieldNames
+}
+
+// lowerSubstring lowers the a substring from s, where the portion lowored starts from the first character
+// and lowers wordLen characters in s
+func lowerSubstring(s string, wordLen int) string {
+	return strings.ToLower(s[:wordLen]) + s[wordLen:]
+}
+
+// isSeparator checks if character is a underscore, hyphen or a space
+func isSeparator(r rune) bool {
+	return r == '_' || r == '-' || unicode.IsSpace(r)
+}
+
+// getFirstWord returns the first work of the string before the seperator
+func GetFirstWord(name string) string {
+	words := strings.FieldsFunc(name, isSeparator)
+	return words[0]
 }
 
 // checkEntqlMutation checks if the type has the entgql.Mutation annotation
