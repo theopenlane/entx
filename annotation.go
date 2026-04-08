@@ -38,6 +38,9 @@ var IntegrationMappingFieldAnnotationName = "OPENLANE_INTEGRATION_MAPPING_FIELD"
 // IntegrationMappingSchemaAnnotationName is the annotation name for integration mapping schemas
 var IntegrationMappingSchemaAnnotationName = "OPENLANE_INTEGRATION_MAPPING_SCHEMA"
 
+// FileCategoryAnnotationName is the annotation name for default file categories.
+var FileCategoryAnnotationName = "OPENLANE_FILE_CATEGORY"
+
 // CascadeAnnotation is an annotation used to indicate that an edge should be cascaded
 type CascadeAnnotation struct {
 	Field string
@@ -138,6 +141,11 @@ type IntegrationMappingSchemaAnnotation struct {
 	StockPersist bool
 }
 
+// FileCategoryAnnotation marks a schema with a default file category for uploads.
+type FileCategoryAnnotation struct {
+	Category string
+}
+
 // Name returns the name of the CascadeAnnotation
 func (a CascadeAnnotation) Name() string {
 	return CascadeAnnotationName
@@ -193,6 +201,11 @@ func (a IntegrationMappingSchemaAnnotation) Name() string {
 	return IntegrationMappingSchemaAnnotationName
 }
 
+// Name returns the name of the FileCategoryAnnotation
+func (a FileCategoryAnnotation) Name() string {
+	return FileCategoryAnnotationName
+}
+
 // CascadeAnnotationField sets the field name of the edge containing the ID of a record from the current schema
 func CascadeAnnotationField(fieldname string) *CascadeAnnotation {
 	return &CascadeAnnotation{
@@ -218,6 +231,13 @@ func SchemaGenSkip(skip bool) *SchemaGenAnnotation {
 func SchemaSearchable(s bool) *SchemaGenAnnotation {
 	return &SchemaGenAnnotation{
 		SkipSearch: !s,
+	}
+}
+
+// FileCategory marks a schema with the default category for files attached to it.
+func FileCategory(category string) FileCategoryAnnotation {
+	return FileCategoryAnnotation{
+		Category: category,
 	}
 }
 
@@ -482,6 +502,16 @@ func (a *CascadeThroughAnnotation) Decode(annotation any) error {
 
 // Decode unmarshalls the SchemaGenAnnotation
 func (a *SchemaGenAnnotation) Decode(annotation any) error {
+	buf, err := json.Marshal(annotation)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(buf, a)
+}
+
+// Decode unmarshals the FileCategoryAnnotation.
+func (a *FileCategoryAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
