@@ -27,6 +27,8 @@ type Config struct {
 	IntegrationGeneratedPackage string
 	// ContextxPackage is the contextx package import path
 	ContextxPackage string
+	// LogxPackage is the logx package import path
+	LogxPackage string
 	// DoPackage is the samber/do package import path
 	DoPackage string
 	// LoPackage is the samber/lo package import path
@@ -109,6 +111,13 @@ func WithIntegrationGeneratedPackage(path string) ExtensionOption {
 func WithContextxPackage(path string) ExtensionOption {
 	return func(c *Config) {
 		c.ContextxPackage = path
+	}
+}
+
+// WithLogxPackage sets the logx package import path
+func WithLogxPackage(path string) ExtensionOption {
+	return func(c *Config) {
+		c.LogxPackage = path
 	}
 }
 

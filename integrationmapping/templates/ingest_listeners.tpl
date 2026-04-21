@@ -4,6 +4,7 @@ package {{ .IngestPackageName }}
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"{{ .DoPackage }}"
 	"{{ .LoPackage }}"
@@ -12,6 +13,7 @@ import (
 	"{{ .IntegrationGeneratedPackage }}"
 	"{{ .GalaPackage }}"
 	"{{ .ContextxPackage }}"
+	"{{ .LogxPackage }}"
 )
 
 var directorySyncRunIDKey = contextx.NewKey[string]()
@@ -123,6 +125,8 @@ func emitTyped[TInput any, TEvent any](
 ) error {
 	var input TInput
 	if err := json.Unmarshal(payload, &input); err != nil {
+		logx.FromContext(ctx).Error().Str("topic", string(topic.Name)).Str("integration", integration.Family).Err(err).Msg("integrations: error emitting type")
+
 		return ErrIngestMappedDocumentInvalid
 	}
 
@@ -144,6 +148,8 @@ func persistTyped[TInput any](
 ) error {
 	var input TInput
 	if err := json.Unmarshal(payload, &input); err != nil {
+		logx.FromContext(ctx).Error().Err(err).Msg("integrations: error persisting type")
+
 		return ErrIngestMappedDocumentInvalid
 	}
 
@@ -234,7 +240,7 @@ func buildIngestMetadata(integration *ent.Integration, operationName string, rec
 
 // buildIngestHeaders assembles Gala message headers for one ingest record
 func buildIngestHeaders(record mappedIngestRecord, metadata integrationgenerated.IntegrationIngestMetadata) gala.Headers {
-	tags := []string{record.Schema}
+	tags := []string{metadata.DefinitionID, "schema_" + strings.ToLower(record.Schema), metadata.Operation}
 	if metadata.Source != "" {
 		tags = append(tags, string(metadata.Source))
 	}
