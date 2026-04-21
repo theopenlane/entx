@@ -155,4 +155,12 @@ type {{ .Name }}BulkDeletePayload {
     Deleted {{ .Name | ToLowerCamel }} IDs
     """
     deletedIDs: [ID!]!
+    """
+    Error returned when the bulk delete is only partially applied
+    """
+    error: String
+    """
+    IDs of {{ .Name | ToLowerCamel | ToPlural }} that were not deleted
+    """
+    notDeletedIDs: [ID!]
 }
