@@ -240,7 +240,7 @@ func buildIngestMetadata(integration *ent.Integration, operationName string, rec
 
 // buildIngestHeaders assembles Gala message headers for one ingest record
 func buildIngestHeaders(record mappedIngestRecord, metadata integrationgenerated.IntegrationIngestMetadata) gala.Headers {
-	tags := []string{metadata.DefinitionID, "schema_" + strings.ToLower(record.Schema), metadata.Operation}
+	tags := []string{metadata.DefinitionID, "schema_" + strings.ToLower(record.Schema)}
 	if metadata.Source != "" {
 		tags = append(tags, string(metadata.Source))
 	}
