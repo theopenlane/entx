@@ -63,6 +63,7 @@ func GenQuery(graphSchemaDir string) gen.Hook {
 					if schemaToTypes[schemaName] == nil {
 						schemaToTypes[schemaName] = make(map[string]bool)
 					}
+
 					schemaToTypes[schemaName][flatFields.Name] = true
 				}
 			}
@@ -89,8 +90,9 @@ func generateQuery(fieldsToAvoidDeleting map[string]bool, node *gen.Type, tmpl *
 	// check if schema already exists,update query to include manual changes to flat fields
 	if _, err := os.Stat(filePath); err == nil {
 		if err := updateQuery(fieldsToAvoidDeleting, filePath, node, tmpl); err != nil {
-			fmt.Errorf("unable to update file: %v", err)
+			log.Fatalf("unable to update file: %v", err)
 		}
+
 		return
 	}
 
@@ -140,9 +142,7 @@ func loadSchemasFromDir(dir string) (*ast.Schema, error) {
 		})
 
 		return nil
-
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,6 @@ func loadSchemasFromDir(dir string) (*ast.Schema, error) {
 
 // updateQuery updates the query by keeping old edges and updating flat fields
 func updateQuery(fieldsToAvoidDeleting map[string]bool, filePath string, node *gen.Type, tmpl *template.Template) error {
-
 	// Read file contents and parses for comparison and updating
 	srcFile, err := os.ReadFile(filePath)
 	if err != nil {
@@ -217,7 +216,7 @@ func updateQuery(fieldsToAvoidDeleting map[string]bool, filePath string, node *g
 		}
 
 		// if the new query signature parameters differ from the old query's, keep the old query.
-		if compareSignatureParams(oldQuery.VariableDefinitions, newQuery.VariableDefinitions) == false {
+		if !compareSignatureParams(oldQuery.VariableDefinitions, newQuery.VariableDefinitions) {
 			newQuerySelections[queryName] = oldQuery
 			continue
 		}
@@ -226,7 +225,7 @@ func updateQuery(fieldsToAvoidDeleting map[string]bool, filePath string, node *g
 		writeMissingFields(oldQuery.SelectionSet, &newQuery.SelectionSet, fieldsToAvoidDeleting)
 	}
 
-	// sort keys for consitency in output file, this prevents code from thinking file has changed.
+	// sort keys for consistency in output file, this prevents code from thinking file has changed.
 	sort.Strings(newQueryKeys)
 
 	const filePerm = 0644
@@ -254,9 +253,7 @@ func GetAllFieldNames(doc *ast.SchemaDocument) map[string]bool {
 	seen := make(map[string]bool)
 
 	for _, def := range doc.Definitions {
-
 		switch def.Kind {
-
 		case ast.Object, ast.InputObject, ast.Interface:
 			for _, field := range def.Fields {
 				seen[field.Name] = true
@@ -291,14 +288,13 @@ func compareSignatureParams(list1 ast.VariableDefinitionList, list2 ast.Variable
 // writeMissingFields adds edges and flat fields from oldSel into newSel
 func writeMissingFields(oldSel ast.SelectionSet, newSel *ast.SelectionSet, fieldsToAvoidDeleting map[string]bool) {
 	for _, oldSelection := range oldSel {
-
 		oldField, ok := oldSelection.(*ast.Field)
 		if !ok {
 			continue
 		}
 
 		// if this is false, the field was effectively deleted in the new query
-		if !isEdge(oldField) && fieldsToAvoidDeleting[oldField.Name] == false {
+		if !isEdge(oldField) && !fieldsToAvoidDeleting[oldField.Name] {
 			continue
 		}
 
@@ -311,6 +307,7 @@ func writeMissingFields(oldSel ast.SelectionSet, newSel *ast.SelectionSet, field
 			*newSel = append(*newSel, &fieldCopy)
 			continue
 		}
+
 		newField.Name = oldField.Name
 		newField.Alias = oldField.Alias
 
@@ -330,6 +327,7 @@ func findFieldInSelectionSet(sel ast.SelectionSet, name string) *ast.Field {
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -383,7 +381,7 @@ func isSeparator(r rune) bool {
 	return r == '_' || r == '-' || unicode.IsSpace(r)
 }
 
-// getFirstWord returns the first work of the string before the seperator
+// getFirstWord returns the first work of the string before the separator
 func GetFirstWord(name string) string {
 	words := strings.FieldsFunc(name, isSeparator)
 	return words[0]
