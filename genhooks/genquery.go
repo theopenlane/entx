@@ -67,10 +67,6 @@ func GenQuery(graphSchemaDir string) gen.Hook {
 				}
 			}
 
-			for s, _ := range schemaToTypes["tfasetting"] {
-				println("- ", s)
-			}
-
 			// loop through all nodes and generate schema if not specified to be skipped
 			for _, node := range g.Nodes {
 				generateQuery(schemaToTypes[strings.ToLower(node.Name)], node, tmpl, graphSchemaDir)
@@ -209,9 +205,6 @@ func updateQuery(fieldsToAvoidDeleting map[string]bool, filePath string, node *g
 	// track query names we care about.
 	newQueryKeys := make([]string, 0, len(newQuerySelections))
 
-	if node.Name == "TFASetting" {
-		println("For query:", node.Name)
-	}
 	for queryName, oldQuery := range oldQuerySelections {
 		newQuery, ok := newQuerySelections[queryName]
 
@@ -230,7 +223,7 @@ func updateQuery(fieldsToAvoidDeleting map[string]bool, filePath string, node *g
 		}
 
 		// merge edges recursively
-		writeMissingFields(node.Name == "TFASetting", oldQuery.SelectionSet, &newQuery.SelectionSet, fieldsToAvoidDeleting)
+		writeMissingFields(oldQuery.SelectionSet, &newQuery.SelectionSet, fieldsToAvoidDeleting)
 	}
 
 	// sort keys for consitency in output file, this prevents code from thinking file has changed.
@@ -296,7 +289,7 @@ func compareSignatureParams(list1 ast.VariableDefinitionList, list2 ast.Variable
 }
 
 // writeMissingFields adds edges and flat fields from oldSel into newSel
-func writeMissingFields(shouldPrint bool, oldSel ast.SelectionSet, newSel *ast.SelectionSet, fieldsToAvoidDeleting map[string]bool) {
+func writeMissingFields(oldSel ast.SelectionSet, newSel *ast.SelectionSet, fieldsToAvoidDeleting map[string]bool) {
 	for _, oldSelection := range oldSel {
 
 		oldField, ok := oldSelection.(*ast.Field)
@@ -306,9 +299,6 @@ func writeMissingFields(shouldPrint bool, oldSel ast.SelectionSet, newSel *ast.S
 
 		// if this is false, the field was effectively deleted in the new query
 		if !isEdge(oldField) && fieldsToAvoidDeleting[oldField.Name] == false {
-			if shouldPrint {
-				println("Deleted ", oldField.Name)
-			}
 			continue
 		}
 
@@ -326,7 +316,7 @@ func writeMissingFields(shouldPrint bool, oldSel ast.SelectionSet, newSel *ast.S
 
 		// only recurse if it's actually an edge
 		if isEdge(oldField) {
-			writeMissingFields(shouldPrint, oldField.SelectionSet, &newField.SelectionSet, fieldsToAvoidDeleting)
+			writeMissingFields(oldField.SelectionSet, &newField.SelectionSet, fieldsToAvoidDeleting)
 		}
 	}
 }
