@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"unicode"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/theopenlane/entx"
 
+	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/formatter"
 	"github.com/vektah/gqlparser/v2/parser"
@@ -41,9 +43,37 @@ func GenQuery(graphSchemaDir string) gen.Hook {
 			// create schema query
 			tmpl := createQuery()
 
+			schemaDir := "./internal/graphapi/schema/"
+
+			// schemaFilePath := getFileName(schemaDir, node.Name)
+
+			schema, err := loadSchemasFromDir(schemaDir)
+			if err != nil {
+				panic(err)
+			}
+
+			schemaToTypes := make(map[string]map[string]bool)
+
+			for _, field := range schema.Types["Mutation"].Fields {
+				path := field.Position.Src.Name
+
+				schemaName := strings.ToLower(path[strings.LastIndex(path, "/")+1 : strings.LastIndex(path, ".graphql")])
+
+				for _, flatFields := range schema.Types[field.Type.Name()].Fields {
+					if schemaToTypes[schemaName] == nil {
+						schemaToTypes[schemaName] = make(map[string]bool)
+					}
+					schemaToTypes[schemaName][flatFields.Name] = true
+				}
+			}
+
+			for s, _ := range schemaToTypes["tfasetting"] {
+				println("- ", s)
+			}
+
 			// loop through all nodes and generate schema if not specified to be skipped
 			for _, node := range g.Nodes {
-				generateQuery(node, tmpl, graphSchemaDir)
+				generateQuery(schemaToTypes[strings.ToLower(node.Name)], node, tmpl, graphSchemaDir)
 			}
 
 			return next.Generate(g)
@@ -52,7 +82,7 @@ func GenQuery(graphSchemaDir string) gen.Hook {
 }
 
 // generateQuery generates the query file for the type
-func generateQuery(node *gen.Type, tmpl *template.Template, graphSchemaDir string) {
+func generateQuery(fieldsToAvoidDeleting map[string]bool, node *gen.Type, tmpl *template.Template, graphSchemaDir string) {
 	// check skip annotation
 	if checkQueryGenSkip(node) {
 		return
@@ -62,8 +92,8 @@ func generateQuery(node *gen.Type, tmpl *template.Template, graphSchemaDir strin
 
 	// check if schema already exists,update query to include manual changes to flat fields
 	if _, err := os.Stat(filePath); err == nil {
-		if err := updateQuery(filePath, node, tmpl); err != nil {
-			log.Fatalf("unable to update file: %v", err)
+		if err := updateQuery(fieldsToAvoidDeleting, filePath, node, tmpl); err != nil {
+			fmt.Errorf("unable to update file: %v", err)
 		}
 		return
 	}
@@ -86,7 +116,47 @@ func generateQuery(node *gen.Type, tmpl *template.Template, graphSchemaDir strin
 	}
 }
 
-func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error {
+// loadSchemasFromDir loads all the schemas from a root directory
+func loadSchemasFromDir(dir string) (*ast.Schema, error) {
+	var sources []*ast.Source
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		if filepath.Ext(path) != ".graphql" {
+			return nil
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		sources = append(sources, &ast.Source{
+			Name:  path,
+			Input: string(content),
+		})
+
+		return nil
+
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return gqlparser.LoadSchema(sources...)
+}
+
+// updateQuery updates the query by keeping old edges and updating flat fields
+func updateQuery(fieldsToAvoidDeleting map[string]bool, filePath string, node *gen.Type, tmpl *template.Template) error {
+
 	// Read file contents and parses for comparison and updating
 	srcFile, err := os.ReadFile(filePath)
 	if err != nil {
@@ -139,6 +209,9 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 	// track query names we care about.
 	newQueryKeys := make([]string, 0, len(newQuerySelections))
 
+	if node.Name == "TFASetting" {
+		println("For query:", node.Name)
+	}
 	for queryName, oldQuery := range oldQuerySelections {
 		newQuery, ok := newQuerySelections[queryName]
 
@@ -157,7 +230,7 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 		}
 
 		// merge edges recursively
-		writeMissingFields(oldQuery.SelectionSet, &newQuery.SelectionSet)
+		writeMissingFields(node.Name == "TFASetting", oldQuery.SelectionSet, &newQuery.SelectionSet, fieldsToAvoidDeleting)
 	}
 
 	// sort keys for consitency in output file, this prevents code from thinking file has changed.
@@ -183,6 +256,24 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 	return nil
 }
 
+// GetAllFieldNames gets all field names from a schema document and returns them in a map for easy lookup
+func GetAllFieldNames(doc *ast.SchemaDocument) map[string]bool {
+	seen := make(map[string]bool)
+
+	for _, def := range doc.Definitions {
+
+		switch def.Kind {
+
+		case ast.Object, ast.InputObject, ast.Interface:
+			for _, field := range def.Fields {
+				seen[field.Name] = true
+			}
+		}
+	}
+
+	return seen
+}
+
 // compareSelectionSets compares the parameters between two querys, returns true if equal, false otherwise
 func compareSignatureParams(list1 ast.VariableDefinitionList, list2 ast.VariableDefinitionList) bool {
 	if len(list1) != len(list2) {
@@ -205,11 +296,19 @@ func compareSignatureParams(list1 ast.VariableDefinitionList, list2 ast.Variable
 }
 
 // writeMissingFields adds edges and flat fields from oldSel into newSel
-func writeMissingFields(oldSel ast.SelectionSet, newSel *ast.SelectionSet) {
+func writeMissingFields(shouldPrint bool, oldSel ast.SelectionSet, newSel *ast.SelectionSet, fieldsToAvoidDeleting map[string]bool) {
 	for _, oldSelection := range oldSel {
 
 		oldField, ok := oldSelection.(*ast.Field)
 		if !ok {
+			continue
+		}
+
+		// if this is false, the field was effectively deleted in the new query
+		if !isEdge(oldField) && fieldsToAvoidDeleting[oldField.Name] == false {
+			if shouldPrint {
+				println("Deleted ", oldField.Name)
+			}
 			continue
 		}
 
@@ -227,7 +326,7 @@ func writeMissingFields(oldSel ast.SelectionSet, newSel *ast.SelectionSet) {
 
 		// only recurse if it's actually an edge
 		if isEdge(oldField) {
-			writeMissingFields(oldField.SelectionSet, &newField.SelectionSet)
+			writeMissingFields(shouldPrint, oldField.SelectionSet, &newField.SelectionSet, fieldsToAvoidDeleting)
 		}
 	}
 }
