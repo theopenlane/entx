@@ -52,21 +52,7 @@ func GenQuery(graphSchemaDir string) gen.Hook {
 			}
 
 			// schemaToFields collects the extended flat fields for each schema
-			schemaToFields := make(map[string]map[string]bool)
-
-			for _, field := range schema.Types["Mutation"].Fields {
-				path := field.Position.Src.Name
-
-				schemaName := strings.ToLower(path[strings.LastIndex(path, "/")+1 : strings.LastIndex(path, ".graphql")])
-
-				for _, flatFields := range schema.Types[field.Type.Name()].Fields {
-					if schemaToFields[schemaName] == nil {
-						schemaToFields[schemaName] = make(map[string]bool)
-					}
-
-					schemaToFields[schemaName][flatFields.Name] = true
-				}
-			}
+			schemaToFields := mapFieldsToSchema(schema)
 
 			// loop through all nodes and generate schema if not specified to be skipped
 			for _, node := range g.Nodes {
@@ -76,6 +62,26 @@ func GenQuery(graphSchemaDir string) gen.Hook {
 			return next.Generate(g)
 		})
 	}
+}
+
+// mapFieldsToSchema creates a mapping of schema to the fields that should be avoided deleting in the query update process
+func mapFieldsToSchema(schema *ast.Schema) map[string]map[string]bool {
+	schemaToFields := make(map[string]map[string]bool)
+
+	for _, field := range schema.Types["Mutation"].Fields {
+		path := field.Position.Src.Name
+
+		schemaName := strings.ToLower(path[strings.LastIndex(path, "/")+1 : strings.LastIndex(path, ".graphql")])
+
+		for _, flatFields := range schema.Types[field.Type.Name()].Fields {
+			if schemaToFields[schemaName] == nil {
+				schemaToFields[schemaName] = make(map[string]bool)
+			}
+
+			schemaToFields[schemaName][flatFields.Name] = true
+		}
+	}
+	return schemaToFields
 }
 
 // generateQuery generates the query file for the type
