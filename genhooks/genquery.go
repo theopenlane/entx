@@ -133,7 +133,7 @@ func loadSchemasFromDir(dir string) (*ast.Schema, error) {
 			return nil
 		}
 
-		content, err := os.ReadFile(path)
+		content, err := fs.ReadFile(fsys, path)
 		if err != nil {
 			return err
 		}
