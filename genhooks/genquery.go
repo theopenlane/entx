@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -45,14 +46,13 @@ func GenQuery(graphSchemaDir string) gen.Hook {
 
 			schemaDir := "./internal/graphapi/schema/"
 
-			// schemaFilePath := getFileName(schemaDir, node.Name)
-
 			schema, err := loadSchemasFromDir(schemaDir)
 			if err != nil {
 				panic(err)
 			}
 
-			schemaToTypes := make(map[string]map[string]bool)
+			// schemaToFields collects the extended flat fields for each schema
+			schemaToFields := make(map[string]map[string]bool)
 
 			for _, field := range schema.Types["Mutation"].Fields {
 				path := field.Position.Src.Name
@@ -60,17 +60,17 @@ func GenQuery(graphSchemaDir string) gen.Hook {
 				schemaName := strings.ToLower(path[strings.LastIndex(path, "/")+1 : strings.LastIndex(path, ".graphql")])
 
 				for _, flatFields := range schema.Types[field.Type.Name()].Fields {
-					if schemaToTypes[schemaName] == nil {
-						schemaToTypes[schemaName] = make(map[string]bool)
+					if schemaToFields[schemaName] == nil {
+						schemaToFields[schemaName] = make(map[string]bool)
 					}
 
-					schemaToTypes[schemaName][flatFields.Name] = true
+					schemaToFields[schemaName][flatFields.Name] = true
 				}
 			}
 
 			// loop through all nodes and generate schema if not specified to be skipped
 			for _, node := range g.Nodes {
-				generateQuery(schemaToTypes[strings.ToLower(node.Name)], node, tmpl, graphSchemaDir)
+				generateQuery(schemaToFields[strings.ToLower(node.Name)], node, tmpl, graphSchemaDir)
 			}
 
 			return next.Generate(g)
@@ -118,12 +118,14 @@ func generateQuery(fieldsToAvoidDeleting map[string]bool, node *gen.Type, tmpl *
 func loadSchemasFromDir(dir string) (*ast.Schema, error) {
 	var sources []*ast.Source
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	fsys := os.DirFS(dir)
+
+	err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		if info.IsDir() {
+		if d.IsDir() {
 			return nil
 		}
 
