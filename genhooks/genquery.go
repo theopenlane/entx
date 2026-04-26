@@ -256,22 +256,6 @@ func updateQuery(fieldsToAvoidDeleting map[string]bool, filePath string, node *g
 	return nil
 }
 
-// GetAllFieldNames gets all field names from a schema document and returns them in a map for easy lookup
-func GetAllFieldNames(doc *ast.SchemaDocument) map[string]bool {
-	seen := make(map[string]bool)
-
-	for _, def := range doc.Definitions {
-		switch def.Kind {
-		case ast.Object, ast.InputObject, ast.Interface:
-			for _, field := range def.Fields {
-				seen[field.Name] = true
-			}
-		}
-	}
-
-	return seen
-}
-
 // compareSelectionSets compares the parameters between two querys, returns true if equal, false otherwise
 func compareSignatureParams(list1 ast.VariableDefinitionList, list2 ast.VariableDefinitionList) bool {
 	if len(list1) != len(list2) {
