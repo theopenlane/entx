@@ -44,8 +44,6 @@ func GenQuery(graphSchemaDir, schemaDir string) gen.Hook {
 			// create schema query
 			tmpl := createQuery()
 
-			print(schemaDir)
-
 			schema, err := loadSchemasFromDir(schemaDir)
 			if err != nil {
 				log.Fatalf("unable to load schemas: %v", err)
