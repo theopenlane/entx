@@ -38,15 +38,17 @@ type query struct {
 }
 
 // GenQuery generates graphql queries when not specified to be skipped
-func GenQuery(graphSchemaDir string, schemaDir string) gen.Hook {
+func GenQuery(graphSchemaDir, schemaDir string) gen.Hook {
 	return func(next gen.Generator) gen.Generator {
 		return gen.GenerateFunc(func(g *gen.Graph) error {
 			// create schema query
 			tmpl := createQuery()
 
+			print(schemaDir)
+
 			schema, err := loadSchemasFromDir(schemaDir)
 			if err != nil {
-				panic(err)
+				log.Fatalf("unable to load schemas: %v", err)
 			}
 
 			// schemaToFields collects the extended flat fields for each schema
