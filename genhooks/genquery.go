@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"unicode"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/theopenlane/entx"
 
+	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/formatter"
 	"github.com/vektah/gqlparser/v2/parser"
@@ -35,15 +38,23 @@ type query struct {
 }
 
 // GenQuery generates graphql queries when not specified to be skipped
-func GenQuery(graphSchemaDir string) gen.Hook {
+func GenQuery(graphSchemaDir, schemaDir string) gen.Hook {
 	return func(next gen.Generator) gen.Generator {
 		return gen.GenerateFunc(func(g *gen.Graph) error {
 			// create schema query
 			tmpl := createQuery()
 
+			schema, err := loadSchemasFromDir(schemaDir)
+			if err != nil {
+				log.Fatalf("unable to load schemas: %v", err)
+			}
+
+			// schemaToFields collects the extended flat fields for each schema
+			schemaToFields := mapFieldsToSchema(schema)
+
 			// loop through all nodes and generate schema if not specified to be skipped
 			for _, node := range g.Nodes {
-				generateQuery(node, tmpl, graphSchemaDir)
+				generateQuery(schemaToFields[strings.ToLower(node.Name)], node, tmpl, graphSchemaDir)
 			}
 
 			return next.Generate(g)
@@ -51,8 +62,28 @@ func GenQuery(graphSchemaDir string) gen.Hook {
 	}
 }
 
+// mapFieldsToSchema creates a mapping of schema to the fields that should be avoided deleting in the query update process
+func mapFieldsToSchema(schema *ast.Schema) map[string]map[string]bool {
+	schemaToFields := make(map[string]map[string]bool)
+
+	for _, field := range schema.Types["Mutation"].Fields {
+		path := field.Position.Src.Name
+
+		schemaName := strings.ToLower(path[strings.LastIndex(path, "/")+1 : strings.LastIndex(path, ".graphql")])
+
+		for _, flatFields := range schema.Types[field.Type.Name()].Fields {
+			if schemaToFields[schemaName] == nil {
+				schemaToFields[schemaName] = make(map[string]bool)
+			}
+
+			schemaToFields[schemaName][flatFields.Name] = true
+		}
+	}
+	return schemaToFields
+}
+
 // generateQuery generates the query file for the type
-func generateQuery(node *gen.Type, tmpl *template.Template, graphSchemaDir string) {
+func generateQuery(fieldsToAvoidDeleting map[string]bool, node *gen.Type, tmpl *template.Template, graphSchemaDir string) {
 	// check skip annotation
 	if checkQueryGenSkip(node) {
 		return
@@ -62,9 +93,10 @@ func generateQuery(node *gen.Type, tmpl *template.Template, graphSchemaDir strin
 
 	// check if schema already exists,update query to include manual changes to flat fields
 	if _, err := os.Stat(filePath); err == nil {
-		if err := updateQuery(filePath, node, tmpl); err != nil {
+		if err := updateQuery(fieldsToAvoidDeleting, filePath, node, tmpl); err != nil {
 			log.Fatalf("unable to update file: %v", err)
 		}
+
 		return
 	}
 
@@ -86,7 +118,46 @@ func generateQuery(node *gen.Type, tmpl *template.Template, graphSchemaDir strin
 	}
 }
 
-func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error {
+// loadSchemasFromDir loads all the schemas from a root directory
+func loadSchemasFromDir(dir string) (*ast.Schema, error) {
+	var sources []*ast.Source
+
+	fsys := os.DirFS(dir)
+
+	err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		if filepath.Ext(path) != ".graphql" {
+			return nil
+		}
+
+		content, err := fs.ReadFile(fsys, path)
+		if err != nil {
+			return err
+		}
+
+		sources = append(sources, &ast.Source{
+			Name:  path,
+			Input: string(content),
+		})
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return gqlparser.LoadSchema(sources...)
+}
+
+// updateQuery updates the query by keeping old edges and updating flat fields
+func updateQuery(fieldsToAvoidDeleting map[string]bool, filePath string, node *gen.Type, tmpl *template.Template) error {
 	// Read file contents and parses for comparison and updating
 	srcFile, err := os.ReadFile(filePath)
 	if err != nil {
@@ -151,16 +222,16 @@ func updateQuery(filePath string, node *gen.Type, tmpl *template.Template) error
 		}
 
 		// if the new query signature parameters differ from the old query's, keep the old query.
-		if compareSignatureParams(oldQuery.VariableDefinitions, newQuery.VariableDefinitions) == false {
+		if !compareSignatureParams(oldQuery.VariableDefinitions, newQuery.VariableDefinitions) {
 			newQuerySelections[queryName] = oldQuery
 			continue
 		}
 
 		// merge edges recursively
-		writeMissingFields(oldQuery.SelectionSet, &newQuery.SelectionSet)
+		writeMissingFields(oldQuery.SelectionSet, &newQuery.SelectionSet, fieldsToAvoidDeleting)
 	}
 
-	// sort keys for consitency in output file, this prevents code from thinking file has changed.
+	// sort keys for consistency in output file, this prevents code from thinking file has changed.
 	sort.Strings(newQueryKeys)
 
 	const filePerm = 0644
@@ -205,11 +276,15 @@ func compareSignatureParams(list1 ast.VariableDefinitionList, list2 ast.Variable
 }
 
 // writeMissingFields adds edges and flat fields from oldSel into newSel
-func writeMissingFields(oldSel ast.SelectionSet, newSel *ast.SelectionSet) {
+func writeMissingFields(oldSel ast.SelectionSet, newSel *ast.SelectionSet, fieldsToAvoidDeleting map[string]bool) {
 	for _, oldSelection := range oldSel {
-
 		oldField, ok := oldSelection.(*ast.Field)
 		if !ok {
+			continue
+		}
+
+		// if this is false, the field was effectively deleted in the new query
+		if !isEdge(oldField) && !fieldsToAvoidDeleting[oldField.Name] {
 			continue
 		}
 
@@ -222,12 +297,13 @@ func writeMissingFields(oldSel ast.SelectionSet, newSel *ast.SelectionSet) {
 			*newSel = append(*newSel, &fieldCopy)
 			continue
 		}
+
 		newField.Name = oldField.Name
 		newField.Alias = oldField.Alias
 
 		// only recurse if it's actually an edge
 		if isEdge(oldField) {
-			writeMissingFields(oldField.SelectionSet, &newField.SelectionSet)
+			writeMissingFields(oldField.SelectionSet, &newField.SelectionSet, fieldsToAvoidDeleting)
 		}
 	}
 }
@@ -241,6 +317,7 @@ func findFieldInSelectionSet(sel ast.SelectionSet, name string) *ast.Field {
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -294,7 +371,7 @@ func isSeparator(r rune) bool {
 	return r == '_' || r == '-' || unicode.IsSpace(r)
 }
 
-// getFirstWord returns the first work of the string before the seperator
+// getFirstWord returns the first work of the string before the separator
 func GetFirstWord(name string) string {
 	words := strings.FieldsFunc(name, isSeparator)
 	return words[0]
