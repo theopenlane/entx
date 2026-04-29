@@ -38,13 +38,11 @@ type query struct {
 }
 
 // GenQuery generates graphql queries when not specified to be skipped
-func GenQuery(graphSchemaDir string) gen.Hook {
+func GenQuery(graphSchemaDir string, schemaDir string) gen.Hook {
 	return func(next gen.Generator) gen.Generator {
 		return gen.GenerateFunc(func(g *gen.Graph) error {
 			// create schema query
 			tmpl := createQuery()
-
-			schemaDir := "./internal/graphapi/schema/"
 
 			schema, err := loadSchemasFromDir(schemaDir)
 			if err != nil {
