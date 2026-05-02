@@ -85,11 +85,16 @@ func historyHookUpdate[T Mutation]() ent.Hook {
 				return nil, err
 			}
 
+			value, err := next.Mutate(ctx, m)
+			if err != nil {
+				return nil, err
+			}
+
 			if err = mutation.CreateHistoryFromUpdate(ctx); err != nil {
 				return nil, err
 			}
 
-			return next.Mutate(ctx, m)
+			return value, nil
 		})
 	}
 }
@@ -103,11 +108,16 @@ func historyHookDelete[T Mutation]() ent.Hook {
 				return nil, err
 			}
 
+			value, err := next.Mutate(ctx, m)
+			if err != nil {
+				return nil, err
+			}
+
 			if err = mutation.CreateHistoryFromDelete(ctx); err != nil {
 				return nil, err
 			}
 
-			return next.Mutate(ctx, m)
+			return value, nil
 		})
 	}
 }
