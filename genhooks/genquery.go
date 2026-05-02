@@ -79,6 +79,7 @@ func mapFieldsToSchema(schema *ast.Schema) map[string]map[string]bool {
 			schemaToFields[schemaName][flatFields.Name] = true
 		}
 	}
+
 	return schemaToFields
 }
 
@@ -254,7 +255,7 @@ func updateQuery(fieldsToAvoidDeleting map[string]bool, filePath string, node *g
 	return nil
 }
 
-// compareSelectionSets compares the parameters between two querys, returns true if equal, false otherwise
+// compareSelectionSets compares the parameters between two queries, returns true if equal, false otherwise
 func compareSignatureParams(list1 ast.VariableDefinitionList, list2 ast.VariableDefinitionList) bool {
 	if len(list1) != len(list2) {
 		return false

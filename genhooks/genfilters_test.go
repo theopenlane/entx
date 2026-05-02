@@ -120,10 +120,10 @@ func TestEntSkipWhere(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-
 			if tc.typ.Fields != nil {
 				got := entSkipWhere(tc.typ.Fields[0])
 				assert.Equal(t, tc.want, got)
+
 				return
 			}
 
