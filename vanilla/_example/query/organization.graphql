@@ -1,125 +1,119 @@
-
-mutation CreateBulkCSVOrganization($input: Upload!) {
-  createBulkCSVOrganization(input: $input) {
-    organizations {
-      createdAt
-      createdBy
-      description
-      displayID
-      id
-      name
-      updatedAt
-      updatedBy
-    }
-  }
+mutation CreateBulkCSVOrganization ($input: Upload!) {
+	createBulkCSVOrganization(input: $input) {
+		organizations {
+			createdAt
+			createdBy
+			description
+			displayID
+			id
+			name
+			updatedAt
+			updatedBy
+		}
+	}
 }
-
-mutation CreateBulkOrganization($input: [CreateOrganizationInput!]) {
-  createBulkOrganization(input: $input) {
-    organizations {
-      createdAt
-      createdBy
-      description
-      displayID
-      id
-      name
-      updatedAt
-      updatedBy
-    }
-  }
+mutation CreateBulkOrganization ($input: [CreateOrganizationInput!]) {
+	createBulkOrganization(input: $input) {
+		organizations {
+			createdAt
+			createdBy
+			description
+			displayID
+			id
+			name
+			updatedAt
+			updatedBy
+		}
+	}
 }
-
-mutation CreateOrganization($input: CreateOrganizationInput!) {
-  createOrganization(input: $input) {
-    organization {
-      createdAt
-      createdBy
-      description
-      displayID
-      id
-      name
-      updatedAt
-      updatedBy
-    }
-  }
+mutation CreateOrganization ($input: CreateOrganizationInput!) {
+	createOrganization(input: $input) {
+		organization {
+			createdAt
+			createdBy
+			description
+			displayID
+			id
+			name
+			updatedAt
+			updatedBy
+		}
+	}
 }
-
-mutation DeleteOrganization($deleteOrganizationId: ID!) {
-  deleteOrganization(id: $deleteOrganizationId) {
-    deletedID
-  }
+mutation DeleteOrganization ($deleteOrganizationId: ID!) {
+	deleteOrganization(id: $deleteOrganizationId) {
+		deletedID
+	}
 }
-
 query GetAllOrganizations {
-  organizations {
-    totalCount
-    pageInfo {
-      startCursor
-      endCursor
-      hasPreviousPage
-      hasNextPage
-    }
-    edges {
-      node {
-        createdAt
-        createdBy
-        description
-        displayID
-        id
-        name
-        updatedAt
-        updatedBy
-      }
-    }
-  }
+	organizations {
+		totalCount
+		pageInfo {
+			startCursor
+			endCursor
+			hasPreviousPage
+			hasNextPage
+		}
+		edges {
+			node {
+				createdAt
+				createdBy
+				description
+				displayID
+				id
+				name
+				updatedAt
+				updatedBy
+			}
+		}
+	}
 }
-query GetOrganizationByID($organizationId: ID!) {
-  organization(id: $organizationId) {
-    createdAt
-    createdBy
-    description
-    displayID
-    id
-    name
-    updatedAt
-    updatedBy
-  }
+query GetOrganizationByID ($organizationId: ID!) {
+	organization(id: $organizationId) {
+		createdAt
+		createdBy
+		description
+		displayID
+		id
+		name
+		updatedAt
+		updatedBy
+	}
 }
-
-query GetOrganizations($first: Int, $last: Int, $where: OrganizationWhereInput) {
-  organizations(first: $first, last: $last, where: $where) {
-    totalCount
-    pageInfo {
-      startCursor
-      endCursor
-      hasPreviousPage
-      hasNextPage
-    }
-    edges {
-      node {
-        createdAt
-        createdBy
-        description
-        displayID
-        id
-        name
-        updatedAt
-        updatedBy
-      }
-    }
-  }
+query GetOrganizations ($first: Int, $last: Int, $where: OrganizationWhereInput) {
+	organizations(first: $first, last: $last, where: $where) {
+		totalCount
+		pageInfo {
+			startCursor
+			endCursor
+			hasPreviousPage
+			hasNextPage
+		}
+		edges {
+			node {
+				createdAt
+				createdBy
+				description
+				displayID
+				id
+				name
+				updatedAt
+				updatedBy
+			}
+		}
+	}
 }
-mutation UpdateOrganization($updateOrganizationId: ID!, $input: UpdateOrganizationInput!) {
-  updateOrganization(id: $updateOrganizationId, input: $input) {
-    organization {
-      createdAt
-      createdBy
-      description
-      displayID
-      id
-      name
-      updatedAt
-      updatedBy
-    }
-  }
+mutation UpdateOrganization ($updateOrganizationId: ID!, $input: UpdateOrganizationInput!) {
+	updateOrganization(id: $updateOrganizationId, input: $input) {
+		organization {
+			createdAt
+			createdBy
+			description
+			displayID
+			id
+			name
+			updatedAt
+			updatedBy
+		}
+	}
 }

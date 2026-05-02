@@ -111,6 +111,7 @@ func collectOSCALFieldMappings(fields []*load.Field) []oscalFieldInfo {
 
 	for _, field := range fields {
 		ann := &OSCALField{}
+
 		raw, ok := field.Annotations[ann.Name()]
 		if !ok {
 			continue
@@ -141,6 +142,7 @@ func collectOSCALRelationshipMappings(edges []*load.Edge) []oscalRelationshipInf
 
 	for _, edge := range edges {
 		ann := &OSCALRelationship{}
+
 		raw, ok := edge.Annotations[ann.Name()]
 		if !ok {
 			continue

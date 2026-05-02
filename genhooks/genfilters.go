@@ -21,6 +21,7 @@ func WithStringSliceWhereOps() entgql.SchemaHook {
 			}
 
 			whereName := gqlTypeName + "WhereInput"
+
 			whereDef := s.Types[whereName]
 			if whereDef == nil || whereDef.Kind != ast.InputObject {
 				continue
@@ -45,6 +46,7 @@ func WithStringSliceWhereOps() entgql.SchemaHook {
 				addInputField(whereDef, existing, fieldName+"Has", ast.NamedType("String", nil))
 			}
 		}
+
 		return nil
 	}
 }
