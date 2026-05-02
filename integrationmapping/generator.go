@@ -211,6 +211,7 @@ func collectMappingData(g *gen.Graph, c *Config) (MappingData, error) {
 		hasPrepareInput := stockPersist && len(runtimeDefaults) > 0
 
 		entAlias := strings.ToLower(node.Name)
+
 		entPkg := ""
 		if c.EntPackage != "" {
 			entPkg = c.EntPackage + "/" + entAlias

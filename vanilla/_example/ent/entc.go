@@ -40,7 +40,7 @@ func main() {
 			Features: []gen.Feature{gen.FeaturePrivacy},
 			Hooks: []gen.Hook{
 				genhooks.GenSchema(graphSchemaDir),
-				genhooks.GenQuery(graphQueryDir),
+				genhooks.GenQuery(graphQueryDir, graphSchemaDir),
 				accessExt.Hook(),
 			},
 		},

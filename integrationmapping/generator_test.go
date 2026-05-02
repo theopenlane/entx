@@ -38,8 +38,8 @@ func TestBuildMappingTemplate_GeneratesTypedIngestContracts(t *testing.T) {
 				},
 				RuntimeDefaults: []IngestRuntimeDefault{
 					{
-						Field:             "owner_id",
-						GoField:           "OwnerID",
+						Field:            "owner_id",
+						GoField:          "OwnerID",
 						IntegrationField: "OwnerID",
 					},
 				},
@@ -49,6 +49,7 @@ func TestBuildMappingTemplate_GeneratesTypedIngestContracts(t *testing.T) {
 	}
 
 	var out bytes.Buffer
+
 	err := tmpl.Execute(&out, data)
 	assert.NoError(t, err)
 
@@ -81,6 +82,7 @@ func TestBuildMappingTemplate_OmitsTypedIngestContractsWhenDisabled(t *testing.T
 	}
 
 	var out bytes.Buffer
+
 	err := tmpl.Execute(&out, data)
 	assert.NoError(t, err)
 
@@ -117,6 +119,7 @@ func TestBuildMappingTemplate_FromIntegrationGeneratesPrepareFunc(t *testing.T) 
 	}
 
 	var out bytes.Buffer
+
 	err := tmpl.Execute(&out, data)
 	assert.NoError(t, err)
 
