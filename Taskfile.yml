@@ -1,5 +1,8 @@
 version: '3'
 
+env:
+  GOEXPERIMENT: jsonv2
+
 includes:
   example:
     taskfile: ./vanilla/_example/Taskfile.yml

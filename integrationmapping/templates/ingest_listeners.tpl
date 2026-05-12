@@ -31,8 +31,8 @@ func directorySyncRunIDFromContext(ctx context.Context) string {
 // schemaRegistration wires one ingest schema to its Gala listener, async emit, and sync persist functions
 type schemaRegistration struct {
 	register func(runtime *gala.Gala) error
-	emit     func(ctx context.Context, runtime *gala.Gala, integration *ent.Integration, metadata integrationgenerated.IntegrationIngestMetadata, headers gala.Headers, payload json.RawMessage) error
-	persist  func(ctx context.Context, db *ent.Client, integration *ent.Integration, payload json.RawMessage) error
+	emit     func(ctx context.Context, runtime *gala.Gala, integration *ent.Integration, metadata integrationgenerated.IntegrationIngestMetadata, headers gala.Headers, payload jsontext.Value) error
+	persist  func(ctx context.Context, db *ent.Client, integration *ent.Integration, payload jsontext.Value) error
 }
 
 // ingestSchemaOrder defines the registration order for ingest schema listeners
@@ -102,7 +102,7 @@ func emitMappedRecord(ctx context.Context, runtime *gala.Gala, integration *ent.
 }
 
 // persistMappedRecord looks up the schema registration and persists one mapped ingest record synchronously
-func persistMappedRecord(ctx context.Context, db *ent.Client, integration *ent.Integration, schema string, payload json.RawMessage) error {
+func persistMappedRecord(ctx context.Context, db *ent.Client, integration *ent.Integration, schema string, payload jsontext.Value) error {
 	registration, ok := lookupIngestSchemaRegistration(schema)
 	if !ok {
 		return ErrIngestUnsupportedSchema
@@ -118,7 +118,7 @@ func emitTyped[TInput any, TEvent any](
 	integration *ent.Integration,
 	metadata integrationgenerated.IntegrationIngestMetadata,
 	headers gala.Headers,
-	payload json.RawMessage,
+	payload jsontext.Value,
 	topic gala.Topic[TEvent],
 	prepare func(context.Context, TInput, *ent.Integration) TInput,
 	wrap func(integrationgenerated.IntegrationIngestMetadata, TInput) TEvent,
@@ -142,7 +142,7 @@ func persistTyped[TInput any](
 	ctx context.Context,
 	db *ent.Client,
 	integration *ent.Integration,
-	payload json.RawMessage,
+	payload jsontext.Value,
 	prepare func(context.Context, TInput, *ent.Integration) TInput,
 	persist func(context.Context, *ent.Client, *ent.Integration, TInput) error,
 ) error {
@@ -199,10 +199,10 @@ func buildSchemaRegistration[TInput any, TEvent any](
 
 			return err
 		},
-		emit: func(ctx context.Context, runtime *gala.Gala, integration *ent.Integration, metadata integrationgenerated.IntegrationIngestMetadata, headers gala.Headers, payload json.RawMessage) error {
+		emit: func(ctx context.Context, runtime *gala.Gala, integration *ent.Integration, metadata integrationgenerated.IntegrationIngestMetadata, headers gala.Headers, payload jsontext.Value) error {
 			return emitTyped(ctx, runtime, integration, metadata, headers, payload, topic, prepare, wrap)
 		},
-		persist: func(ctx context.Context, db *ent.Client, integration *ent.Integration, payload json.RawMessage) error {
+		persist: func(ctx context.Context, db *ent.Client, integration *ent.Integration, payload jsontext.Value) error {
 			return persistTyped(ctx, db, integration, payload, prepare, persistInput)
 		},
 	}
