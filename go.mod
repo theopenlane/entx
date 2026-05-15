@@ -7,7 +7,7 @@ require (
 	entgo.io/ent v0.14.6
 	github.com/99designs/gqlgen v0.17.90
 	github.com/XSAM/otelsql v0.42.0
-	github.com/brianvoe/gofakeit/v7 v7.14.1
+	github.com/brianvoe/gofakeit/v7 v7.15.0
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/rs/zerolog v1.35.1
 	github.com/stoewer/go-strcase v1.3.1
@@ -34,7 +34,6 @@ require (
 	github.com/bmatcuk/doublestar v1.3.4 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/inflect v0.21.5
