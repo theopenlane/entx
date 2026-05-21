@@ -9,6 +9,7 @@ import (
 	"{{ .DoPackage }}"
 	"{{ .LoPackage }}"
 
+	"{{ .AuthPackage }}"
 	ent "{{ .EntPackage }}"
 	"{{ .IntegrationGeneratedPackage }}"
 	"{{ .GalaPackage }}"
@@ -175,7 +176,24 @@ func handleIngestRequested[TInput any](
 		return err
 	}
 
-	return persist(ctx.Context, db, integration, input)
+	persistCtx, err := setIntegrationOwnerInContext(ctx.Context, integration.OwnerID)
+	if err != nil {
+		return err
+	}
+
+	return persist(persistCtx, db, integration, input)
+}
+
+func setIntegrationOwnerInContext(ctx context.Context, ownerID string) (context.Context, error) {
+	caller, ok := auth.CallerFromContext(ctx)
+	if !ok || caller == nil {
+		return ctx, auth.ErrNoAuthUser
+	}
+
+	scoped := *caller
+	scoped.OrganizationID = ownerID
+
+	return auth.WithCaller(ctx, &scoped), nil
 }
 
 // buildSchemaRegistration assembles one ingest schema registration from shared generic helpers and schema-specific closures.

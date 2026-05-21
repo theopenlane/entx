@@ -35,6 +35,8 @@ type Config struct {
 	LoPackage string
 	// JsonxPackage is the jsonx package import path
 	JsonxPackage string
+	// AuthPackage is the auth package import path used for scoping generated ingest persistence
+	AuthPackage string
 }
 
 // Extension implements entc.Extension for integration mapping generation
@@ -139,6 +141,13 @@ func WithLoPackage(path string) ExtensionOption {
 func WithJsonxPackage(path string) ExtensionOption {
 	return func(c *Config) {
 		c.JsonxPackage = path
+	}
+}
+
+// WithAuthPackage sets the auth package import path
+func WithAuthPackage(path string) ExtensionOption {
+	return func(c *Config) {
+		c.AuthPackage = path
 	}
 }
 
