@@ -20,13 +20,6 @@ const (
 // FGASkipMode is the skip for crud annotations
 type FGASkipMode int
 
-// FGACrudAnnotation marks the crud operations that are allowed for the schema to generate crud tuples
-// If this annotation is not added, it uses the default based on annotations and policies on the schema
-type FGACrudAnnotation struct {
-	// Skip mode used for fga crud generation
-	Skip FGASkipMode
-}
-
 // Has determines if the skip mode contains the flag
 func (m FGASkipMode) Has(flag FGASkipMode) bool {
 	return m&flag == flag
@@ -49,4 +42,13 @@ func FGACrudSkip(flags ...FGASkipMode) FGACrudAnnotation {
 	}
 
 	return FGACrudAnnotation{Skip: skip}
+}
+
+// FGACrudParent returns the FGAParentCrudAnnotation with the parent schemas set
+func FGACrudParent(schemas ...string) FGAParentCrudAnnotation {
+	if len(schemas) == 0 {
+		return FGAParentCrudAnnotation{}
+	}
+
+	return FGAParentCrudAnnotation{ParentSchemas: schemas}
 }

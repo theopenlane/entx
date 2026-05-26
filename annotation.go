@@ -46,6 +46,12 @@ var FileCategoryAnnotationName = "OPENLANE_FILE_CATEGORY"
 // FGACrudAnnotationName is the annotation name for crud operations
 var FGACrudAnnotationName = "OPENLANE_FGA_CRUD_OPERATIONS"
 
+// FGACrudParentAnnotationName is the annotation name for parent objects for crud operations
+var FGACrudParentAnnotationName = "OPENLANE_FGA_PARENT_CRUD_OPERATIONS"
+
+// GroupPermissionsEnabledName is the annotation name for group permissions enabled on the object
+var GroupPermissionsEnabledName = "OPENLANE_GROUP_PERMISSIONS_ENABLED"
+
 // CascadeAnnotation is an annotation used to indicate that an edge should be cascaded
 type CascadeAnnotation struct {
 	Field string
@@ -151,6 +157,23 @@ type FileCategoryAnnotation struct {
 	Category string
 }
 
+// FGACrudAnnotation marks the crud operations that are allowed for the schema to generate crud tuples
+// If this annotation is not added, it uses the default based on annotations and policies on the schema
+type FGACrudAnnotation struct {
+	// Skip mode used for fga crud generation
+	Skip FGASkipMode
+}
+
+// FGAParentCrudAnnotation indicates parent permission inheritance, e.g. organization setting updates can be inherited via
+// permissions to organization
+type FGAParentCrudAnnotation struct {
+	// ParentSchemas are schemas that will also give access to this schema
+	ParentSchemas []string
+}
+
+// GroupPermissionsEnabled marks the schema as having group permissions enabled
+type GroupPermissionsEnabled struct{}
+
 // Name returns the name of the CascadeAnnotation
 func (a CascadeAnnotation) Name() string {
 	return CascadeAnnotationName
@@ -214,6 +237,16 @@ func (a FileCategoryAnnotation) Name() string {
 // Name returns the name of the FGACrudAnnotation
 func (a FGACrudAnnotation) Name() string {
 	return FGACrudAnnotationName
+}
+
+// Name returns the name of the FGAParentCrudAnnotation
+func (a FGAParentCrudAnnotation) Name() string {
+	return FGACrudParentAnnotationName
+}
+
+// Name returns the name of the GroupPermissionsEnabled
+func (a GroupPermissionsEnabled) Name() string {
+	return GroupPermissionsEnabledName
 }
 
 // CascadeAnnotationField sets the field name of the edge containing the ID of a record from the current schema
@@ -532,6 +565,21 @@ func (a *FileCategoryAnnotation) Decode(annotation any) error {
 
 // Decode unmarshals the FGACrudAnnotation.
 func (a *FGACrudAnnotation) Decode(annotation any) error {
+	buf, err := json.Marshal(annotation)
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(buf, a)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Decode unmarshals the FGAParentCrudAnnotation.
+func (a *FGAParentCrudAnnotation) Decode(annotation any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
