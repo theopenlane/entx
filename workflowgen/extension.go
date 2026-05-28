@@ -5,15 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"text/template"
 
-	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc"
 	"entgo.io/ent/entc/gen"
 	"golang.org/x/tools/imports"
-
-	"github.com/theopenlane/entx"
 )
 
 // ExtensionOption is a function that modifies the Extension configuration
@@ -118,7 +114,6 @@ func (e Extension) Hook() gen.Hook {
 
 			ctx := templateContext{
 				Graph:                   g,
-				CreatableNodes:          buildCreatableNodes(g),
 				HooksPackageName:        e.config.HooksPackageName,
 				EnumsPackageName:        e.config.EnumsPackageName,
 				EnumsImportPath:         e.config.EnumsImportPath,
@@ -153,8 +148,6 @@ func (Extension) Templates() []*gen.Template { return nil }
 type templateContext struct {
 	// Graph is the ent code generation graph containing all schema information
 	*gen.Graph
-	// CreatableNodes is the list of nodes with generated CreateInput types
-	CreatableNodes []*gen.Type
 	// HooksPackageName is the package name for generated workflow hooks
 	HooksPackageName string
 	// EnumsPackageName is the package name for generated enum types
@@ -201,12 +194,6 @@ func (e Extension) generateHooks(ctx templateContext) error {
 			filename:  "workflow_domain.go",
 			outputDir: e.config.HooksOutputDir,
 			content:   workflowDomainTemplate,
-		},
-		{
-			name:      "workflow_create_helpers",
-			filename:  "workflow_create_helpers.go",
-			outputDir: e.config.HooksOutputDir,
-			content:   workflowCreateHelpersTemplate,
 		},
 	}
 
@@ -268,55 +255,6 @@ func writeTemplate(outputDir, filename, templateName string, tmpl *template.Temp
 	return nil
 }
 
-func buildCreatableNodes(g *gen.Graph) []*gen.Type {
-	result := make([]*gen.Type, 0, len(g.Nodes))
-	for _, node := range g.Nodes {
-		if checkSkipMutationCreateInput(node) {
-			continue
-		}
-
-		result = append(result, node)
-	}
-
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Name < result[j].Name
-	})
-
-	return result
-}
-
-// checkSkipMutationCreateInput checks if the schema should be skipped for create helper generation.
-// Returns true if no CreateInput type is generated for this schema, which can happen when:
-// 1. The schema has entgql.Skip(entgql.SkipMutationCreateInput) annotation
-// 2. The schema has no MutationInputs configured (no entgql.Mutations() annotation)
-// 3. The schema has MutationInputs but none are configured for create operations
-func checkSkipMutationCreateInput(node *gen.Type) bool {
-	entgqlAnt, ok := entx.GetAnnotation[*entgql.Annotation](node)
-	if !ok {
-		return true
-	}
-
-	// Check if explicitly skipped
-	if entgqlAnt.Skip.Is(entgql.SkipMutationCreateInput) {
-		return true
-	}
-
-	// Check if mutations are configured - if nil, no mutations are generated
-	if entgqlAnt.MutationInputs == nil {
-		return true
-	}
-
-	// Check if any mutation input is configured for create operations
-	for _, mi := range entgqlAnt.MutationInputs {
-		if mi.IsCreate {
-			return false
-		}
-	}
-
-	// No create mutation found
-	return true
-}
-
 const workflowRegistryTemplate = `{{/* Generate workflow object + CEL registry hooks for workflows */}}
 {{/* gotype: entgo.io/ent/entc/gen.Graph */}}
 
@@ -348,88 +286,76 @@ import (
 	{{- end }}
 {{- end }}
 
-func init() {
-	// Register WorkflowObjectRef resolvers for workflow-addressable schemas.
-	{{- range $n := $.Nodes }}
+{{- /* Build edge struct field map from WorkflowObjectRef edges */ -}}
+{{- $refEdgeFields := dict }}
+{{- range $n := $.Nodes }}
 	{{- if eq $n.Name "WorkflowObjectRef" }}
-	wf.RegisterObjectRefResolver(func(ref *generated.WorkflowObjectRef) (*wf.Object, bool) {
 		{{- range $e := $n.Edges }}
-			{{- if $e.Unique }}
-				{{- $targetType := $e.Type.Name }}
-				{{- if hasKey $workflowTypes $targetType }}
-		if ref.{{ $e.StructField }}ID != "" {
-			return &wf.Object{ID: ref.{{ $e.StructField }}ID, Type: enums.WorkflowObjectType{{ $targetType }}}, true
-		}
-				{{- end }}
+			{{- if and $e.Unique (hasKey $workflowTypes $e.Type.Name) }}
+				{{- $_ := set $refEdgeFields $e.Type.Name $e.StructField }}
 			{{- end }}
 		{{- end }}
-		return nil, false
-	})
 	{{- end }}
-	{{- end }}
+{{- end }}
 
-	// Register WorkflowObjectRef query builders so object-based lookups avoid table scans.
-	wf.RegisterObjectRefQueryBuilder(func(query *generated.WorkflowObjectRefQuery, obj *wf.Object) (*generated.WorkflowObjectRefQuery, bool) {
-		if obj == nil {
-			return nil, false
-		}
-
-		switch obj.Type {
-		{{- range $n := $.Nodes }}
-			{{- if hasKey $workflowTypes $n.Name }}
-		case enums.WorkflowObjectType{{ $n.Name }}:
-			return query.Where(workflowobjectref.{{ $n.Name }}IDEQ(obj.ID)), true
-			{{- end }}
-		{{- end }}
-		default:
-			return nil, false
-		}
-	})
-
-	// Register CEL context builders so CEL expressions can work with typed objects.
-	// Objects are converted to map[string]any via JSON to ensure:
-	// - Field names match JSON tags (lowercase)
-	// - Enum types are converted to strings
+func init() {
+	// Register per-object-type capabilities.
 	{{- range $n := $.Nodes }}
-		{{- $hasWorkflowFields := false }}
-		{{- range $f := $n.Fields }}
-			{{- if $f.Annotations.OPENLANE_WORKFLOW_ELIGIBLE }}{{ $hasWorkflowFields = true }}{{ end }}
-		{{- end }}
-		{{- if $hasWorkflowFields }}
-	wf.RegisterCELContextBuilder(func(obj *wf.Object, changedFields []string, changedEdges []string, addedIDs, removedIDs map[string][]string, eventType, userID string, proposedChanges map[string]any) map[string]any {
-		if obj == nil || obj.Node == nil {
-			return nil
-		}
-		entObj, ok := obj.Node.(*generated.{{ $n.Name }})
-		if !ok {
-			return nil
-		}
-		objectMap, err := entObjectToMap(entObj)
-		if err != nil {
-			return nil
-		}
-		return map[string]any{
-			"object":         objectMap,
-			"changed_fields": changedFields,
-			"changed_edges":  changedEdges,
-			"added_ids":      addedIDs,
-			"removed_ids":    removedIDs,
-			"event_type":     eventType,
-			"user_id":        userID,
-			"proposed_changes": proposedChanges,
-		}
+		{{- if hasKey $workflowTypes $n.Name }}
+	wf.RegisterObjectCapability(wf.ObjectCapabilityConfig{
+		ObjectType: enums.WorkflowObjectType{{ $n.Name }},
+		CELContextBuilder: func(input wf.CELContextInput) map[string]any {
+			if input.Object == nil || input.Object.Node == nil {
+				return nil
+			}
+			entObj, ok := input.Object.Node.(*generated.{{ $n.Name }})
+			if !ok {
+				return nil
+			}
+			objectMap, err := entObjectToMap(entObj)
+			if err != nil {
+				return nil
+			}
+			return celVarsFromObject(objectMap, input)
+		},
+			{{- if hasKey $refEdgeFields $n.Name }}
+			{{- $edgeField := index $refEdgeFields $n.Name }}
+		ObjectRefResolver: func(ref *generated.WorkflowObjectRef) (*wf.Object, bool) {
+			if ref.{{ $edgeField }}ID != "" {
+				return &wf.Object{ID: ref.{{ $edgeField }}ID, Type: enums.WorkflowObjectType{{ $n.Name }}}, true
+			}
+			return nil, false
+		},
+			{{- end }}
+		ObjectRefQueryBuilder: func(query *generated.WorkflowObjectRefQuery, obj *wf.Object) (*generated.WorkflowObjectRefQuery, bool) {
+			if obj == nil || obj.Type != enums.WorkflowObjectType{{ $n.Name }} {
+				return nil, false
+			}
+			return query.Where(workflowobjectref.{{ $n.Name }}IDEQ(obj.ID)), true
+		},
 	})
 		{{- end }}
 	{{- end }}
 
-	// Register assignment context builder for workflow runtime state in CEL expressions.
+	// Register cross-cutting capabilities.
 	wf.RegisterAssignmentContextBuilder(buildAssignmentContext)
-
-	// Register observability fields builder for structured logging.
 	wf.RegisterObservabilityFieldsBuilder(buildObservabilityFields)
-
-	// Register eligible fields from the generated workflow domain.
 	wf.RegisterEligibleFields(WorkflowEligibleFields)
+	wf.RegisterEligibleEdges(WorkflowEligibleEdges)
+}
+
+// celVarsFromObject builds the standard CEL variable map from a pre-marshaled object map
+func celVarsFromObject(objectMap map[string]any, input wf.CELContextInput) map[string]any {
+	return map[string]any{
+		"object":           objectMap,
+		"changed_fields":   input.ChangedFields,
+		"changed_edges":    input.ChangedEdges,
+		"added_ids":        input.AddedIDs,
+		"removed_ids":      input.RemovedIDs,
+		"event_type":       input.EventType,
+		"user_id":          input.UserID,
+		"proposed_changes": input.ProposedChanges,
+	}
 }
 
 // buildObservabilityFields returns standard log fields for a workflow object.
@@ -807,123 +733,6 @@ func NewWorkflowDomain(objectType enums.WorkflowObjectType, fields []string) (Wo
 		ObjectType: objectType,
 		Fields:     sorted,
 	}, nil
-}
-
-{{ end }}
-`
-const workflowCreateHelpersTemplate = `{{/* Generate workflow create helpers for CREATE_OBJECT actions */}}
-{{/* gotype: entgo.io/ent/entc/gen.Graph */}}
-
-{{ define "workflow_create_helpers" }}
-// Code generated by ent. DO NOT EDIT.
-// This file is generated to keep workflow create helpers in sync with ent schemas.
-package {{ .HooksPackageName }}
-
-import (
-	"context"
-	"errors"
-	"strings"
-
-	"github.com/go-viper/mapstructure/v2"
-	"{{ .GeneratedImportPath }}"
-)
-
-var (
-	ErrNilClient               = errors.New("ent client is required")
-	ErrCreateObjectTypeInvalid = errors.New("create object type is invalid")
-)
-
-type createObjectEntry struct {
-	create func(ctx context.Context, client *generated.Client, fields map[string]any) error
-}
-
-var creatableSchemaTypes = map[string]createObjectEntry{
-{{- range $n := .CreatableNodes }}
-	NormalizeSchemaType("{{ $n.Name }}"): makeCreateEntry[generated.Create{{ $n.Name }}Input](func(client *generated.Client) *generated.{{ $n.Name }}Create { return client.{{ $n.Name }}.Create() }),
-{{- end }}
-}
-
-// NormalizeSchemaType returns a normalized schema identifier for matching.
-func NormalizeSchemaType(value string) string {
-	if value == "" {
-		return ""
-	}
-
-	normalized := strings.ToLower(value)
-	normalized = strings.ReplaceAll(normalized, "_", "")
-	normalized = strings.ReplaceAll(normalized, "-", "")
-	normalized = strings.ReplaceAll(normalized, " ", "")
-
-	return normalized
-}
-
-// IsCreatableSchemaType reports whether the schema type maps to a creatable ent client.
-func IsCreatableSchemaType(schemaType string) bool {
-	if schemaType == "" {
-		return false
-	}
-
-	_, ok := creatableSchemaTypes[NormalizeSchemaType(schemaType)]
-	return ok
-}
-
-// CreateObject builds and executes a create mutation for the provided schema type.
-func CreateObject(ctx context.Context, client *generated.Client, schemaType string, fields map[string]any) error {
-	if client == nil {
-		return ErrNilClient
-	}
-
-	entry, ok := creatableSchemaTypes[NormalizeSchemaType(schemaType)]
-	if !ok {
-		return ErrCreateObjectTypeInvalid
-	}
-
-	return entry.create(ctx, client, fields)
-}
-
-func makeCreateEntry[I any, B interface {
-	SetInput(I) B
-	Exec(context.Context) error
-}](builder func(client *generated.Client) B) createObjectEntry {
-	return createObjectEntry{
-		create: func(ctx context.Context, client *generated.Client, fields map[string]any) error {
-			input, err := decodeCreateInput[I](fields)
-			if err != nil {
-				return err
-			}
-
-			return builder(client).SetInput(input).Exec(ctx)
-		},
-	}
-}
-
-func decodeCreateInput[I any](fields map[string]any) (I, error) {
-	var input I
-	if len(fields) == 0 {
-		return input, nil
-	}
-
-	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		Result:           &input,
-		WeaklyTypedInput: true,
-		TagName:          "json",
-		MatchName: func(mapKey, fieldName string) bool {
-			return NormalizeSchemaType(mapKey) == NormalizeSchemaType(fieldName)
-		},
-		DecodeHook: mapstructure.ComposeDecodeHookFunc(
-			mapstructure.StringToTimeDurationHookFunc(),
-			mapstructure.TextUnmarshallerHookFunc(),
-		),
-	})
-	if err != nil {
-		return input, err
-	}
-
-	if err := decoder.Decode(fields); err != nil {
-		return input, err
-	}
-
-	return input, nil
 }
 
 {{ end }}

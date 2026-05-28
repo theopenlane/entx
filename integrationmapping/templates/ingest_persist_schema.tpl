@@ -12,16 +12,16 @@ import (
 )
 
 // persist{{ .Schema.Name }}Input upserts one {{ .Schema.Name }} record using the ingest lookup key fields
-func persist{{ .Schema.Name }}Input(ctx context.Context, db *ent.Client, integration *ent.Integration, createInput ent.{{ .Schema.InputTypeName }}) error {
+func persist{{ .Schema.Name }}Input(ctx context.Context, db *ent.Client, integration *ent.Integration, createInput ent.{{ .Schema.InputTypeName }}) (string, error) {
 {{ if .Schema.StockPersist -}}
 {{- range .Schema.LookupFields }}
 {{ if .Required -}}
 	if createInput.{{ .GoField }} == "" {
-		return ErrIngestUpsertKeyMissing
+		return "", ErrIngestUpsertKeyMissing
 	}
 {{- else -}}
 	if createInput.{{ .GoField }} == nil || *createInput.{{ .GoField }} == "" {
-		return ErrIngestUpsertKeyMissing
+		return "", ErrIngestUpsertKeyMissing
 	}
 {{- end }}
 {{ end }}
@@ -44,12 +44,18 @@ func persist{{ .Schema.Name }}Input(ctx context.Context, db *ent.Client, integra
 {{ end -}}
 				Only(ctx)
 		},
-		func(ctx context.Context, input ent.{{ .Schema.InputTypeName }}) error {
-			return db.{{ .Schema.Name }}.Create().SetInput(input).Exec(ctx)
+		func(ctx context.Context, input ent.{{ .Schema.InputTypeName }}) (string, error) {
+			entity, err := db.{{ .Schema.Name }}.Create().SetInput(input).Save(ctx)
+			if err != nil {
+				return "", err
+			}
+
+			return entity.ID, nil
 		},
 		func(ctx context.Context, existing *ent.{{ .Schema.Name }}, input ent.{{ .Schema.UpdateInputTypeName }}) error {
 			return db.{{ .Schema.Name }}.UpdateOneID(existing.ID).SetInput(input).Exec(ctx)
 		},
+		func(existing *ent.{{ .Schema.Name }}) string { return existing.ID },
 	)
 {{ else -}}
 	// Custom persistence logic required for {{ .Schema.Name }}.
