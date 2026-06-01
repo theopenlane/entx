@@ -556,166 +556,106 @@ func (b *CSVRefBuilder) MarshalJSON() ([]byte, error) {
 
 // Decode unmarshalls the CascadeAnnotation
 func (a *CascadeAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation[CascadeAnnotation](annotation)
 }
 
 // Decode unmarshalls the CascadeThroughAnnotation
 func (a *CascadeThroughAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation[CascadeThroughAnnotation](annotation)
 }
 
 // Decode unmarshalls the SchemaGenAnnotation
 func (a *SchemaGenAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation[SchemaGenAnnotation](annotation)
 }
 
 // Decode unmarshals the FileCategoryAnnotation.
 func (a *FileCategoryAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation[FileCategoryAnnotation](annotation)
 }
 
 // Decode unmarshals the FGACrudAnnotation.
 func (a *FGACrudAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	err = json.Unmarshal(buf, a)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return DecodeAnnotation[FGACrudAnnotation](annotation)
 }
 
 // Decode unmarshals the FGAParentCrudAnnotation.
 func (a *FGAParentCrudAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	err = json.Unmarshal(buf, a)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return DecodeAnnotation[FGAParentCrudAnnotation](annotation)
 }
 
 // Decode unmarshalls the QueryGenAnnotation
 func (a *QueryGenAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation[QueryGenAnnotation](annotation)
 }
 
 // Decode unmarshalls the SearchFieldAnnotation
 func (a *SearchFieldAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation[SearchFieldAnnotation](annotation)
 }
 
 // Decode unmarshalls the WorkflowEligibleAnnotation
 func (a *WorkflowEligibleAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation[WorkflowEligibleAnnotation](annotation)
 }
 
 // Decode unmarshalls the WebhookPayloadFieldAnnotation
 func (a *WebhookPayloadFieldAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation[WebhookPayloadFieldAnnotation](annotation)
 }
 
 // Decode unmarshalls the WorkflowObjectConfigAnnotation
 func (a *WorkflowObjectConfigAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation[WorkflowObjectConfigAnnotation](annotation)
 }
 
 // Decode unmarshalls the CSVReferenceAnnotation
 func (a *CSVReferenceAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation[CSVReferenceAnnotation](annotation)
 }
 
 // Decode unmarshalls the IntegrationMappingFieldAnnotation
 func (a *IntegrationMappingFieldAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation[IntegrationMappingFieldAnnotation](annotation)
 }
 
 // Decode unmarshalls the IntegrationMappingSchemaAnnotation
 func (a *IntegrationMappingSchemaAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation[IntegrationMappingSchemaAnnotation](annotation)
 }
 
 // HasAnnotation returns true if the schema has the provided annotation type
 func HasAnnotation[T schema.Annotation](node *gen.Type) bool {
-	var ant T
+	return hasAnnotation[T](node.Annotations)
+}
 
-	_, ok := node.Annotations[ant.Name()]
-
-	return ok
+// HasEdgeAnnotation returns true if the edge schema has the provided annotation type
+func HasEdgeAnnotation[T schema.Annotation](node *gen.Edge) bool {
+	return hasAnnotation[T](node.Annotations)
 }
 
 // GetAnnotation returns the decoded annotation of type T if present on the node.
 // T must be a pointer type, e.g. GetAnnotation[*MyAnnotation](node).
 func GetAnnotation[T DecodableAnnotation](node *gen.Type) (T, bool) {
+	return getAnnotation[T](node.Annotations)
+}
+
+// GetEdgeAnnotation returns the annotation for the edge
+func GetEdgeAnnotation[T DecodableAnnotation](node *gen.Edge) (T, bool) {
+	return getAnnotation[T](node.Annotations)
+}
+
+// hasAnnotation returns true if the provided annotations has the provided annotation type
+func hasAnnotation[T schema.Annotation](ants gen.Annotations) bool {
+	var ant T
+
+	_, ok := ants[ant.Name()]
+
+	return ok
+}
+
+// getAnnotation returns the annotation value if set in the annotations
+func getAnnotation[T DecodableAnnotation](ants gen.Annotations) (T, bool) {
 	var nilT T
 
 	// Allocate so value-receiver methods (like Name) can be called safely on a non-nil pointer
@@ -724,7 +664,7 @@ func GetAnnotation[T DecodableAnnotation](node *gen.Type) (T, bool) {
 		return nilT, false
 	}
 
-	val, ok := node.Annotations[out.Name()]
+	val, ok := ants[out.Name()]
 	if !ok {
 		return nilT, false
 	}
@@ -734,4 +674,15 @@ func GetAnnotation[T DecodableAnnotation](node *gen.Type) (T, bool) {
 	}
 
 	return out, true
+}
+
+func DecodeAnnotation[T any](annotation any) error {
+	var a T
+
+	buf, err := json.Marshal(annotation)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(buf, a)
 }

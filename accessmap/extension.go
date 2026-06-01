@@ -58,6 +58,11 @@ func (a Annotations) Name() string {
 	return EdgeAuthCheckName
 }
 
+// Decode unmarshals the Annotations from a raw annotation value
+func (a *Annotations) Decode(annotation any) error {
+	return entx.DecodeAnnotation[Annotations](annotation)
+}
+
 // Annotations defines the configuration settings for the edge access map annotation
 type Annotations struct {
 	// ObjectType is the type of the object that the edge is associated with and referenced in authz checks
@@ -135,10 +140,8 @@ func (e Extension) Hook() gen.Hook {
 				"singular": pc.Singular,
 				"isSystemOwned": func(e *gen.Edge) bool {
 					objectType := pc.Singular(e.Name)
-					if ann, ok := e.Annotations["EdgeAuthCheck"]; ok {
-						if a, ok := ann.(Annotations); ok && a.ObjectType != "" {
-							objectType = a.ObjectType
-						}
+					if ann, ok := entx.GetEdgeAnnotation[*Annotations](e); ok && ann.ObjectType != "" {
+						objectType = ann.ObjectType
 					}
 
 					return systemOwnedByType[objectType]
