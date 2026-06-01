@@ -1,7 +1,5 @@
 package entx
 
-import "encoding/json"
-
 // Exportable annotation marks a schema as exportable.
 // This annotation can be used to indicate that a schema supports
 // export functionality and should be included in export validation.
@@ -34,33 +32,12 @@ func NewExportable(opts ...ExportableOption) Exportable {
 	return e
 }
 
-// WithOrgOwned is an option for the Exportable annotation
-// that indicates the schema is owned by an organization.
-func WithOrgOwned() ExportableOption {
-	return func(e *Exportable) {
-		e.OrgOwned = true
-	}
-}
-
-// WithSystemOwned is an option for the Exportable annotation
-// that indicates the schema is owned by the system.
-func WithSystemOwned() ExportableOption {
-	return func(e *Exportable) {
-		e.HasSystemOwned = true
-	}
-}
-
 // Name returns the name of the Exportable annotation.
 func (Exportable) Name() string {
 	return "Exportable"
 }
 
 // Decode unmarshalls the Exportable annotation
-func (a *Exportable) Decode(annotation interface{}) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+func (a *Exportable) Decode(annotation any) error {
+	return DecodeAnnotation[Exportable](annotation)
 }
