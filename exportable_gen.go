@@ -163,25 +163,21 @@ type Info struct {
 func (e *ExportableGenerator) findExportableSchemas(graph *gen.Graph) []map[string]Info {
 	var exportableSchemas []map[string]Info
 
-	ant := &Exportable{}
-
-	for _, schema := range graph.Schemas {
-		if raw, ok := schema.Annotations[ant.Name()]; ok {
-			if err := ant.Decode(raw); err == nil {
-				exportableSchemas = append(exportableSchemas, map[string]Info{
-					strcase.UpperSnakeCase(schema.Name): {
-						HasOwnerField:       ant.OrgOwned,
-						HasSystemOwnedField: ant.HasSystemOwned,
-					},
-				})
-			}
+	for _, n := range graph.Nodes {
+		if !HasAnnotation[Exportable](n) {
+			continue
 		}
+
+		exportableSchemas = append(exportableSchemas, map[string]Info{
+			strcase.UpperSnakeCase(n.Name): {
+				HasOwnerField:       HasAnnotation[OrgOwnedSchema](n),
+				HasSystemOwnedField: HasAnnotation[SystemOwnedSchema](n),
+			},
+		})
 	}
 
 	// sort schemas for consistent output by the schema name which is a string comparison
-	exportableSchemas = sortExportableSchemas(exportableSchemas)
-
-	return exportableSchemas
+	return sortExportableSchemas(exportableSchemas)
 }
 
 func sortExportableSchemas(schemas []map[string]Info) []map[string]Info {
