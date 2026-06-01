@@ -12,8 +12,9 @@ import (
 	"github.com/gertd/go-pluralize"
 	"github.com/rs/zerolog/log"
 	"github.com/stoewer/go-strcase"
-	"github.com/theopenlane/entx"
 	"golang.org/x/tools/imports"
+
+	"github.com/theopenlane/entx"
 )
 
 // ExtensionOption is a function that modifies the Extension configuration.
@@ -60,7 +61,7 @@ func (a Annotations) Name() string {
 
 // Decode unmarshals the Annotations from a raw annotation value
 func (a *Annotations) Decode(annotation any) error {
-	return entx.DecodeAnnotation[Annotations](annotation)
+	return entx.DecodeAnnotation(annotation, a)
 }
 
 // Annotations defines the configuration settings for the edge access map annotation

@@ -39,5 +39,5 @@ func (Exportable) Name() string {
 
 // Decode unmarshalls the Exportable annotation
 func (a *Exportable) Decode(annotation any) error {
-	return DecodeAnnotation[Exportable](annotation)
+	return DecodeAnnotation(annotation, a)
 }

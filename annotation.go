@@ -556,72 +556,72 @@ func (b *CSVRefBuilder) MarshalJSON() ([]byte, error) {
 
 // Decode unmarshalls the CascadeAnnotation
 func (a *CascadeAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[CascadeAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the CascadeThroughAnnotation
 func (a *CascadeThroughAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[CascadeThroughAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the SchemaGenAnnotation
 func (a *SchemaGenAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[SchemaGenAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshals the FileCategoryAnnotation.
 func (a *FileCategoryAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[FileCategoryAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshals the FGACrudAnnotation.
 func (a *FGACrudAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[FGACrudAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshals the FGAParentCrudAnnotation.
 func (a *FGAParentCrudAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[FGAParentCrudAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the QueryGenAnnotation
 func (a *QueryGenAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[QueryGenAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the SearchFieldAnnotation
 func (a *SearchFieldAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[SearchFieldAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the WorkflowEligibleAnnotation
 func (a *WorkflowEligibleAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[WorkflowEligibleAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the WebhookPayloadFieldAnnotation
 func (a *WebhookPayloadFieldAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[WebhookPayloadFieldAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the WorkflowObjectConfigAnnotation
 func (a *WorkflowObjectConfigAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[WorkflowObjectConfigAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the CSVReferenceAnnotation
 func (a *CSVReferenceAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[CSVReferenceAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the IntegrationMappingFieldAnnotation
 func (a *IntegrationMappingFieldAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[IntegrationMappingFieldAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the IntegrationMappingSchemaAnnotation
 func (a *IntegrationMappingSchemaAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation[IntegrationMappingSchemaAnnotation](annotation)
+	return DecodeAnnotation(annotation, a)
 }
 
 // HasAnnotation returns true if the schema has the provided annotation type
@@ -676,13 +676,13 @@ func getAnnotation[T DecodableAnnotation](ants gen.Annotations) (T, bool) {
 	return out, true
 }
 
-func DecodeAnnotation[T any](annotation any) error {
-	var a T
-
+// DecodeAnnotation is a common wrapper to decode an annotation with
+// json marshal and unmarshal into the target
+func DecodeAnnotation(annotation any, target any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
 	}
 
-	return json.Unmarshal(buf, a)
+	return json.Unmarshal(buf, target)
 }
