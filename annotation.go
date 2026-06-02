@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"entgo.io/ent/entc/gen"
+	"entgo.io/ent/entc/load"
 	"entgo.io/ent/schema"
 )
 
@@ -624,25 +625,38 @@ func (a *IntegrationMappingSchemaAnnotation) Decode(annotation any) error {
 	return DecodeAnnotation(annotation, a)
 }
 
-// HasAnnotation returns true if the schema has the provided annotation type
-func HasAnnotation[T schema.Annotation](node *gen.Type) bool {
-	return hasAnnotation[T](node.Annotations)
+// DecodeAnnotation is a common wrapper to decode an annotation with
+// json marshal and unmarshal into the target
+func DecodeAnnotation(annotation any, target any) error {
+	buf, err := json.Marshal(annotation)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(buf, target)
 }
 
-// HasEdgeAnnotation returns true if the edge schema has the provided annotation type
-func HasEdgeAnnotation[T schema.Annotation](node *gen.Edge) bool {
-	return hasAnnotation[T](node.Annotations)
+// HasAnnotation returns true if the type has the provided annotation type
+func HasAnnotation[T schema.Annotation, K any](t K) bool {
+	annotations := getAnnotationForType(t)
+	if annotations == nil {
+		return false
+	}
+
+	return hasAnnotation[T](annotations)
 }
 
 // GetAnnotation returns the decoded annotation of type T if present on the node.
 // T must be a pointer type, e.g. GetAnnotation[*MyAnnotation](node).
-func GetAnnotation[T DecodableAnnotation](node *gen.Type) (T, bool) {
-	return getAnnotation[T](node.Annotations)
-}
+func GetAnnotation[T DecodableAnnotation, K any](t K) (T, bool) {
+	var nilT T
 
-// GetEdgeAnnotation returns the annotation for the edge
-func GetEdgeAnnotation[T DecodableAnnotation](node *gen.Edge) (T, bool) {
-	return getAnnotation[T](node.Annotations)
+	annotations := getAnnotationForType(t)
+	if annotations == nil {
+		return nilT, false
+	}
+
+	return getAnnotation[T](annotations)
 }
 
 // hasAnnotation returns true if the provided annotations has the provided annotation type
@@ -676,13 +690,21 @@ func getAnnotation[T DecodableAnnotation](ants gen.Annotations) (T, bool) {
 	return out, true
 }
 
-// DecodeAnnotation is a common wrapper to decode an annotation with
-// json marshal and unmarshal into the target
-func DecodeAnnotation(annotation any, target any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
+func getAnnotationForType[K any](t K) map[string]any {
+	switch v := any(t).(type) {
+	case *load.Schema:
+		return v.Annotations
+	case *load.Field:
+		return v.Annotations
+	case *load.Edge:
+		return v.Annotations
+	case *gen.Type:
+		return v.Annotations
+	case *gen.Field:
+		return v.Annotations
+	case *gen.Edge:
+		return v.Annotations
 	}
 
-	return json.Unmarshal(buf, target)
+	return nil
 }

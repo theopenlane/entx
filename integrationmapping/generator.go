@@ -502,32 +502,22 @@ func integrationFieldForEntField(entField string) (string, error) {
 
 // getFieldAnnotation retrieves the IntegrationMappingFieldAnnotation from a field
 func getFieldAnnotation(field *load.Field) *entx.IntegrationMappingFieldAnnotation {
-	ant := &entx.IntegrationMappingFieldAnnotation{}
-
-	if raw, ok := field.Annotations[ant.Name()]; ok {
-		if err := ant.Decode(raw); err != nil {
-			return nil
-		}
-
-		return ant
+	ant, ok := entx.GetAnnotation[*entx.IntegrationMappingFieldAnnotation](field)
+	if !ok {
+		return nil
 	}
 
-	return nil
+	return ant
 }
 
 // getSchemaAnnotation retrieves the IntegrationMappingSchemaAnnotation from a schema
 func getSchemaAnnotation(schema *load.Schema) *entx.IntegrationMappingSchemaAnnotation {
-	ant := &entx.IntegrationMappingSchemaAnnotation{}
-
-	if raw, ok := schema.Annotations[ant.Name()]; ok {
-		if err := ant.Decode(raw); err != nil {
-			return nil
-		}
-
-		return ant
+	ant, ok := entx.GetAnnotation[*entx.IntegrationMappingSchemaAnnotation](schema)
+	if !ok {
+		return nil
 	}
 
-	return nil
+	return ant
 }
 
 // isFieldMappingEligible checks if a field is eligible for integration mapping
@@ -549,32 +539,30 @@ func isFieldMappingEligible(field *load.Field) bool {
 
 // entSkipType checks if the field has entgql.SkipType or SkipAll
 func entSkipType(field *load.Field) bool {
-	entAnt := &entgql.Annotation{}
-
-	if ant, ok := field.Annotations[entAnt.Name()]; ok {
-		if err := entAnt.Decode(ant); err == nil {
-			switch {
-			case entAnt.Skip.Is(entgql.SkipType):
-				return true
-			case entAnt.Skip.Is(entgql.SkipAll):
-				return true
-			}
-		}
+	entAnt, ok := entx.GetAnnotation[*entgql.Annotation](field)
+	if !ok {
+		return false
 	}
 
-	return false
+	switch {
+	case entAnt.Skip.Is(entgql.SkipType):
+		return true
+	case entAnt.Skip.Is(entgql.SkipAll):
+		return true
+	default:
+		return false
+	}
 }
 
 // entSkipMutationInputs checks if the field is skipped from both create and update inputs
 func entSkipMutationInputs(field *load.Field) bool {
-	entAnt := &entgql.Annotation{}
+	entAnt, ok := entx.GetAnnotation[*entgql.Annotation](field)
+	if !ok {
+		return false
+	}
 
-	if ant, ok := field.Annotations[entAnt.Name()]; ok {
-		if err := entAnt.Decode(ant); err == nil {
-			if entAnt.Skip.Is(entgql.SkipMutationCreateInput) && entAnt.Skip.Is(entgql.SkipMutationUpdateInput) {
-				return true
-			}
-		}
+	if entAnt.Skip.Is(entgql.SkipMutationCreateInput) && entAnt.Skip.Is(entgql.SkipMutationUpdateInput) {
+		return true
 	}
 
 	return false
@@ -600,78 +588,46 @@ func getEntSchema(graph *gen.Graph, name string) *load.Schema {
 
 // checkSchemaGenSkip checks if the type has the Schema Skip annotation
 func checkSchemaGenSkip(node *gen.Type) bool {
-	schemaGenAnt := &entx.SchemaGenAnnotation{}
-
-	if ant, ok := node.Annotations[schemaGenAnt.Name()]; ok {
-		if err := schemaGenAnt.Decode(ant); err != nil {
-			return false
-		}
-
-		return schemaGenAnt.Skip
+	schemaGenAnt, ok := entx.GetAnnotation[*entx.SchemaGenAnnotation](node)
+	if !ok {
+		return false
 	}
 
-	return false
+	return schemaGenAnt.Skip
 }
 
 // checkQueryGenSkip checks if the type has the QueryGen Skip annotation
 func checkQueryGenSkip(node *gen.Type) bool {
-	queryGenAnt := &entx.QueryGenAnnotation{}
-
-	if ant, ok := node.Annotations[queryGenAnt.Name()]; ok {
-		if err := queryGenAnt.Decode(ant); err != nil {
-			return false
-		}
-
-		return queryGenAnt.Skip
+	queryGenAnt, ok := entx.GetAnnotation[*entx.QueryGenAnnotation](node)
+	if !ok {
+		return false
 	}
 
-	return false
+	return queryGenAnt.Skip
 }
 
 // checkSkipMutationCreateInput returns true if no CreateInput type is generated for this schema
 func checkSkipMutationCreateInput(node *gen.Type) bool {
-	entgqlAnt := &entgql.Annotation{}
-
-	ant, ok := node.Annotations[entgqlAnt.Name()]
-	if !ok {
-		return true
-	}
-
-	if err := entgqlAnt.Decode(ant); err != nil {
-		return true
-	}
-
-	if entgqlAnt.Skip.Is(entgql.SkipMutationCreateInput) {
-		return true
-	}
-
-	if entgqlAnt.MutationInputs == nil {
-		return true
-	}
-
-	for _, mi := range entgqlAnt.MutationInputs {
-		if mi.IsCreate {
-			return false
-		}
-	}
-
-	return true
+	return checkSkipMutation(node, false, true)
 }
 
 // checkSkipMutationUpdateInput returns true if no UpdateInput type is generated for this schema
 func checkSkipMutationUpdateInput(node *gen.Type) bool {
-	entgqlAnt := &entgql.Annotation{}
+	return checkSkipMutation(node, true, false)
+}
 
-	ant, ok := node.Annotations[entgqlAnt.Name()]
+// checkSkipMutation is an internal helper to do update or check skip checks
+func checkSkipMutation(node *gen.Type, checkUpdate, checkCreate bool) bool {
+	entgqlAnt, ok := entx.GetAnnotation[*entgql.Annotation](node)
 	if !ok {
+		return false
+	}
+
+	if checkCreate && entgqlAnt.Skip.Is(entgql.SkipMutationCreateInput) {
 		return true
 	}
 
-	if err := entgqlAnt.Decode(ant); err != nil {
-		return true
-	}
-
-	if entgqlAnt.Skip.Is(entgql.SkipMutationUpdateInput) {
+	if checkUpdate && entgqlAnt.Skip.Is(entgql.SkipMutationUpdateInput) {
 		return true
 	}
 
@@ -680,7 +636,9 @@ func checkSkipMutationUpdateInput(node *gen.Type) bool {
 	}
 
 	for _, mi := range entgqlAnt.MutationInputs {
-		if !mi.IsCreate {
+		if checkCreate && mi.IsCreate {
+			return false
+		} else if checkUpdate && !mi.IsCreate {
 			return false
 		}
 	}

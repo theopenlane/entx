@@ -266,17 +266,12 @@ func createSearchQueryTemplate() *template.Template {
 
 // includeSchemaForSearch checks if the type has the Schema Searchable annotation
 func includeSchemaForSearch(node *gen.Type) bool {
-	schemaGenAnt := &entx.SchemaGenAnnotation{}
-
-	if ant, ok := node.Annotations[schemaGenAnt.Name()]; ok {
-		if err := schemaGenAnt.Decode(ant); err != nil {
-			return false
-		}
-
-		return !schemaGenAnt.SkipSearch
+	schemaGenAnt, ok := entx.GetAnnotation[*entx.SchemaGenAnnotation](node)
+	if !ok {
+		return true // not skipped
 	}
 
-	return true
+	return !schemaGenAnt.SkipSearch
 }
 
 // GetSearchableFields returns a list of searchable fields for a schema based on the search annotation
@@ -321,16 +316,12 @@ func GetSearchableFields(schemaName string, graph *gen.Graph) (fields []Field, a
 }
 
 func getSearchAnnotation(field *load.Field) *entx.SearchFieldAnnotation {
-	searchAnt := &entx.SearchFieldAnnotation{}
-	if ant, ok := field.Annotations[searchAnt.Name()]; ok {
-		if err := searchAnt.Decode(ant); err != nil {
-			return nil
-		}
-
-		return searchAnt
+	searchAnt, ok := entx.GetAnnotation[*entx.SearchFieldAnnotation](field)
+	if !ok {
+		return nil
 	}
 
-	return nil
+	return searchAnt
 }
 
 // isFieldSearchable checks if the field has the SearchField annotation
@@ -410,19 +401,19 @@ func entSkip(field *load.Field) bool {
 		return true
 	}
 
-	entAnt := &entgql.Annotation{}
-	if ant, ok := field.Annotations[entAnt.Name()]; ok {
-		if err := entAnt.Decode(ant); err == nil {
-			switch {
-			case entAnt.Skip.Is(entgql.SkipType):
-				return true
-			case entAnt.Skip.Is(entgql.SkipWhereInput):
-				return true
-			}
-		}
+	entAnt, ok := entx.GetAnnotation[*entgql.Annotation](field)
+	if !ok {
+		return false
 	}
 
-	return false
+	switch {
+	case entAnt.Skip.Is(entgql.SkipType):
+		return true
+	case entAnt.Skip.Is(entgql.SkipWhereInput):
+		return true
+	default:
+		return false
+	}
 }
 
 // isFieldTypeExcluded checks if the field type should be excluded from being searchable

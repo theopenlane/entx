@@ -251,15 +251,9 @@ func getCSVInputData(g *gen.Graph, c *CSVConfig) CSVSchemaData {
 // 2. The schema has no MutationInputs configured (no entgql.Mutations() annotation)
 // 3. The schema has MutationInputs but none are configured for create operations
 func checkSkipMutationCreateInput(node *gen.Type) bool {
-	entgqlAnt := &entgql.Annotation{}
-
-	ant, ok := node.Annotations[entgqlAnt.Name()]
+	entgqlAnt, ok := entx.GetAnnotation[*entgql.Annotation](node)
 	if !ok {
 		// No entgql annotation means no mutations configured
-		return true
-	}
-
-	if err := entgqlAnt.Decode(ant); err != nil {
 		return true
 	}
 
@@ -290,15 +284,9 @@ func checkSkipMutationCreateInput(node *gen.Type) bool {
 // 2. The schema has no MutationInputs configured (no entgql.Mutations() annotation)
 // 3. The schema has MutationInputs but none are configured for update operations
 func checkSkipMutationUpdateInput(node *gen.Type) bool {
-	entgqlAnt := &entgql.Annotation{}
-
-	ant, ok := node.Annotations[entgqlAnt.Name()]
+	entgqlAnt, ok := entx.GetAnnotation[*entgql.Annotation](node)
 	if !ok {
 		// No entgql annotation means no mutations configured
-		return true
-	}
-
-	if err := entgqlAnt.Decode(ant); err != nil {
 		return true
 	}
 
@@ -453,30 +441,22 @@ func getCSVReferenceFieldsFromEdges(schema *load.Schema) []CSVReferenceField {
 
 // getCSVReferenceAnnotation retrieves the CSV reference annotation from a field
 func getCSVReferenceAnnotation(field *load.Field) *entx.CSVReferenceAnnotation {
-	ann := &entx.CSVReferenceAnnotation{}
-	if a, ok := field.Annotations[ann.Name()]; ok {
-		if err := ann.Decode(a); err != nil {
-			return nil
-		}
-
-		return ann
+	ann, ok := entx.GetAnnotation[*entx.CSVReferenceAnnotation](field)
+	if !ok {
+		return nil
 	}
 
-	return nil
+	return ann
 }
 
 // getCSVReferenceAnnotationFromEdge retrieves the CSV reference annotation from an edge
 func getCSVReferenceAnnotationFromEdge(edge *load.Edge) *entx.CSVReferenceAnnotation {
-	ann := &entx.CSVReferenceAnnotation{}
-	if a, ok := edge.Annotations[ann.Name()]; ok {
-		if err := ann.Decode(a); err != nil {
-			return nil
-		}
-
-		return ann
+	ann, ok := entx.GetAnnotation[*entx.CSVReferenceAnnotation](edge)
+	if !ok {
+		return nil
 	}
 
-	return nil
+	return ann
 }
 
 // generateCSVHelperFile creates the CSV helper Go file

@@ -380,16 +380,13 @@ func GetFirstWord(name string) string {
 
 // checkEntqlMutation checks if the type has the entgql.Mutation annotation
 func checkEntqlMutation(node *gen.Type) bool {
-	entqlAnt := &entgql.Annotation{}
+	entgqlAnt, ok := entx.GetAnnotation[*entgql.Annotation](node)
+	if !ok {
+		return false
+	}
 
-	if ant, ok := node.Annotations[entqlAnt.Name()]; ok {
-		if err := entqlAnt.Decode(ant); err != nil {
-			return false
-		}
-
-		if entqlAnt.MutationInputs != nil {
-			return true
-		}
+	if entgqlAnt.MutationInputs != nil {
+		return true
 	}
 
 	return false
@@ -397,34 +394,24 @@ func checkEntqlMutation(node *gen.Type) bool {
 
 // checkQueryGenSkip checks if the type has the QueryGen Skip annotation
 func checkQueryGenSkip(node *gen.Type) bool {
-	queryGenAnt := &entx.QueryGenAnnotation{}
-
-	if ant, ok := node.Annotations[queryGenAnt.Name()]; ok {
-		if err := queryGenAnt.Decode(ant); err != nil {
-			return false
-		}
-
-		return queryGenAnt.Skip
+	queryGenAnt, ok := entx.GetAnnotation[*entx.QueryGenAnnotation](node)
+	if !ok {
+		return false
 	}
 
-	return false
+	return queryGenAnt.Skip
 }
 
 // checkEntGqlSkip checks if the field has the entgql.Skip annotation
 // and returns true if it is set to SkipType
 func checkEntGqlSkip(f *gen.Field) bool {
-	entqlAnt := &entgql.Annotation{}
-
-	if ant, ok := f.Annotations[entqlAnt.Name()]; ok {
-		if err := entqlAnt.Decode(ant); err != nil {
-			return false
-		}
-
-		if entqlAnt.Skip.Is(entgql.SkipType) {
-			return true
-		}
-
+	entgqlAnt, ok := entx.GetAnnotation[*entgql.Annotation](f)
+	if !ok {
 		return false
+	}
+
+	if entgqlAnt.Skip.Is(entgql.SkipType) {
+		return true
 	}
 
 	return false

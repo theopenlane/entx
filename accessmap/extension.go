@@ -141,7 +141,7 @@ func (e Extension) Hook() gen.Hook {
 				"singular": pc.Singular,
 				"isSystemOwned": func(e *gen.Edge) bool {
 					objectType := pc.Singular(e.Name)
-					if ann, ok := entx.GetEdgeAnnotation[*Annotations](e); ok && ann.ObjectType != "" {
+					if ann, ok := entx.GetAnnotation[*Annotations](e); ok && ann.ObjectType != "" {
 						objectType = ann.ObjectType
 					}
 

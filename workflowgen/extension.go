@@ -12,6 +12,8 @@ import (
 	"entgo.io/ent/entc"
 	"entgo.io/ent/entc/gen"
 	"golang.org/x/tools/imports"
+
+	"github.com/theopenlane/entx"
 )
 
 // ExtensionOption is a function that modifies the Extension configuration
@@ -289,15 +291,8 @@ func buildCreatableNodes(g *gen.Graph) []*gen.Type {
 // 2. The schema has no MutationInputs configured (no entgql.Mutations() annotation)
 // 3. The schema has MutationInputs but none are configured for create operations
 func checkSkipMutationCreateInput(node *gen.Type) bool {
-	entgqlAnt := &entgql.Annotation{}
-
-	ant, ok := node.Annotations[entgqlAnt.Name()]
+	entgqlAnt, ok := entx.GetAnnotation[*entgql.Annotation](node)
 	if !ok {
-		// No entgql annotation means no mutations configured
-		return true
-	}
-
-	if err := entgqlAnt.Decode(ant); err != nil {
 		return true
 	}
 
