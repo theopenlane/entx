@@ -5,9 +5,10 @@ import (
 
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
-	"entgo.io/ent/entc/load"
 	"github.com/stoewer/go-strcase"
 	"github.com/vektah/gqlparser/v2/ast"
+
+	"github.com/theopenlane/entx"
 )
 
 // WithStringSliceWhereOps is a schema hook that adds "Has" filter operations for fields of type []string in the generated GraphQL where input types. For example, if a node has a field "Tags" of type []string, this hook will add a "TagsHas" field to the corresponding where input type, allowing users to filter based on whether the "Tags" field contains a specific value.
@@ -53,32 +54,19 @@ func WithStringSliceWhereOps() entgql.SchemaHook {
 
 // entSkipWhere checks if the field has entgql.SkipWhereInput, entgql.SkipType which indicate that the field should be skipped when generating where input filter types
 func entSkipWhere[T any](t T) bool {
-	entAnt := &entgql.Annotation{}
-	annotations := map[string]any{}
-
-	switch v := any(t).(type) {
-	case *load.Schema:
-		annotations = v.Annotations
-	case *load.Field:
-		annotations = v.Annotations
-	case *gen.Type:
-		annotations = v.Annotations
-	case *gen.Field:
-		annotations = v.Annotations
+	entAnt, ok := entx.GetAnnotation[*entgql.Annotation](t)
+	if !ok {
+		return false
 	}
 
-	if ant, ok := annotations[entAnt.Name()]; ok {
-		if err := entAnt.Decode(ant); err == nil {
-			switch {
-			case entAnt.Skip.Is(entgql.SkipWhereInput):
-				return true
-			case entAnt.Skip.Is(entgql.SkipType):
-				return true
-			}
-		}
+	switch {
+	case entAnt.Skip.Is(entgql.SkipWhereInput):
+		return true
+	case entAnt.Skip.Is(entgql.SkipType):
+		return true
+	default:
+		return false
 	}
-
-	return false
 }
 
 // addInputField adds a new field to the input definition if it doesn't already exist

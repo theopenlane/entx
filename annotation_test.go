@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"entgo.io/ent/entc/gen"
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +47,6 @@ func TestExportableAnnotation(t *testing.T) {
 
 	assert.Equal(t, ea.Name(), "Exportable")
 
-	// Test Decode method with empty annotation (since Exportable has no fields)
 	err := ea.Decode(map[string]any{})
 	assert.NoError(t, err)
 }
@@ -174,4 +174,85 @@ func TestCSVReferenceAnnotationDecode(t *testing.T) {
 	assert.Equal(t, "UserEmail", decoded.CSVColumn)
 	assert.Equal(t, "User", decoded.TargetEntity)
 	assert.True(t, decoded.CreateIfMissing)
+}
+
+func TestGetAnnotation(t *testing.T) {
+	ant := SchemaGenAnnotation{}
+
+	tests := []struct {
+		name        string
+		node        *gen.Type
+		expectedOk  bool
+		expectedVal *SchemaGenAnnotation
+	}{
+		{
+			name: "annotation exists as pointer",
+			node: &gen.Type{
+				Annotations: map[string]interface{}{
+					ant.Name(): &SchemaGenAnnotation{Skip: true, SkipSearch: true},
+				},
+			},
+			expectedOk:  true,
+			expectedVal: &SchemaGenAnnotation{Skip: true, SkipSearch: true},
+		},
+		{
+			name: "annotation missing",
+			node: &gen.Type{
+				Annotations: map[string]interface{}{},
+			},
+			expectedOk:  false,
+			expectedVal: nil,
+		},
+		{
+			name: "annotation stored as value, not pointer",
+			node: &gen.Type{
+				Annotations: map[string]interface{}{
+					ant.Name(): SchemaGenAnnotation{Skip: true},
+				},
+			},
+			expectedOk:  true,
+			expectedVal: &SchemaGenAnnotation{Skip: true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			val, ok := GetAnnotation[*SchemaGenAnnotation](tt.node)
+			assert.Equal(t, tt.expectedOk, ok)
+			assert.Equal(t, tt.expectedVal, val)
+		})
+	}
+}
+
+func TestHasAnnotation(t *testing.T) {
+	ant := OrgOwnedSchema{}
+
+	tests := []struct {
+		name     string
+		node     *gen.Type
+		expected bool
+	}{
+		{
+			name: "has annotation",
+			node: &gen.Type{
+				Annotations: map[string]interface{}{
+					ant.Name(): &OrgOwnedSchema{},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "missing annotation",
+			node: &gen.Type{
+				Annotations: map[string]interface{}{},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, HasAnnotation[OrgOwnedSchema](tt.node))
+		})
+	}
 }

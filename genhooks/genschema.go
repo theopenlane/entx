@@ -60,17 +60,12 @@ func GenSchema(graphSchemaDir string) gen.Hook {
 
 // checkSchemaGenSkip checks if the type has the Schema Skip annotation
 func checkSchemaGenSkip(node *gen.Type) bool {
-	schemaGenAnt := &entx.SchemaGenAnnotation{}
-
-	if ant, ok := node.Annotations[schemaGenAnt.Name()]; ok {
-		if err := schemaGenAnt.Decode(ant); err != nil {
-			return false
-		}
-
-		return schemaGenAnt.Skip
+	ant, ok := entx.GetAnnotation[*entx.SchemaGenAnnotation](node)
+	if !ok {
+		return false
 	}
 
-	return false
+	return ant.Skip
 }
 
 // createTemplate creates a new template for generating graphql schemas

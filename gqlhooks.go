@@ -14,6 +14,7 @@ var (
 			Description: "A valid JSON string.",
 			Name:        "JSON",
 		}
+
 		return nil
 	}
 )

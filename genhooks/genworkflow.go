@@ -54,16 +54,12 @@ func GetWorkflowEligibleFields(schemaName string, graph *gen.Graph) []WorkflowFi
 
 // getWorkflowEligibleAnnotation retrieves the WorkflowEligible annotation from a field
 func getWorkflowEligibleAnnotation(field *load.Field) *entx.WorkflowEligibleAnnotation {
-	workflowAnt := &entx.WorkflowEligibleAnnotation{}
-	if ant, ok := field.Annotations[workflowAnt.Name()]; ok {
-		if err := workflowAnt.Decode(ant); err != nil {
-			return nil
-		}
-
-		return workflowAnt
+	workflowAnt, ok := entx.GetAnnotation[*entx.WorkflowEligibleAnnotation](field)
+	if !ok {
+		return nil
 	}
 
-	return nil
+	return workflowAnt
 }
 
 // isFieldWorkflowEligible checks if the field has the WorkflowEligible annotation set to true

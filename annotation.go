@@ -2,7 +2,17 @@ package entx
 
 import (
 	"encoding/json"
+
+	"entgo.io/ent/entc/gen"
+	"entgo.io/ent/entc/load"
+	"entgo.io/ent/schema"
 )
+
+// DecodableAnnotation is an annotation that can decode itself from a raw value
+type DecodableAnnotation interface {
+	schema.Annotation
+	Decode(annotation any) error
+}
 
 // CascadeAnnotationName is a name for our cascading delete annotation
 var CascadeAnnotationName = "OPENLANE_CASCADE"
@@ -51,6 +61,12 @@ var FGACrudParentAnnotationName = "OPENLANE_FGA_PARENT_CRUD_OPERATIONS"
 
 // GroupPermissionsEnabledName is the annotation name for group permissions enabled on the object
 var GroupPermissionsEnabledName = "OPENLANE_GROUP_PERMISSIONS_ENABLED"
+
+// OrgOwnedSchemaName is the annotation name for org owned schemas
+var OrgOwnedSchemaName = "OPENLANE_ORG_OWNED_SCHEMA"
+
+// SystemOwnedSchemaName is the annotation name for org owned schemas
+var SystemOwnedSchemaName = "OPENLANE_SYSTEM_OWNED_SCHEMA"
 
 // CascadeAnnotation is an annotation used to indicate that an edge should be cascaded
 type CascadeAnnotation struct {
@@ -174,6 +190,12 @@ type FGAParentCrudAnnotation struct {
 // GroupPermissionsEnabled marks the schema as having group permissions enabled
 type GroupPermissionsEnabled struct{}
 
+// OrgOwnedSchema marks the schema as being org owned
+type OrgOwnedSchema struct{}
+
+// SystemOwnedSchema marks the schema as being able to have system owned objects
+type SystemOwnedSchema struct{}
+
 // Name returns the name of the CascadeAnnotation
 func (a CascadeAnnotation) Name() string {
 	return CascadeAnnotationName
@@ -247,6 +269,16 @@ func (a FGAParentCrudAnnotation) Name() string {
 // Name returns the name of the GroupPermissionsEnabled
 func (a GroupPermissionsEnabled) Name() string {
 	return GroupPermissionsEnabledName
+}
+
+// Name returns the name of the OrgOwnedSchema
+func (a OrgOwnedSchema) Name() string {
+	return OrgOwnedSchemaName
+}
+
+// Name returns the name of the SystemOwnedSchema
+func (a SystemOwnedSchema) Name() string {
+	return SystemOwnedSchemaName
 }
 
 // CascadeAnnotationField sets the field name of the edge containing the ID of a record from the current schema
@@ -365,12 +397,12 @@ func (b *IntegrationMappingSchemaBuilder) StockPersist() *IntegrationMappingSche
 	return b
 }
 
-// Name returns the annotation name, implementing the ent Annotation interface.
+// Name returns the annotation name, implementing the ent Annotation interface
 func (b *IntegrationMappingFieldBuilder) Name() string {
 	return b.annotation.Name()
 }
 
-// Name returns the annotation name, implementing the ent Annotation interface.
+// Name returns the annotation name, implementing the ent Annotation interface
 func (b *IntegrationMappingSchemaBuilder) Name() string {
 	return b.annotation.Name()
 }
@@ -512,7 +544,7 @@ func (b *CSVRefBuilder) CreateIfMissing() *CSVRefBuilder {
 	return b
 }
 
-// Name returns the annotation name, implementing the ent Annotation interface.
+// Name returns the annotation name, implementing the ent Annotation interface
 func (b *CSVRefBuilder) Name() string {
 	return b.annotation.Name()
 }
@@ -525,150 +557,154 @@ func (b *CSVRefBuilder) MarshalJSON() ([]byte, error) {
 
 // Decode unmarshalls the CascadeAnnotation
 func (a *CascadeAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the CascadeThroughAnnotation
 func (a *CascadeThroughAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the SchemaGenAnnotation
 func (a *SchemaGenAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshals the FileCategoryAnnotation.
 func (a *FileCategoryAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshals the FGACrudAnnotation.
 func (a *FGACrudAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	err = json.Unmarshal(buf, a)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshals the FGAParentCrudAnnotation.
 func (a *FGAParentCrudAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	err = json.Unmarshal(buf, a)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the QueryGenAnnotation
 func (a *QueryGenAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the SearchFieldAnnotation
 func (a *SearchFieldAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the WorkflowEligibleAnnotation
 func (a *WorkflowEligibleAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the WebhookPayloadFieldAnnotation
 func (a *WebhookPayloadFieldAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the WorkflowObjectConfigAnnotation
 func (a *WorkflowObjectConfigAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the CSVReferenceAnnotation
 func (a *CSVReferenceAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the IntegrationMappingFieldAnnotation
 func (a *IntegrationMappingFieldAnnotation) Decode(annotation any) error {
-	buf, err := json.Marshal(annotation)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(buf, a)
+	return DecodeAnnotation(annotation, a)
 }
 
 // Decode unmarshalls the IntegrationMappingSchemaAnnotation
 func (a *IntegrationMappingSchemaAnnotation) Decode(annotation any) error {
+	return DecodeAnnotation(annotation, a)
+}
+
+// DecodeAnnotation is a common wrapper to decode an annotation with
+// json marshal and unmarshal into the target
+func DecodeAnnotation(annotation any, target any) error {
 	buf, err := json.Marshal(annotation)
 	if err != nil {
 		return err
 	}
 
-	return json.Unmarshal(buf, a)
+	return json.Unmarshal(buf, target)
+}
+
+// HasAnnotation returns true if the type has the provided annotation type
+func HasAnnotation[T schema.Annotation, K any](t K) bool {
+	annotations := getAnnotationForType(t)
+	if annotations == nil {
+		return false
+	}
+
+	return hasAnnotation[T](annotations)
+}
+
+// GetAnnotation returns the decoded annotation of type T if present on the node.
+// T must be a pointer type, e.g. GetAnnotation[*MyAnnotation](node).
+func GetAnnotation[T DecodableAnnotation, K any](t K) (T, bool) {
+	var nilT T
+
+	annotations := getAnnotationForType(t)
+	if annotations == nil {
+		return nilT, false
+	}
+
+	return getAnnotation[T](annotations)
+}
+
+// hasAnnotation returns true if the provided annotations has the provided annotation type
+func hasAnnotation[T schema.Annotation](ants gen.Annotations) bool {
+	var ant T
+
+	_, ok := ants[ant.Name()]
+
+	return ok
+}
+
+// getAnnotation returns the annotation value if set in the annotations
+func getAnnotation[T DecodableAnnotation](ants gen.Annotations) (T, bool) {
+	var nilT T
+
+	// Allocate so value-receiver methods (like Name) can be called safely on a non-nil pointer
+	var out T
+	if err := json.Unmarshal([]byte("{}"), &out); err != nil {
+		return nilT, false
+	}
+
+	val, ok := ants[out.Name()]
+	if !ok {
+		return nilT, false
+	}
+
+	if err := out.Decode(val); err != nil {
+		return nilT, false
+	}
+
+	return out, true
+}
+
+func getAnnotationForType[K any](t K) map[string]any {
+	switch v := any(t).(type) {
+	case *load.Schema:
+		return v.Annotations
+	case *load.Field:
+		return v.Annotations
+	case *load.Edge:
+		return v.Annotations
+	case *gen.Type:
+		return v.Annotations
+	case *gen.Field:
+		return v.Annotations
+	case *gen.Edge:
+		return v.Annotations
+	}
+
+	return nil
 }
