@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"{{ .EntPackage }}"
-	"{{ .GalaPackage }}"
 	"{{ .JsonxPackage }}"
 {{- range .Schemas }}
 {{- if and .HasOwnerID .PredicateImport }}
@@ -18,14 +17,6 @@ import (
 {{- end }}
 {{- end }}
 )
-
-// EntityEvent is a typed event wrapper carrying operation metadata and a typed input payload
-type EntityEvent[T any] struct {
-	// Metadata carries structured context about the entity operation
-	Metadata EntityOperationMetadata `json:"metadata"`
-	// Input is the typed entity input payload
-	Input T `json:"input"`
-}
 
 // EntityRef is a lightweight reference to an entity
 type EntityRef struct {
@@ -47,14 +38,6 @@ type Schema struct {
 	Query func(ctx context.Context, client *generated.Client, orgID string) ([]json.RawMessage, error)
 	// Load loads a single entity by ID and returns its JSON representation
 	Load func(ctx context.Context, client *generated.Client, entityID string) (json.RawMessage, error)
-	// EmitCreated emits a typed entity creation event
-	EmitCreated func(ctx context.Context, runtime *gala.Gala, meta EntityOperationMetadata, input json.RawMessage, headers gala.Headers) (gala.EmitReceipt, error)
-	// EmitUpdated emits a typed entity update event
-	EmitUpdated func(ctx context.Context, runtime *gala.Gala, meta EntityOperationMetadata, input json.RawMessage, headers gala.Headers) (gala.EmitReceipt, error)
-	// CreatedTopic is the Gala topic name for entity creation events
-	CreatedTopic gala.TopicName
-	// UpdatedTopic is the Gala topic name for entity update events
-	UpdatedTopic gala.TopicName
 	// Edges lists the linkable edges on this schema
 	Edges []EdgeDescriptor
 }
@@ -84,26 +67,6 @@ func normalizeFieldKeys(raw json.RawMessage, keyMap map[string]string) json.RawM
 
 	return result
 }
-
-// --- Per-schema typed event types and topic variables ---
-{{- range .Schemas }}
-{{- if .HasCreate }}
-
-type EntityEvent{{ .Name }}Created = EntityEvent[generated.{{ .CreateInputType }}]
-
-var Topic{{ .Name }}Created = gala.Topic[EntityEvent{{ .Name }}Created]{
-	Name: "entity.{{ .Snake }}.created",
-}
-{{- end }}
-{{- if .HasUpdate }}
-
-type EntityEvent{{ .Name }}Updated = EntityEvent[generated.{{ .UpdateInputType }}]
-
-var Topic{{ .Name }}Updated = gala.Topic[EntityEvent{{ .Name }}Updated]{
-	Name: "entity.{{ .Snake }}.updated",
-}
-{{- end }}
-{{- end }}
 
 // --- Per-schema descriptors (defined separately to avoid init cycles) ---
 
@@ -157,19 +120,6 @@ var (
 
 			return entity.ID, nil
 		},
-		EmitCreated: func(ctx context.Context, runtime *gala.Gala, meta EntityOperationMetadata, input json.RawMessage, headers gala.Headers) (gala.EmitReceipt, error) {
-			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpEmit}
-
-			decoded, err := jsonx.Decode[generated.{{ .CreateInputType }}](input)
-			if err != nil {
-				return gala.EmitReceipt{}, logError(ctx, ref, ErrDecodeFailed, err)
-			}
-
-			ctx = WithOperationMetadata(ctx, meta)
-
-			return runtime.EmitWithHeaders(ctx, Topic{{ .Name }}Created.Name, EntityEvent{{ .Name }}Created{Metadata: meta, Input: decoded}, headers), nil
-		},
-		CreatedTopic: Topic{{ .Name }}Created.Name,
 {{- end }}
 {{- if .HasUpdate }}
 		Update: func(ctx context.Context, client *generated.Client, entityID string, input json.RawMessage) error {
@@ -186,19 +136,6 @@ var (
 
 			return nil
 		},
-		EmitUpdated: func(ctx context.Context, runtime *gala.Gala, meta EntityOperationMetadata, input json.RawMessage, headers gala.Headers) (gala.EmitReceipt, error) {
-			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpEmit}
-
-			decoded, err := jsonx.Decode[generated.{{ .UpdateInputType }}](input)
-			if err != nil {
-				return gala.EmitReceipt{}, logError(ctx, ref, ErrDecodeFailed, err)
-			}
-
-			ctx = WithOperationMetadata(ctx, meta)
-
-			return runtime.EmitWithHeaders(ctx, Topic{{ .Name }}Updated.Name, EntityEvent{{ .Name }}Updated{Metadata: meta, Input: decoded}, headers), nil
-		},
-		UpdatedTopic: Topic{{ .Name }}Updated.Name,
 {{- end }}
 {{- if .HasOwnerID }}
 		Query: func(ctx context.Context, client *generated.Client, orgID string) ([]json.RawMessage, error) {
@@ -252,7 +189,9 @@ func init() {
 {{- range .Edges }}
 		{
 			Name: "{{ .Name }}",
+{{- if .TargetEligible }}
 			Target: Schema{{ .TargetSchema }},
+{{- end }}
 			Relationship: "{{ .Relationship }}",
 			Link: func(ctx context.Context, client *generated.Client, entityID string, targetIDs ...string) error {
 				if err := client.{{ $schema.Name }}.UpdateOneID(entityID).Add{{ .Name | pascal | singular }}IDs(targetIDs...).Exec(ctx); err != nil {
@@ -267,6 +206,14 @@ func init() {
 				}
 
 				return nil
+			},
+			Query: func(ctx context.Context, client *generated.Client, entityID string) ([]string, error) {
+				entity, err := client.{{ $schema.Name }}.Get(ctx, entityID)
+				if err != nil {
+					return nil, logError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: OpQuery, EntityID: entityID, Edge: "{{ .Name }}"}, ErrLoadFailed, err)
+				}
+
+				return entity.Query{{ .Name | pascal }}().IDs(ctx)
 			},
 		},
 {{- end }}
@@ -367,7 +314,7 @@ func SelectTargets(ctx context.Context, client *generated.Client, orgID string, 
 		}
 
 		if selector.Expression != "" {
-			match, evalErr := eval.EvaluateBool(ctx, selector.Expression, data)
+			match, evalErr := EvaluateWithOptionalSource(ctx, eval, selector.Expression, data, selector.SourceContext)
 			if evalErr != nil {
 				logError(ctx, SchemaRef{Schema: schema.Snake, Operation: OpQuery, EntityID: parsed.ID}, ErrEvaluationFailed, evalErr)
 				continue
@@ -382,4 +329,16 @@ func SelectTargets(ctx context.Context, client *generated.Client, orgID string, 
 	}
 
 	return results, nil
+}
+
+// EvaluateWithOptionalSource dispatches to SourceAwareExpressionEvaluator when source context is
+// present, otherwise falls back to the standard ExpressionEvaluator
+func EvaluateWithOptionalSource(ctx context.Context, eval ExpressionEvaluator, expression string, targetData json.RawMessage, sourceContext json.RawMessage) (bool, error) {
+	if len(sourceContext) > 0 {
+		if sa, ok := eval.(SourceAwareExpressionEvaluator); ok {
+			return sa.EvaluateBoolWithSource(ctx, expression, targetData, sourceContext)
+		}
+	}
+
+	return eval.EvaluateBool(ctx, expression, targetData)
 }

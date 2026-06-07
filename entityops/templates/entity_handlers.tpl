@@ -19,8 +19,8 @@ import (
 type SchemaHandler struct {
 	// Register wires Gala listeners for this schema's topics
 	Register func(runtime *gala.Gala) error
-	// Emit dispatches a typed event with operation metadata and headers
-	Emit func(ctx context.Context, runtime *gala.Gala, meta EntityOperationMetadata, headers gala.Headers, payload json.RawMessage) error
+	// Emit dispatches a typed event with operation context and headers
+	Emit func(ctx context.Context, runtime *gala.Gala, oc gala.OperationContext, headers gala.Headers, payload json.RawMessage) error
 	// Persist synchronously persists an entity from a raw JSON payload
 	Persist func(ctx context.Context, client *generated.Client, payload json.RawMessage) (string, error)
 }
@@ -32,10 +32,10 @@ type SchemaHandlerConfig[TInput any, TEvent any] struct {
 	Topic gala.Topic[TEvent]
 	// Prepare transforms the input before persistence or emission
 	Prepare func(context.Context, TInput) TInput
-	// Wrap constructs a typed event from metadata and input
-	Wrap func(EntityOperationMetadata, TInput) TEvent
-	// Unwrap extracts metadata and input from a typed event
-	Unwrap func(TEvent) (EntityOperationMetadata, TInput)
+	// Wrap constructs a typed event from operation context and input
+	Wrap func(gala.OperationContext, TInput) TEvent
+	// Unwrap extracts operation context and input from a typed event
+	Unwrap func(TEvent) (gala.OperationContext, TInput)
 	// Persist saves the entity and returns its ID
 	Persist func(context.Context, *generated.Client, TInput) (string, error)
 }
@@ -74,7 +74,7 @@ func BuildSchemaHandler[TInput any, TEvent any](cfg SchemaHandlerConfig[TInput, 
 
 			return nil
 		},
-		Emit: func(ctx context.Context, runtime *gala.Gala, meta EntityOperationMetadata, headers gala.Headers, payload json.RawMessage) error {
+		Emit: func(ctx context.Context, runtime *gala.Gala, oc gala.OperationContext, headers gala.Headers, payload json.RawMessage) error {
 			ref := SchemaRef{Schema: schema, Operation: OpEmit}
 
 			decoded, err := jsonx.Decode[TInput](payload)
@@ -83,10 +83,10 @@ func BuildSchemaHandler[TInput any, TEvent any](cfg SchemaHandlerConfig[TInput, 
 			}
 
 			prepared := cfg.Prepare(ctx, decoded)
-			event := cfg.Wrap(meta, prepared)
+			event := cfg.Wrap(oc, prepared)
 
 			if headers.Metadata == nil {
-				raw, marshalErr := json.Marshal(meta)
+				raw, marshalErr := json.Marshal(oc)
 				if marshalErr != nil {
 					return logError(ctx, ref, ErrMarshalFailed, marshalErr)
 				}
@@ -94,7 +94,7 @@ func BuildSchemaHandler[TInput any, TEvent any](cfg SchemaHandlerConfig[TInput, 
 				headers.Metadata = raw
 			}
 
-			ctx = WithOperationMetadata(ctx, meta)
+			ctx = gala.WithOperationContext(ctx, oc)
 
 			receipt := runtime.EmitWithHeaders(ctx, cfg.Topic.Name, event, headers)
 			if receipt.Err != nil {

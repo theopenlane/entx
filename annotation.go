@@ -35,6 +35,9 @@ var FeatureVisibilityAnnotationName = "OPENLANE_SCHEMA_VISIBILITY"
 // WorkflowEligibleAnnotationName is the annotation name for workflow-eligible fields
 var WorkflowEligibleAnnotationName = "OPENLANE_WORKFLOW_ELIGIBLE"
 
+// WorkflowGroupEdgeAnnotationName is the annotation name for workflow group-permission edges
+var WorkflowGroupEdgeAnnotationName = "OPENLANE_WORKFLOW_GROUP_EDGE"
+
 // WebhookPayloadFieldAnnotationName is the annotation name for fields to include in webhook payloads
 var WebhookPayloadFieldAnnotationName = "OPENLANE_WEBHOOK_PAYLOAD_FIELD"
 
@@ -116,6 +119,17 @@ type SearchFieldAnnotation struct {
 type WorkflowEligibleAnnotation struct {
 	// Eligible indicates that the field can be included in workflow definitions and modified via proposed changes
 	Eligible bool
+	// Marker indicates the field exists only to flag the schema as workflow-eligible and must not be surfaced as a workflow-triggerable field
+	Marker bool
+}
+
+// WorkflowGroupEdgeAnnotation marks a group-permission edge (editors/viewers/blocked_groups)
+// so the entityops registry exposes a query closure for workflow group-target resolution.
+// It is intentionally distinct from WorkflowEligibleAnnotation so these edges do NOT become
+// workflow change-triggers
+type WorkflowGroupEdgeAnnotation struct {
+	// GroupEdge indicates the edge resolves group targets for workflows
+	GroupEdge bool
 }
 
 // WebhookPayloadFieldAnnotation is an annotation used to indicate that a field should be included in webhook payloads
@@ -224,6 +238,11 @@ func (a SearchFieldAnnotation) Name() string {
 // Name returns the name of the WorkflowEligibleAnnotation
 func (a WorkflowEligibleAnnotation) Name() string {
 	return WorkflowEligibleAnnotationName
+}
+
+// Name returns the name of the WorkflowGroupEdgeAnnotation
+func (a WorkflowGroupEdgeAnnotation) Name() string {
+	return WorkflowGroupEdgeAnnotationName
 }
 
 // Name returns the name of the WebhookPayloadFieldAnnotation
@@ -451,6 +470,23 @@ func FieldAdminSearchable(s bool) *SearchFieldAnnotation {
 func FieldWorkflowEligible() *WorkflowEligibleAnnotation {
 	return &WorkflowEligibleAnnotation{
 		Eligible: true,
+	}
+}
+
+// WorkflowEligibleMarker returns a WorkflowEligibleAnnotation that marks the schema as
+// workflow-eligible without surfacing the carrier field as a workflow-triggerable field
+func WorkflowEligibleMarker() *WorkflowEligibleAnnotation {
+	return &WorkflowEligibleAnnotation{
+		Eligible: true,
+		Marker:   true,
+	}
+}
+
+// EdgeWorkflowGroup marks a group-permission edge so the entityops registry exposes its
+// query closure for workflow group-target resolution, without making it a workflow trigger
+func EdgeWorkflowGroup() *WorkflowGroupEdgeAnnotation {
+	return &WorkflowGroupEdgeAnnotation{
+		GroupEdge: true,
 	}
 }
 

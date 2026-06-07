@@ -77,6 +77,14 @@ type EntitySchema struct {
 	Fields []EntityField
 	// Edges contains linkable M2M and O2M edges for this schema
 	Edges []EntityEdge
+	// WorkflowEligible indicates the schema participates in workflows via eligible fields or edges
+	WorkflowEligible bool
+	// WorkflowRefField is the WorkflowObjectRef struct field for this type (e.g. "Control"); empty if none
+	WorkflowRefField string
+	// WorkflowFields are the snake_case names of workflow-eligible fields
+	WorkflowFields []string
+	// WorkflowEdges are the names of workflow-eligible edges
+	WorkflowEdges []string
 }
 
 // EntityField represents a mutable field with its name variations
@@ -95,6 +103,10 @@ type EntityEdge struct {
 	TargetSchema string
 	// Relationship is "M2M" or "O2M"
 	Relationship string
+	// TargetEligible reports whether the target schema has its own entityops Schema
+	// (so a Target reference can be emitted); false for workflow-eligible edges whose
+	// target is not an entity-ops schema (e.g. group-permission edges to Group)
+	TargetEligible bool
 }
 
 // collectEntityData iterates the ent graph and collects schemas annotated with
@@ -110,7 +122,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		Schemas:         []EntitySchema{},
 	}
 
-	eligibleSchemas := make(map[string]struct{})
+	var eligibleSchemas []string
 
 	for _, node := range g.Nodes {
 		if skipNode(node) {
@@ -124,12 +136,14 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 
 		source := classifySource(node, schema)
 		if source.Workflow || source.Integration {
-			eligibleSchemas[node.Name] = struct{}{}
+			eligibleSchemas = append(eligibleSchemas, node.Name)
 		}
 	}
 
+	refFields := workflowRefFields(g)
+
 	for _, node := range g.Nodes {
-		if _, ok := eligibleSchemas[node.Name]; !ok {
+		if !slices.Contains(eligibleSchemas, node.Name) {
 			continue
 		}
 
@@ -166,7 +180,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 			}
 
 			entitySchema.Fields = append(entitySchema.Fields, EntityField{
-				Name:  field.Name,
+				Name:  field.StructField(),
 				Snake: field.StorageKey(),
 			})
 		}
@@ -180,16 +194,23 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 				continue
 			}
 
-			if _, ok := eligibleSchemas[edge.Type.Name]; !ok {
+			targetEligible := slices.Contains(eligibleSchemas, edge.Type.Name)
+			_, groupEdge := edge.Annotations[entx.WorkflowGroupEdgeAnnotationName]
+
+			// include edges to eligible target schemas (cross-object linking) and
+			// group-permission edges whose target is not an entityops schema, so the
+			// registry exposes a query closure for workflow group-target resolution
+			if !targetEligible && !groupEdge {
 				continue
 			}
 
 			switch edge.Rel.Type {
 			case gen.M2M, gen.O2M:
 				entitySchema.Edges = append(entitySchema.Edges, EntityEdge{
-					Name:         edge.Name,
-					TargetSchema: edge.Type.Name,
-					Relationship: edge.Rel.Type.String(),
+					Name:           edge.Name,
+					TargetSchema:   edge.Type.Name,
+					Relationship:   edge.Rel.Type.String(),
+					TargetEligible: targetEligible,
 				})
 			}
 		}
@@ -197,6 +218,39 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		slices.SortFunc(entitySchema.Edges, func(a, b EntityEdge) int {
 			return cmp.Compare(a.Name, b.Name)
 		})
+
+		var workflowMarker bool
+
+		for _, field := range node.Fields {
+			raw, ok := field.Annotations[entx.WorkflowEligibleAnnotationName]
+			if !ok {
+				continue
+			}
+
+			ann := &entx.WorkflowEligibleAnnotation{}
+			if err := ann.Decode(raw); err != nil {
+				return EntityData{}, fmt.Errorf("decode workflow eligible annotation on %s.%s: %w", node.Name, field.Name, err)
+			}
+
+			if ann.Marker {
+				workflowMarker = true
+				continue
+			}
+
+			entitySchema.WorkflowFields = append(entitySchema.WorkflowFields, field.Name)
+		}
+
+		for _, edge := range node.Edges {
+			if _, ok := edge.Annotations[entx.WorkflowEligibleAnnotationName]; ok {
+				entitySchema.WorkflowEdges = append(entitySchema.WorkflowEdges, edge.Name)
+			}
+		}
+
+		slices.Sort(entitySchema.WorkflowFields)
+		slices.Sort(entitySchema.WorkflowEdges)
+
+		entitySchema.WorkflowEligible = workflowMarker || len(entitySchema.WorkflowFields) > 0 || len(entitySchema.WorkflowEdges) > 0
+		entitySchema.WorkflowRefField = refFieldFor(refFields, node.Name)
 
 		if hasCreate {
 			entitySchema.CreateInputType = "Create" + node.Name + "Input"
@@ -234,10 +288,6 @@ func classifySource(node *gen.Type, schema *load.Schema) schemaSource {
 	}
 
 	for _, edge := range node.Edges {
-		if edge.IsInverse() {
-			continue
-		}
-
 		if _, ok := edge.Annotations[entx.WorkflowEligibleAnnotationName]; ok {
 			source.Workflow = true
 			break
@@ -304,8 +354,8 @@ func generateEntityFiles(outputDir string, data EntityData) error {
 		{name: "entity_errors", filename: "entity_errors.go", tmplFile: "templates/entity_errors.tpl"},
 		{name: "entity_registry", filename: "entity_registry.go", tmplFile: "templates/entity_registry.tpl"},
 		{name: "entity_upsert", filename: "entity_upsert.go", tmplFile: "templates/entity_upsert.tpl"},
-		{name: "entity_metadata", filename: "entity_metadata.go", tmplFile: "templates/entity_metadata.tpl"},
 		{name: "entity_handlers", filename: "entity_handlers.go", tmplFile: "templates/entity_handlers.tpl"},
+		{name: "entity_workflow", filename: "entity_workflow.go", tmplFile: "templates/entity_workflow.tpl"},
 	}
 
 	for _, spec := range specs {
@@ -426,6 +476,47 @@ func skipMutationUpdateInput(node *gen.Type) bool {
 	}
 
 	return true
+}
+
+// workflowRef pairs a workflow object type with its WorkflowObjectRef struct field
+type workflowRef struct {
+	// typeName is the target object type name (e.g. "Control")
+	typeName string
+	// field is the WorkflowObjectRef struct field for that type (e.g. "Control")
+	field string
+}
+
+// workflowRefFields returns, for each unique edge on the WorkflowObjectRef node, the
+// target type and its struct field — used to generate the object-ref resolver and filter
+func workflowRefFields(g *gen.Graph) []workflowRef {
+	var out []workflowRef
+
+	for _, node := range g.Nodes {
+		if node.Name != "WorkflowObjectRef" {
+			continue
+		}
+
+		for _, edge := range node.Edges {
+			if !edge.Unique {
+				continue
+			}
+
+			out = append(out, workflowRef{typeName: edge.Type.Name, field: edge.StructField()})
+		}
+	}
+
+	return out
+}
+
+// refFieldFor returns the WorkflowObjectRef struct field for a type, or "" if none
+func refFieldFor(refs []workflowRef, typeName string) string {
+	for _, r := range refs {
+		if r.typeName == typeName {
+			return r.field
+		}
+	}
+
+	return ""
 }
 
 // findSchema returns the schema for a given name from the graph

@@ -41,8 +41,6 @@ type Extension struct {
 func New(opts ...ExtensionOption) *Extension {
 	ext := &Extension{
 		config: &Config{
-			HooksOutputDir:      "./internal/ent/workflowgenerated",
-			HooksPackageName:    "workflowgenerated",
 			EnumsOutputDir:      "./common/enums",
 			EnumsPackageName:    "enums",
 			EnumsImportPath:     "github.com/theopenlane/core/common/enums",
@@ -122,8 +120,12 @@ func (e Extension) Hook() gen.Hook {
 				WorkflowObjectRefImport: filepath.ToSlash(filepath.Join(g.Package, "workflowobjectref")),
 			}
 
-			if err := e.generateHooks(ctx); err != nil {
-				return err
+			// Hooks generation is opt-in: workflow capabilities are now produced by the
+			// entityops generator, so hooks are only emitted when an output dir is configured
+			if e.config.HooksOutputDir != "" {
+				if err := e.generateHooks(ctx); err != nil {
+					return err
+				}
 			}
 
 			if err := e.generateEnums(ctx); err != nil {
@@ -304,20 +306,6 @@ func init() {
 		{{- if hasKey $workflowTypes $n.Name }}
 	wf.RegisterObjectCapability(wf.ObjectCapabilityConfig{
 		ObjectType: enums.WorkflowObjectType{{ $n.Name }},
-		CELContextBuilder: func(input wf.CELContextInput) map[string]any {
-			if input.Object == nil || input.Object.Node == nil {
-				return nil
-			}
-			entObj, ok := input.Object.Node.(*generated.{{ $n.Name }})
-			if !ok {
-				return nil
-			}
-			objectMap, err := entObjectToMap(entObj)
-			if err != nil {
-				return nil
-			}
-			return celVarsFromObject(objectMap, input)
-		},
 			{{- if hasKey $refEdgeFields $n.Name }}
 			{{- $edgeField := index $refEdgeFields $n.Name }}
 		ObjectRefResolver: func(ref *generated.WorkflowObjectRef) (*wf.Object, bool) {
@@ -342,20 +330,6 @@ func init() {
 	wf.RegisterObservabilityFieldsBuilder(buildObservabilityFields)
 	wf.RegisterEligibleFields(WorkflowEligibleFields)
 	wf.RegisterEligibleEdges(WorkflowEligibleEdges)
-}
-
-// celVarsFromObject builds the standard CEL variable map from a pre-marshaled object map
-func celVarsFromObject(objectMap map[string]any, input wf.CELContextInput) map[string]any {
-	return map[string]any{
-		"object":           objectMap,
-		"changed_fields":   input.ChangedFields,
-		"changed_edges":    input.ChangedEdges,
-		"added_ids":        input.AddedIDs,
-		"removed_ids":      input.RemovedIDs,
-		"event_type":       input.EventType,
-		"user_id":          input.UserID,
-		"proposed_changes": input.ProposedChanges,
-	}
 }
 
 // buildObservabilityFields returns standard log fields for a workflow object.

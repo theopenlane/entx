@@ -69,6 +69,8 @@ type EdgeDescriptor struct {
 	Link func(ctx context.Context, client *generated.Client, entityID string, targetIDs ...string) error `json:"-"`
 	// Unlink removes edges between the source entity and target entities
 	Unlink func(ctx context.Context, client *generated.Client, entityID string, targetIDs ...string) error `json:"-"`
+	// Query returns the IDs of the entities currently linked to the source entity via this edge
+	Query func(ctx context.Context, client *generated.Client, entityID string) ([]string, error) `json:"-"`
 }
 
 // TargetSelector specifies a set of entities to target via schema and expression
@@ -79,6 +81,8 @@ type TargetSelector struct {
 	Expression string `json:"expression"`
 	// ExcludeIDs is a list of entity IDs to exclude from the result set
 	ExcludeIDs []string `json:"exclude_ids,omitempty"`
+	// SourceContext is optional JSON data for the source entity, exposed as "source" in CEL expressions
+	SourceContext json.RawMessage `json:"source_context,omitempty"`
 }
 
 // LinkSpec describes a linking operation between a source entity and matching targets
@@ -93,4 +97,11 @@ type LinkSpec struct {
 type ExpressionEvaluator interface {
 	// EvaluateBool evaluates the expression against the provided entity JSON and returns the result
 	EvaluateBool(ctx context.Context, expression string, data json.RawMessage) (bool, error)
+}
+
+// SourceAwareExpressionEvaluator extends ExpressionEvaluator with source entity context
+type SourceAwareExpressionEvaluator interface {
+	ExpressionEvaluator
+	// EvaluateBoolWithSource evaluates the expression with both target and source entity JSON
+	EvaluateBoolWithSource(ctx context.Context, expression string, targetData json.RawMessage, sourceData json.RawMessage) (bool, error)
 }
