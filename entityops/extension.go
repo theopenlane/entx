@@ -24,6 +24,8 @@ type Config struct {
 	LogxPackage string
 	// ContextxPackage is the contextx package import path for typed context keys
 	ContextxPackage string
+	// CelxPackage is the celx package import path for typed entity expression evaluation
+	CelxPackage string
 }
 
 // Extension implements entc.Extension for entity operations generation
@@ -93,6 +95,13 @@ func WithLogxPackage(path string) ExtensionOption {
 func WithContextxPackage(path string) ExtensionOption {
 	return func(c *Config) {
 		c.ContextxPackage = path
+	}
+}
+
+// WithCelxPackage sets the celx package import path
+func WithCelxPackage(path string) ExtensionOption {
+	return func(c *Config) {
+		c.CelxPackage = path
 	}
 }
 

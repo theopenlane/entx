@@ -10,20 +10,6 @@ import (
 	"{{ .EntPackage }}/workflowobjectref"
 )
 
-// WorkflowObjectDescriptor is the workflow capability rollup for one object type.
-// It is JSON-native so consumers can unmarshal it directly or validate against its
-// reflected schema rather than reconstructing lookup tables
-type WorkflowObjectDescriptor struct {
-	// Type is the workflow object type name (PascalCase, matches ent mutation type)
-	Type string `json:"type" jsonschema:"description=Workflow object type name"`
-	// RefField is the WorkflowObjectRef struct field for this type; empty if the type has no ref edge
-	RefField string `json:"refField,omitempty" jsonschema:"description=WorkflowObjectRef struct field for this type"`
-	// Fields are the workflow-eligible field names (snake_case)
-	Fields []string `json:"fields,omitempty" jsonschema:"description=Workflow-eligible field names"`
-	// Edges are the workflow-eligible edge names
-	Edges []string `json:"edges,omitempty" jsonschema:"description=Workflow-eligible edge names"`
-}
-
 // EdgeChange describes one mutated edge and the IDs added or removed
 type EdgeChange struct {
 	// Edge is the mutated edge name
@@ -34,101 +20,96 @@ type EdgeChange struct {
 	RemovedIDs []string `json:"removedIds,omitempty" jsonschema:"description=IDs removed from the edge"`
 }
 
-// workflowObjectDescriptors is the generated rollup of all workflow-eligible object types
-var workflowObjectDescriptors = []WorkflowObjectDescriptor{
-{{- range .Schemas }}
-{{- if .WorkflowEligible }}
-	{
-		Type: "{{ .Name }}",
-{{- if .WorkflowRefField }}
-		RefField: "{{ .WorkflowRefField }}",
-{{- end }}
-{{- if .WorkflowFields }}
-		Fields: []string{
-{{- range .WorkflowFields }}
-			"{{ . }}",
-{{- end }}
-		},
-{{- end }}
-{{- if .WorkflowEdges }}
-		Edges: []string{
-{{- range .WorkflowEdges }}
-			"{{ . }}",
-{{- end }}
-		},
-{{- end }}
-	},
-{{- end }}
-{{- end }}
+// WorkflowEligible reports whether the schema participates in workflows via eligible fields or edges
+func (s *Schema) WorkflowEligible() bool {
+	return s.RefField != "" ||
+		slices.ContainsFunc(s.Fields, func(f FieldDescriptor) bool { return f.WorkflowEligible }) ||
+		slices.ContainsFunc(s.Edges, func(e EdgeDescriptor) bool { return e.WorkflowEligible })
 }
 
-// WorkflowObjectDescriptors returns the full workflow capability rollup
-func WorkflowObjectDescriptors() []WorkflowObjectDescriptor {
-	return workflowObjectDescriptors
-}
+// WorkflowFieldNames returns the snake_case names of this schema's workflow-eligible fields
+func (s *Schema) WorkflowFieldNames() []string {
+	var out []string
 
-// WorkflowObjectDescriptorFor returns the descriptor for an object type, or false if the type is not workflow-eligible
-func WorkflowObjectDescriptorFor(objectType string) (WorkflowObjectDescriptor, bool) {
-	for _, d := range workflowObjectDescriptors {
-		if d.Type == objectType {
-			return d, true
+	for _, f := range s.Fields {
+		if f.WorkflowEligible {
+			out = append(out, f.Name)
 		}
 	}
 
-	return WorkflowObjectDescriptor{}, false
+	return out
 }
 
-// WorkflowEligibleFields returns the workflow-eligible field names for an object type
-func WorkflowEligibleFields(objectType string) []string {
-	d, ok := WorkflowObjectDescriptorFor(objectType)
-	if !ok {
-		return nil
+// WorkflowFields returns this schema's workflow-eligible field descriptors (name, label, type), the
+// descriptor analog of WorkflowFieldNames consumed by the workflow builder and proposal preview UI
+func (s *Schema) WorkflowFields() []FieldDescriptor {
+	var out []FieldDescriptor
+
+	for _, f := range s.Fields {
+		if f.WorkflowEligible {
+			out = append(out, f)
+		}
 	}
 
-	return d.Fields
+	return out
 }
 
-// WorkflowEligibleEdges returns the workflow-eligible edge names for an object type
-func WorkflowEligibleEdges(objectType string) []string {
-	d, ok := WorkflowObjectDescriptorFor(objectType)
-	if !ok {
-		return nil
+// WorkflowEdgeNames returns the names of this schema's workflow-eligible edges
+func (s *Schema) WorkflowEdgeNames() []string {
+	var out []string
+
+	for _, e := range s.Edges {
+		if e.WorkflowEligible {
+			out = append(out, e.Name)
+		}
 	}
 
-	return d.Edges
+	return out
 }
 
-// ObjectFromWorkflowRef resolves the workflow object type and ID from a WorkflowObjectRef row
-func ObjectFromWorkflowRef(ref *generated.WorkflowObjectRef) (objectType string, objectID string, ok bool) {
-	switch {
+// init wires workflow object-ref resolution onto each schema that has a WorkflowObjectRef edge
+func init() {
 {{- range .Schemas }}
 {{- if .WorkflowRefField }}
-	case ref.{{ .WorkflowRefField }}ID != "":
-		return "{{ .Name }}", ref.{{ .WorkflowRefField }}ID, true
+	Schema{{ .Name }}.RefField = "{{ .WorkflowRefField }}"
+	Schema{{ .Name }}.RefMatch = func(ref *generated.WorkflowObjectRef) (string, bool) {
+		if ref.{{ .WorkflowRefField }}ID != "" {
+			return ref.{{ .WorkflowRefField }}ID, true
+		}
+
+		return "", false
+	}
+	Schema{{ .Name }}.RefFilter = func(query *generated.WorkflowObjectRefQuery, objectID string) *generated.WorkflowObjectRefQuery {
+		return query.Where(workflowobjectref.{{ .WorkflowRefField }}IDEQ(objectID))
+	}
 {{- end }}
 {{- end }}
+}
+
+// ObjectFromWorkflowRef resolves the workflow object type and ID from a WorkflowObjectRef row by
+// dispatching to each schema's generated RefMatch closure
+func ObjectFromWorkflowRef(ref *generated.WorkflowObjectRef) (objectType string, objectID string, ok bool) {
+	for _, schema := range allSchemas {
+		if schema.RefMatch == nil {
+			continue
+		}
+
+		if id, matched := schema.RefMatch(ref); matched {
+			return schema.Name, id, true
+		}
 	}
 
 	return "", "", false
 }
 
-// ApplyWorkflowRefFilter adds the object-type-specific predicate to a WorkflowObjectRef query
-func ApplyWorkflowRefFilter(query *generated.WorkflowObjectRefQuery, objectType string, objectID string) (*generated.WorkflowObjectRefQuery, bool) {
-	switch objectType {
-{{- range .Schemas }}
-{{- if .WorkflowRefField }}
-	case "{{ .Name }}":
-		return query.Where(workflowobjectref.{{ .WorkflowRefField }}IDEQ(objectID)), true
-{{- end }}
-{{- end }}
-	}
-
-	return nil, false
-}
-
 // ExtractChangedEdges returns the workflow-eligible edges mutated by m, with the IDs added or removed
 func ExtractChangedEdges(m ent.Mutation) []EdgeChange {
-	eligible := WorkflowEligibleEdges(m.Type())
+	schema, ok := LookupSchema(m.Type())
+	if !ok {
+		return nil
+	}
+
+	eligible := schema.WorkflowEdgeNames()
 	if len(eligible) == 0 {
 		return nil
 	}

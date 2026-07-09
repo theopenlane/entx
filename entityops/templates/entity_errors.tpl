@@ -28,6 +28,8 @@ var (
 	ErrLoadFailed = errors.New("entityops: load failed")
 	// ErrLinkFailed indicates an edge link operation failed
 	ErrLinkFailed = errors.New("entityops: link failed")
+	// ErrEdgeNotFound indicates the named edge does not exist or is not linkable on the source schema
+	ErrEdgeNotFound = errors.New("entityops: edge not found")
 	// ErrUnlinkFailed indicates an edge unlink operation failed
 	ErrUnlinkFailed = errors.New("entityops: unlink failed")
 	// ErrDecodeFailed indicates input JSON decoding failed
@@ -52,6 +54,12 @@ var (
 	ErrQueryUnsupported = errors.New("entityops: query unsupported")
 	// ErrEvaluationFailed indicates a CEL expression evaluation failed
 	ErrEvaluationFailed = errors.New("entityops: evaluation failed")
+	// ErrKeyMatchUnsupported indicates the schema does not support key-based target queries
+	ErrKeyMatchUnsupported = errors.New("entityops: key match unsupported")
+	// ErrInvalidKeyField indicates a key match referenced a field that is not an indexable key on the schema
+	ErrInvalidKeyField = errors.New("entityops: invalid key field")
+	// ErrEvaluatorBuildFailed indicates the typed CEL evaluator for a schema projection could not be built
+	ErrEvaluatorBuildFailed = errors.New("entityops: evaluator build failed")
 )
 
 // --- Operation constants ---

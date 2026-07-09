@@ -3,12 +3,17 @@
 package {{ .PackageName }}
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 
+	"github.com/stoewer/go-strcase"
+
+	"{{ .CelxPackage }}"
 	"{{ .EntPackage }}"
 	"{{ .JsonxPackage }}"
 {{- range .Schemas }}
@@ -36,16 +41,45 @@ type Schema struct {
 	Update func(ctx context.Context, client *generated.Client, entityID string, input json.RawMessage) error
 	// Query returns all entities of this schema within an organization as JSON
 	Query func(ctx context.Context, client *generated.Client, orgID string) ([]json.RawMessage, error)
+	// QueryByKey returns entities of this schema within an organization whose given snake_case
+	// field matches any of the provided values, pushing the predicate into the database
+	QueryByKey func(ctx context.Context, client *generated.Client, orgID string, field string, values []string) ([]json.RawMessage, error)
 	// Load loads a single entity by ID and returns its JSON representation
 	Load func(ctx context.Context, client *generated.Client, entityID string) (json.RawMessage, error)
-	// Edges lists the linkable edges on this schema
+	// Fields is the unified field catalog for this schema, consumed by the workflow builder and the
+	// integration cross-link config; workflow-eligible and match-key views are filtered from it
+	Fields []FieldDescriptor
+	// Edges lists every edge to an entityops schema (and workflow group edges) for this schema
 	Edges []EdgeDescriptor
+	// SourceContext re-keys an ingest create-input payload into the snake_case source context that a
+	// cross-link rule's key-match and CEL expression read; set for every schema with a create input
+	SourceContext func(payload json.RawMessage) json.RawMessage
+	// AllowedKeys is the set of integration mapping input keys accepted for this schema; empty for
+	// schemas that do not participate in integration ingest mapping
+	AllowedKeys map[string]struct{}
+	// StockPersist reports whether the schema opts into the generated stock ingest persistence path
+	StockPersist bool
+	// ProjectionType is the reflect.Type of this schema's flat CEL/jsonschema projection struct
+	// ({Name}Projection); the registerable native-type view of the entity used for typed expressions
+	ProjectionType reflect.Type
+	// RefField is the WorkflowObjectRef struct field for this object type (e.g. "Control"); empty if
+	// the type has no workflow object-ref edge
+	RefField string
+	// RefMatch reports the object id and whether this schema owns the given WorkflowObjectRef row,
+	// replacing the per-type ObjectFromWorkflowRef switch; nil for non-workflow schemas
+	RefMatch func(ref *generated.WorkflowObjectRef) (string, bool)
+	// RefFilter adds this object type's predicate to a WorkflowObjectRef query, replacing the per-type
+	// ApplyWorkflowRefFilter switch; nil for non-workflow schemas
+	RefFilter func(query *generated.WorkflowObjectRefQuery, objectID string) *generated.WorkflowObjectRefQuery
 }
 
-// normalizeFieldKeys re-keys a JSON object from snake_case to PascalCase field names
-// so json.Unmarshal matches generated UpdateInput fields
-func normalizeFieldKeys(raw json.RawMessage, keyMap map[string]string) json.RawMessage {
-	if len(keyMap) == 0 || len(raw) == 0 {
+// applyClears rewrites explicit null values in a snake_case payload to the generated Clear<Field>
+// flag so the field is cleared rather than ignored. Non-null keys pass through unchanged: they
+// already match the create/update input's snake_case json tags, so no field re-keying is needed.
+// The Clear<Field> name is derived by the same convention used for the @readOnly clear-field
+// directive (Clear + UpperCamelCase of the snake field name)
+func applyClears(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
 		return raw
 	}
 
@@ -56,8 +90,8 @@ func normalizeFieldKeys(raw json.RawMessage, keyMap map[string]string) json.RawM
 
 	normalized := make(map[string]json.RawMessage, len(m))
 	for k, v := range m {
-		if pascal, ok := keyMap[k]; ok {
-			normalized[pascal] = v
+		if isJSONNull(v) {
+			normalized["Clear"+strcase.UpperCamelCase(k)] = json.RawMessage("true")
 		} else {
 			normalized[k] = v
 		}
@@ -68,42 +102,25 @@ func normalizeFieldKeys(raw json.RawMessage, keyMap map[string]string) json.RawM
 	return result
 }
 
-// --- Per-schema descriptors (defined separately to avoid init cycles) ---
-
-var (
-{{- range .Schemas }}
-	desc{{ .Name }} = SchemaDescriptor{
-		Name:   "{{ .Name }}",
-		Snake:  "{{ .Snake }}",
-		Camel:  "{{ .Camel }}",
-		Lower:  "{{ .Lower }}",
-		Plural: "{{ .Plural }}",
-		Table:  "{{ .Table }}",
-		Label:  "{{ .Label }}",
-	}
-{{- end }}
-)
-
-// --- Per-schema field key maps (snake_case → PascalCase) ---
-
-var (
-{{- range .Schemas }}
-{{- if .HasUpdate }}
-	fieldKeys{{ .Name }} = map[string]string{
-	{{- range .Fields }}
-		"{{ .Snake }}": "{{ .Name }}",
-	{{- end }}
-	}
-{{- end }}
-{{- end }}
-)
+// isJSONNull reports whether a raw JSON value is the literal null
+func isJSONNull(raw json.RawMessage) bool {
+	return bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
+}
 
 // --- Per-schema registrations ---
 
 var (
 {{- range $schema := .Schemas }}
 	Schema{{ $schema.Name }} = &Schema{
-		SchemaDescriptor: desc{{ .Name }},
+		SchemaDescriptor: SchemaDescriptor{
+			Name:   "{{ .Name }}",
+			Snake:  "{{ .Snake }}",
+			Camel:  "{{ .Camel }}",
+			Lower:  "{{ .Lower }}",
+			Plural: "{{ .Plural }}",
+			Table:  "{{ .Table }}",
+			Label:  "{{ .Label }}",
+		},
 {{- if .HasCreate }}
 		Create: func(ctx context.Context, client *generated.Client, input json.RawMessage) (string, error) {
 			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpCreate}
@@ -125,7 +142,7 @@ var (
 		Update: func(ctx context.Context, client *generated.Client, entityID string, input json.RawMessage) error {
 			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpUpdate, EntityID: entityID}
 
-			decoded, err := jsonx.Decode[generated.{{ .UpdateInputType }}](normalizeFieldKeys(input, fieldKeys{{ .Name }}))
+			decoded, err := jsonx.Decode[generated.{{ .UpdateInputType }}](applyClears(input))
 			if err != nil {
 				return logError(ctx, ref, ErrDecodeFailed, err)
 			}
@@ -144,6 +161,44 @@ var (
 			entities, err := client.{{ .Name }}.Query().
 				Where({{ .PredicatePackage }}.OwnerID(orgID)).
 				All(ctx)
+			if err != nil {
+				return nil, logError(ctx, ref, ErrQueryFailed, err)
+			}
+
+			results := make([]json.RawMessage, 0, len(entities))
+			for _, e := range entities {
+				data, err := json.Marshal(e)
+				if err != nil {
+					logError(ctx, ref, ErrMarshalFailed, err)
+					continue
+				}
+
+				results = append(results, data)
+			}
+
+			return results, nil
+		},
+{{- end }}
+{{- $hasMatchKey := false }}
+{{- range .ObjectFields }}{{- if .MatchKey }}{{- $hasMatchKey = true }}{{- end }}{{- end }}
+{{- if and .HasOwnerID $hasMatchKey }}
+		QueryByKey: func(ctx context.Context, client *generated.Client, orgID string, field string, values []string) ([]json.RawMessage, error) {
+			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpQuery}
+
+			query := client.{{ .Name }}.Query().Where({{ .PredicatePackage }}.OwnerID(orgID))
+
+			switch field {
+		{{- range .ObjectFields }}
+		{{- if .MatchKey }}
+			case "{{ .Snake }}":
+				query = query.Where({{ $schema.PredicatePackage }}.{{ .Name }}In(values...))
+		{{- end }}
+		{{- end }}
+			default:
+				return nil, fmt.Errorf("%w: %s.%s", ErrInvalidKeyField, "{{ .Snake }}", field)
+			}
+
+			entities, err := query.All(ctx)
 			if err != nil {
 				return nil, logError(ctx, ref, ErrQueryFailed, err)
 			}
@@ -184,29 +239,72 @@ var (
 // init wires cross-schema edge references after all Schema vars are initialized
 func init() {
 {{- range $schema := .Schemas }}
+{{- if .ObjectFields }}
+	Schema{{ $schema.Name }}.Fields = []FieldDescriptor{
+{{- range .ObjectFields }}
+		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .Immutable }}, Immutable: true{{ end }}{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}", Required: {{ .Required }}{{ if .UpsertKey }}, UpsertKey: true{{ end }}{{ if .LookupKey }}, LookupKey: true{{ end }}{{ end }}},
+{{- end }}
+	}
+{{- end }}
+{{- end }}
+{{- range $schema := .Schemas }}
 {{- if .Edges }}
 	Schema{{ $schema.Name }}.Edges = []EdgeDescriptor{
 {{- range .Edges }}
 		{
 			Name: "{{ .Name }}",
+			Label: "{{ .Name | pascal }}",
 {{- if .TargetEligible }}
 			Target: Schema{{ .TargetSchema }},
+			TargetType: "{{ .TargetSchema }}",
 {{- end }}
 			Relationship: "{{ .Relationship }}",
+{{- if .Unique }}
+			Unique: true,
+			CreateField: "{{ .Name | camel }}ID",
+{{- else }}
+			CreateField: "{{ .Name | pascal | singular | camel }}IDs",
+{{- end }}
+{{- if .Immutable }}
+			Immutable: true,
+{{- end }}
+{{- if .WorkflowEligible }}
+			WorkflowEligible: true,
+{{- end }}
+{{- if not .Immutable }}
 			Link: func(ctx context.Context, client *generated.Client, entityID string, targetIDs ...string) error {
+{{- if .Unique }}
+				if len(targetIDs) == 0 {
+					return nil
+				}
+
+				if err := client.{{ $schema.Name }}.UpdateOneID(entityID).Set{{ .Name | pascal }}ID(targetIDs[0]).Exec(ctx); err != nil {
+					return logPersistError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: OpLink, EntityID: entityID, Edge: "{{ .Name }}"}, ErrLinkFailed, err)
+				}
+{{- else }}
 				if err := client.{{ $schema.Name }}.UpdateOneID(entityID).Add{{ .Name | pascal | singular }}IDs(targetIDs...).Exec(ctx); err != nil {
 					return logPersistError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: OpLink, EntityID: entityID, Edge: "{{ .Name }}"}, ErrLinkFailed, err)
 				}
+{{- end }}
 
 				return nil
 			},
 			Unlink: func(ctx context.Context, client *generated.Client, entityID string, targetIDs ...string) error {
+{{- if .Unique }}
+{{- if .Optional }}
+				if err := client.{{ $schema.Name }}.UpdateOneID(entityID).Clear{{ .Name | pascal }}().Exec(ctx); err != nil {
+					return logPersistError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: OpUnlink, EntityID: entityID, Edge: "{{ .Name }}"}, ErrUnlinkFailed, err)
+				}
+{{- end }}
+{{- else }}
 				if err := client.{{ $schema.Name }}.UpdateOneID(entityID).Remove{{ .Name | pascal | singular }}IDs(targetIDs...).Exec(ctx); err != nil {
 					return logPersistError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: OpUnlink, EntityID: entityID, Edge: "{{ .Name }}"}, ErrUnlinkFailed, err)
 				}
+{{- end }}
 
 				return nil
 			},
+{{- end }}
 			Query: func(ctx context.Context, client *generated.Client, entityID string) ([]string, error) {
 				entity, err := client.{{ $schema.Name }}.Get(ctx, entityID)
 				if err != nil {
@@ -217,6 +315,13 @@ func init() {
 			},
 		},
 {{- end }}
+	}
+{{- end }}
+{{- end }}
+{{- range $schema := .Schemas }}
+{{- if .HasCreate }}
+	Schema{{ $schema.Name }}.SourceContext = func(payload json.RawMessage) json.RawMessage {
+		return payload
 	}
 {{- end }}
 {{- end }}
@@ -274,21 +379,43 @@ func AllSchemas() []*Schema {
 	return result
 }
 
-// SelectTargets queries entities matching a target selector and filters them
-// using the provided expression evaluator
-func SelectTargets(ctx context.Context, client *generated.Client, orgID string, selector TargetSelector, eval ExpressionEvaluator) ([]EntityRef, error) {
+// SelectTargets queries entities matching a target selector and filters them with a typed CEL
+// evaluator bound to the target schema's native projection — and, when the selector carries
+// SourceContext with a SourceSchema, the source schema's projection as "source" — so selector
+// expressions resolve typed fields rather than evaluating against a map[string]any
+func SelectTargets(ctx context.Context, client *generated.Client, orgID string, selector TargetSelector) ([]EntityRef, error) {
 	schema, ok := LookupSchema(selector.Schema.Name)
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrSchemaNotFound, selector.Schema.Name)
 	}
 
-	if schema.Query == nil {
-		return nil, fmt.Errorf("%w: %s", ErrQueryUnsupported, schema.Name)
-	}
-
-	entities, err := schema.Query(ctx, client, orgID)
+	entities, err := selectCandidates(ctx, client, schema, orgID, selector)
 	if err != nil {
 		return nil, err
+	}
+
+	var (
+		eval      *celx.NativeEntityEvaluator
+		useSource bool
+	)
+
+	if selector.Expression != "" {
+		var sourceType reflect.Type
+
+		if len(selector.SourceContext) > 0 && !selector.SourceSchema.IsZero() {
+			if src, ok := LookupSchema(selector.SourceSchema.Name); ok && src.ProjectionType != nil {
+				sourceType = src.ProjectionType
+				useSource = true
+			}
+		}
+
+		envCfg := celx.StrictEnvConfig()
+		envCfg.CrossTypeNumericComparisons = true
+
+		eval, err = celx.NewNativeEntityEvaluator(envCfg, celx.FastEvalConfig(), schema.ProjectionType, sourceType)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s: %w", ErrEvaluatorBuildFailed, schema.Name, err)
+		}
 	}
 
 	excludeSet := make(map[string]struct{}, len(selector.ExcludeIDs))
@@ -314,7 +441,17 @@ func SelectTargets(ctx context.Context, client *generated.Client, orgID string, 
 		}
 
 		if selector.Expression != "" {
-			match, evalErr := EvaluateWithOptionalSource(ctx, eval, selector.Expression, data, selector.SourceContext)
+			var (
+				match   bool
+				evalErr error
+			)
+
+			if useSource {
+				match, evalErr = eval.EvaluateBoolWithSource(ctx, selector.Expression, data, selector.SourceContext)
+			} else {
+				match, evalErr = eval.EvaluateBool(ctx, selector.Expression, data)
+			}
+
 			if evalErr != nil {
 				logError(ctx, SchemaRef{Schema: schema.Snake, Operation: OpQuery, EntityID: parsed.ID}, ErrEvaluationFailed, evalErr)
 				continue
@@ -331,14 +468,77 @@ func SelectTargets(ctx context.Context, client *generated.Client, orgID string, 
 	return results, nil
 }
 
-// EvaluateWithOptionalSource dispatches to SourceAwareExpressionEvaluator when source context is
-// present, otherwise falls back to the standard ExpressionEvaluator
-func EvaluateWithOptionalSource(ctx context.Context, eval ExpressionEvaluator, expression string, targetData json.RawMessage, sourceContext json.RawMessage) (bool, error) {
-	if len(sourceContext) > 0 {
-		if sa, ok := eval.(SourceAwareExpressionEvaluator); ok {
-			return sa.EvaluateBoolWithSource(ctx, expression, targetData, sourceContext)
+// selectCandidates resolves the candidate entity set for a target selector. When the selector
+// carries a KeyMatch it issues an indexed query that pushes the key predicate into the database;
+// otherwise it loads all org-scoped entities for row-by-row expression evaluation
+func selectCandidates(ctx context.Context, client *generated.Client, schema *Schema, orgID string, selector TargetSelector) ([]json.RawMessage, error) {
+	if selector.KeyMatch != nil {
+		if schema.QueryByKey == nil {
+			return nil, fmt.Errorf("%w: %s", ErrKeyMatchUnsupported, schema.Name)
+		}
+
+		values := collectKeyValues(selector.SourceContext, selector.KeyMatch)
+		if len(values) == 0 {
+			return nil, nil
+		}
+
+		return schema.QueryByKey(ctx, client, orgID, selector.KeyMatch.TargetField, values)
+	}
+
+	if schema.Query == nil {
+		return nil, fmt.Errorf("%w: %s", ErrQueryUnsupported, schema.Name)
+	}
+
+	return schema.Query(ctx, client, orgID)
+}
+
+// collectKeyValues extracts the deduplicated, non-empty source-side key values for a KeyMatch
+// from the source entity JSON, combining the scalar SourceField with the SourceList values
+func collectKeyValues(sourceContext json.RawMessage, km *KeyMatch) []string {
+	if len(sourceContext) == 0 {
+		return nil
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(sourceContext, &raw); err != nil {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	var values []string
+
+	add := func(s string) {
+		if s == "" {
+			return
+		}
+
+		if _, ok := seen[s]; ok {
+			return
+		}
+
+		seen[s] = struct{}{}
+		values = append(values, s)
+	}
+
+	if km.SourceField != "" {
+		if v, ok := raw[km.SourceField]; ok {
+			var s string
+			if json.Unmarshal(v, &s) == nil {
+				add(s)
+			}
 		}
 	}
 
-	return eval.EvaluateBool(ctx, expression, targetData)
+	if km.SourceList != "" {
+		if v, ok := raw[km.SourceList]; ok {
+			var list []string
+			if json.Unmarshal(v, &list) == nil {
+				for _, s := range list {
+					add(s)
+				}
+			}
+		}
+	}
+
+	return values
 }

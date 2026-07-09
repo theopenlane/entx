@@ -14,6 +14,7 @@ import (
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/entc/load"
+	entfield "entgo.io/ent/schema/field"
 	"github.com/stoewer/go-strcase"
 	"golang.org/x/tools/imports"
 
@@ -39,6 +40,8 @@ type EntityData struct {
 	LogxPackage string
 	// ContextxPackage is the contextx package import path
 	ContextxPackage string
+	// CelxPackage is the celx package import path for typed entity expression evaluation
+	CelxPackage string
 	// Schemas contains all schemas eligible for entity operations
 	Schemas []EntitySchema
 }
@@ -73,40 +76,107 @@ type EntitySchema struct {
 	PredicateImport string
 	// HasOwnerID indicates the schema has an owner_id field for org-scoped queries
 	HasOwnerID bool
-	// Fields contains mutable field name mappings (snake_case → PascalCase)
-	Fields []EntityField
-	// Edges contains linkable M2M and O2M edges for this schema
+	// ObjectFields is the unified per-schema field catalog (every field with capability flags),
+	// consumed by both the workflow builder and the integration cross-link config. It is the single
+	// field list: update-input re-keying, key-match columns, link source context, and workflow-eligible
+	// fields are all derived from it by filtering on the per-field flags
+	ObjectFields []EntityField
+	// Edges contains every edge to an entityops schema (any cardinality/direction, mutable or immutable)
+	// plus workflow group-permission edges; the single edge list for linking, workflow, and runtime ops
 	Edges []EntityEdge
 	// WorkflowEligible indicates the schema participates in workflows via eligible fields or edges
 	WorkflowEligible bool
 	// WorkflowRefField is the WorkflowObjectRef struct field for this type (e.g. "Control"); empty if none
 	WorkflowRefField string
-	// WorkflowFields are the snake_case names of workflow-eligible fields
-	WorkflowFields []string
-	// WorkflowEdges are the names of workflow-eligible edges
-	WorkflowEdges []string
+	// IntegrationMapped indicates the schema participates in integration ingest mapping
+	IntegrationMapped bool
+	// StockPersist indicates the schema opts into the generated stock ingest persistence path
+	StockPersist bool
+	// RuntimeDefaults are integration-injected field defaults applied by the generated Prepare function
+	RuntimeDefaults []EntityRuntimeDefault
+	// IngestTopic is the gala ingest topic name (entityops.{snake}.ingest.requested) for integration schemas
+	IngestTopic string
+	// IngestRequestType is the generated Go type name for this schema's typed ingest event payload
+	IngestRequestType string
+	// IngestTopicVar is the generated Go variable name for this schema's typed ingest topic
+	IngestTopicVar string
 }
 
-// EntityField represents a mutable field with its name variations
+// EntityField represents a field with its name variations and capability flags
 type EntityField struct {
 	// Name is the PascalCase Go field name (e.g., "ReferenceID")
 	Name string
 	// Snake is the snake_case column name (e.g., "reference_id")
 	Snake string
+	// Type is the ent field type string (e.g. "string", "bool", "time.Time")
+	Type string
+	// Immutable reports whether the field is set only at create time (excluded from update-input re-keying)
+	Immutable bool
+	// WorkflowEligible reports whether the field may drive workflow conditions and triggers
+	WorkflowEligible bool
+	// MatchKey reports whether the field is a plain-string indexed column usable as a cross-link match key
+	MatchKey bool
+	// IntegrationMapped reports whether the field participates in integration ingest mapping
+	IntegrationMapped bool
+	// InputKey is the integration mapping create-input key (lowerCamel of the field name, or annotation override)
+	InputKey string
+	// InputGoField is the exported Go struct field name for the input key on ent create inputs
+	InputGoField string
+	// Required reports whether the field is required (non-optional) on the create input
+	Required bool
+	// UpsertKey reports whether the field participates in integration dedupe/upsert matching
+	UpsertKey bool
+	// LookupKey reports whether the field participates in integration stock ingest lookup matching
+	LookupKey bool
+	// FromIntegration reports whether the field value is injected from the integration record at ingest time
+	FromIntegration bool
 }
 
-// EntityEdge represents one linkable edge on a schema
+// EntityEdge represents one linkable edge on a schema, in either direction
 type EntityEdge struct {
 	// Name is the edge name (e.g., "controls")
 	Name string
 	// TargetSchema is the target PascalCase name (e.g., "Control")
 	TargetSchema string
-	// Relationship is "M2M" or "O2M"
+	// Relationship is the ent relationship type from this side ("M2M", "O2M", "M2O", or "O2O")
 	Relationship string
 	// TargetEligible reports whether the target schema has its own entityops Schema
 	// (so a Target reference can be emitted); false for workflow-eligible edges whose
 	// target is not an entity-ops schema (e.g. group-permission edges to Group)
 	TargetEligible bool
+	// Unique reports whether this side references a single target, so linking sets one id
+	// (Set<Edge>ID) rather than adding many (Add<Edge>IDs)
+	Unique bool
+	// Optional reports whether the edge may be cleared; a required unique edge has no Clear<Edge>
+	// method on the update builder, so its unlink is a no-op
+	Optional bool
+	// Inverse reports whether this is the back-reference (edge.From) side of the relationship
+	Inverse bool
+	// Immutable reports whether the edge is set only at create time; its Link/Unlink (UpdateOne-based)
+	// closures are not emitted because the update builder has no setter for an immutable edge
+	Immutable bool
+	// WorkflowEligible reports whether the edge may drive workflow conditions and triggers
+	WorkflowEligible bool
+}
+
+// fieldWorkflowEligible reports whether a field carries a non-marker workflow-eligible annotation.
+// marker is true when the annotation is the schema-level eligibility marker rather than a real field
+func fieldWorkflowEligible(field *gen.Field) (eligible bool, marker bool, err error) {
+	raw, ok := field.Annotations[entx.WorkflowEligibleAnnotationName]
+	if !ok {
+		return false, false, nil
+	}
+
+	ann := &entx.WorkflowEligibleAnnotation{}
+	if err := ann.Decode(raw); err != nil {
+		return false, false, err
+	}
+
+	if ann.Marker {
+		return false, true, nil
+	}
+
+	return true, false, nil
 }
 
 // collectEntityData iterates the ent graph and collects schemas annotated with
@@ -119,6 +189,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		JsonxPackage:    c.JsonxPackage,
 		LogxPackage:     c.LogxPackage,
 		ContextxPackage: c.ContextxPackage,
+		CelxPackage:     c.CelxPackage,
 		Schemas:         []EntitySchema{},
 	}
 
@@ -174,82 +245,98 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 			HasOwnerID:       hasField(schema, "owner_id"),
 		}
 
-		for _, field := range node.Fields {
-			if field.Immutable {
-				continue
-			}
+		// ObjectFields is the unified field catalog: every field with its type and capability flags,
+		// consumed by both the workflow builder and the integration cross-link config
+		var workflowMarker bool
 
-			entitySchema.Fields = append(entitySchema.Fields, EntityField{
-				Name:  field.StructField(),
-				Snake: field.StorageKey(),
-			})
+		// integrationFields carries the per-field integration mapping metadata (keyed by ent field
+		// name) and integrationMeta the schema-level mapping metadata, folded onto the unified catalog
+		integrationFields, integrationMeta, err := collectIntegrationMapping(schema)
+		if err != nil {
+			return EntityData{}, fmt.Errorf("collect integration mapping for %s: %w", node.Name, err)
 		}
 
-		slices.SortFunc(entitySchema.Fields, func(a, b EntityField) int {
+		for _, field := range node.Fields {
+			eligible, marker, err := fieldWorkflowEligible(field)
+			if err != nil {
+				return EntityData{}, fmt.Errorf("decode workflow eligible annotation on %s.%s: %w", node.Name, field.Name, err)
+			}
+
+			if marker {
+				workflowMarker = true
+			}
+
+			fieldType := ""
+			if field.Type != nil {
+				fieldType = field.Type.String()
+			}
+
+			// MatchKey: plain-string indexed columns (e.g. external_id, ref_code) usable as cross-link
+			// match keys; custom Go types and enums are excluded because their In predicates reject plain strings
+			entityField := EntityField{
+				Name:             field.StructField(),
+				Snake:            field.StorageKey(),
+				Type:             fieldType,
+				Immutable:        field.Immutable,
+				WorkflowEligible: eligible,
+				MatchKey:         field.Type != nil && field.Type.Type == entfield.TypeString && !field.HasGoType(),
+			}
+
+			if im, ok := integrationFields[field.Name]; ok {
+				entityField.IntegrationMapped = true
+				entityField.InputKey = im.InputKey
+				entityField.InputGoField = im.InputGoField
+				entityField.Required = im.Required
+				entityField.UpsertKey = im.UpsertKey
+				entityField.LookupKey = im.LookupKey
+				entityField.FromIntegration = im.FromIntegration
+			}
+
+			entitySchema.ObjectFields = append(entitySchema.ObjectFields, entityField)
+		}
+
+		slices.SortFunc(entitySchema.ObjectFields, func(a, b EntityField) int {
 			return cmp.Compare(a.Snake, b.Snake)
 		})
 
 		for _, edge := range node.Edges {
-			if edge.IsInverse() {
-				continue
-			}
-
 			targetEligible := slices.Contains(eligibleSchemas, edge.Type.Name)
 			_, groupEdge := edge.Annotations[entx.WorkflowGroupEdgeAnnotationName]
 
-			// include edges to eligible target schemas (cross-object linking) and
-			// group-permission edges whose target is not an entityops schema, so the
-			// registry exposes a query closure for workflow group-target resolution
+			// include every edge to an eligible target schema (cross-object linking, in either
+			// direction and at any cardinality) plus group-permission edges whose target is not an
+			// entityops schema, so the registry exposes a query closure for workflow group resolution
 			if !targetEligible && !groupEdge {
 				continue
 			}
 
-			switch edge.Rel.Type {
-			case gen.M2M, gen.O2M:
-				entitySchema.Edges = append(entitySchema.Edges, EntityEdge{
-					Name:           edge.Name,
-					TargetSchema:   edge.Type.Name,
-					Relationship:   edge.Rel.Type.String(),
-					TargetEligible: targetEligible,
-				})
-			}
+			_, workflowEligible := edge.Annotations[entx.WorkflowEligibleAnnotationName]
+
+			// immutable edges are included in the catalog (create-time injection can set them), but the
+			// registry emits no Link/Unlink for them since the update builder has no setter; consumers
+			// that mutate edges already nil-check Link
+			entitySchema.Edges = append(entitySchema.Edges, EntityEdge{
+				Name:             edge.Name,
+				TargetSchema:     edge.Type.Name,
+				Relationship:     edge.Rel.Type.String(),
+				TargetEligible:   targetEligible,
+				Unique:           edge.Unique,
+				Optional:         edge.Optional,
+				Inverse:          edge.IsInverse(),
+				Immutable:        edge.Immutable,
+				WorkflowEligible: workflowEligible,
+			})
 		}
 
 		slices.SortFunc(entitySchema.Edges, func(a, b EntityEdge) int {
 			return cmp.Compare(a.Name, b.Name)
 		})
 
-		var workflowMarker bool
-
-		for _, field := range node.Fields {
-			raw, ok := field.Annotations[entx.WorkflowEligibleAnnotationName]
-			if !ok {
-				continue
-			}
-
-			ann := &entx.WorkflowEligibleAnnotation{}
-			if err := ann.Decode(raw); err != nil {
-				return EntityData{}, fmt.Errorf("decode workflow eligible annotation on %s.%s: %w", node.Name, field.Name, err)
-			}
-
-			if ann.Marker {
-				workflowMarker = true
-				continue
-			}
-
-			entitySchema.WorkflowFields = append(entitySchema.WorkflowFields, field.Name)
-		}
-
-		for _, edge := range node.Edges {
-			if _, ok := edge.Annotations[entx.WorkflowEligibleAnnotationName]; ok {
-				entitySchema.WorkflowEdges = append(entitySchema.WorkflowEdges, edge.Name)
-			}
-		}
-
-		slices.Sort(entitySchema.WorkflowFields)
-		slices.Sort(entitySchema.WorkflowEdges)
-
-		entitySchema.WorkflowEligible = workflowMarker || len(entitySchema.WorkflowFields) > 0 || len(entitySchema.WorkflowEdges) > 0
+		// workflow eligibility is derived from the unified catalog: any workflow-eligible field or
+		// edge, or the schema-level marker
+		entitySchema.WorkflowEligible = workflowMarker ||
+			slices.ContainsFunc(entitySchema.ObjectFields, func(f EntityField) bool { return f.WorkflowEligible }) ||
+			slices.ContainsFunc(entitySchema.Edges, func(e EntityEdge) bool { return e.WorkflowEligible })
 		entitySchema.WorkflowRefField = refFieldFor(refFields, node.Name)
 
 		if hasCreate {
@@ -258,6 +345,16 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 
 		if hasUpdate {
 			entitySchema.UpdateInputType = "Update" + node.Name + "Input"
+		}
+
+		entitySchema.IntegrationMapped = integrationMeta.Mapped
+		entitySchema.StockPersist = integrationMeta.StockPersist
+		entitySchema.RuntimeDefaults = integrationMeta.RuntimeDefaults
+
+		if integrationMeta.Mapped && hasCreate {
+			entitySchema.IngestTopic = "entityops." + entitySchema.Snake + ".ingest.requested"
+			entitySchema.IngestRequestType = node.Name + "IngestRequested"
+			entitySchema.IngestTopicVar = "Topic" + node.Name
 		}
 
 		data.Schemas = append(data.Schemas, entitySchema)
@@ -323,13 +420,7 @@ func hasIntegrationMappingAnnotation(schema *load.Schema) bool {
 			continue
 		}
 
-		raw, ok := field.Annotations[entx.IntegrationMappingFieldAnnotationName]
-		if !ok {
-			continue
-		}
-
-		var ann entx.IntegrationMappingFieldAnnotation
-		if err := ann.Decode(raw); err == nil && (ann.UpsertKey || ann.LookupKey) {
+		if _, ok := field.Annotations[entx.IntegrationMappingFieldAnnotationName]; ok {
 			return true
 		}
 	}
@@ -356,6 +447,9 @@ func generateEntityFiles(outputDir string, data EntityData) error {
 		{name: "entity_upsert", filename: "entity_upsert.go", tmplFile: "templates/entity_upsert.tpl"},
 		{name: "entity_handlers", filename: "entity_handlers.go", tmplFile: "templates/entity_handlers.tpl"},
 		{name: "entity_workflow", filename: "entity_workflow.go", tmplFile: "templates/entity_workflow.tpl"},
+		{name: "entity_links", filename: "entity_links.go", tmplFile: "templates/entity_links.tpl"},
+		{name: "entity_integration", filename: "entity_integration.go", tmplFile: "templates/entity_integration.tpl"},
+		{name: "entity_projection", filename: "entity_projection.go", tmplFile: "templates/entity_projection.tpl"},
 	}
 
 	for _, spec := range specs {
