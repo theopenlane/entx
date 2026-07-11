@@ -119,8 +119,6 @@ type SearchFieldAnnotation struct {
 type WorkflowEligibleAnnotation struct {
 	// Eligible indicates that the field can be included in workflow definitions and modified via proposed changes
 	Eligible bool
-	// Marker indicates the field exists only to flag the schema as workflow-eligible and must not be surfaced as a workflow-triggerable field
-	Marker bool
 }
 
 // WorkflowGroupEdgeAnnotation marks a group-permission edge (editors/viewers/blocked_groups)
@@ -470,15 +468,6 @@ func FieldAdminSearchable(s bool) *SearchFieldAnnotation {
 func FieldWorkflowEligible() *WorkflowEligibleAnnotation {
 	return &WorkflowEligibleAnnotation{
 		Eligible: true,
-	}
-}
-
-// WorkflowEligibleMarker returns a WorkflowEligibleAnnotation that marks the schema as
-// workflow-eligible without surfacing the carrier field as a workflow-triggerable field
-func WorkflowEligibleMarker() *WorkflowEligibleAnnotation {
-	return &WorkflowEligibleAnnotation{
-		Eligible: true,
-		Marker:   true,
 	}
 }
 

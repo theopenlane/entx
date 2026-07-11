@@ -11,17 +11,17 @@ import (
 // integrationSystemFieldNames is the set of system-managed field names excluded from integration
 // mapping unless they carry an explicit IntegrationMappingFieldAnnotation
 var integrationSystemFieldNames = map[string]struct{}{
-	"id":                       {},
-	"owner_id":                 {},
-	"organization_id":          {},
-	"org_id":                   {},
-	"created_at":               {},
-	"updated_at":               {},
-	"created_by":               {},
-	"updated_by":               {},
-	"deleted_at":               {},
-	"deleted_by":               {},
-	"workflow_eligible_marker": {},
+	"id":                        {},
+	"owner_id":                  {},
+	"organization_id":           {},
+	"org_id":                    {},
+	"created_at":                {},
+	"updated_at":                {},
+	"created_by":                {},
+	"updated_by":                {},
+	"deleted_at":                {},
+	"deleted_by":                {},
+	workflowEligibleMarkerField: {},
 }
 
 // EntityRuntimeDefault represents one integration-injected field used by stock ingest preparation

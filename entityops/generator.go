@@ -159,8 +159,13 @@ type EntityEdge struct {
 	WorkflowEligible bool
 }
 
+// workflowEligibleMarkerField is the name of the WorkflowApprovalMixin carrier field that flags a
+// schema as workflow-eligible without being a real workflow-triggerable field
+const workflowEligibleMarkerField = "workflow_eligible_marker"
+
 // fieldWorkflowEligible reports whether a field carries a non-marker workflow-eligible annotation.
-// marker is true when the annotation is the schema-level eligibility marker rather than a real field
+// marker is true when the field is the WorkflowApprovalMixin carrier field, which flags the schema
+// as workflow-eligible without itself being a targetable field
 func fieldWorkflowEligible(field *gen.Field) (eligible bool, marker bool, err error) {
 	raw, ok := field.Annotations[entx.WorkflowEligibleAnnotationName]
 	if !ok {
@@ -172,11 +177,11 @@ func fieldWorkflowEligible(field *gen.Field) (eligible bool, marker bool, err er
 		return false, false, err
 	}
 
-	if ann.Marker {
+	if field.Name == workflowEligibleMarkerField {
 		return false, true, nil
 	}
 
-	return true, false, nil
+	return ann.Eligible, false, nil
 }
 
 // collectEntityData iterates the ent graph and collects schemas annotated with
