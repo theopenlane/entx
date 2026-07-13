@@ -3,11 +3,15 @@
 package {{ .PackageName }}
 
 import (
+	"context"
 	"slices"
 
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/sql"
+
 	"{{ .EntPackage }}"
-	"{{ .EntPackage }}/workflowobjectref"
+	"{{ .EntPackage }}/predicate"
+	"{{ .JsonxPackage }}"
 )
 
 // EdgeChange describes one mutated edge and the IDs added or removed
@@ -20,10 +24,14 @@ type EdgeChange struct {
 	RemovedIDs []string `json:"removedIds,omitempty" jsonschema:"description=IDs removed from the edge"`
 }
 
-// WorkflowEligible reports whether the schema participates in workflows via eligible fields or edges
+// WorkflowEligible reports whether the schema participates in workflows via an object-ref edge or
+// eligible fields or edges
 func (s *Schema) WorkflowEligible() bool {
-	return s.RefField != "" ||
-		slices.ContainsFunc(s.Fields, func(f FieldDescriptor) bool { return f.WorkflowEligible }) ||
+	if _, ok := workflowRefEdgeFor(s); ok {
+		return true
+	}
+
+	return slices.ContainsFunc(s.Fields, func(f FieldDescriptor) bool { return f.WorkflowEligible }) ||
 		slices.ContainsFunc(s.Edges, func(e EdgeDescriptor) bool { return e.WorkflowEligible })
 }
 
@@ -67,39 +75,61 @@ func (s *Schema) WorkflowEdgeNames() []string {
 	return out
 }
 
-// init wires workflow object-ref resolution onto each schema that has a WorkflowObjectRef edge
-func init() {
-{{- range .Schemas }}
-{{- if .WorkflowRefField }}
-	Schema{{ .Name }}.RefField = "{{ .WorkflowRefField }}"
-	Schema{{ .Name }}.RefMatch = func(ref *generated.WorkflowObjectRef) (string, bool) {
-		if ref.{{ .WorkflowRefField }}ID != "" {
-			return ref.{{ .WorkflowRefField }}ID, true
-		}
-
-		return "", false
-	}
-	Schema{{ .Name }}.RefFilter = func(query *generated.WorkflowObjectRefQuery, objectID string) *generated.WorkflowObjectRefQuery {
-		return query.Where(workflowobjectref.{{ .WorkflowRefField }}IDEQ(objectID))
-	}
-{{- end }}
-{{- end }}
-}
-
-// ObjectFromWorkflowRef resolves the workflow object type and ID from a WorkflowObjectRef row by
-// dispatching to each schema's generated RefMatch closure
-func ObjectFromWorkflowRef(ref *generated.WorkflowObjectRef) (objectType string, objectID string, ok bool) {
-	for _, schema := range allSchemas {
-		if schema.RefMatch == nil {
+// workflowRefEdgeFor returns WorkflowObjectRef's unique owning edge targeting the given schema, or
+// false when the schema has no object-ref edge. The owning workflow_instance edge is excluded: it is
+// set on every ref row and does not identify the target object
+func workflowRefEdgeFor(schema *Schema) (EdgeDescriptor, bool) {
+	for _, edge := range SchemaWorkflowObjectRef.Edges {
+		if !edge.Unique || edge.Field == "" || edge.Target == SchemaWorkflowInstance {
 			continue
 		}
 
-		if id, matched := schema.RefMatch(ref); matched {
-			return schema.Name, id, true
+		if edge.Target == schema {
+			return edge, true
 		}
 	}
 
+	return EdgeDescriptor{}, false
+}
+
+// ObjectFromWorkflowRef resolves the workflow object type and ID from a WorkflowObjectRef row using
+// the object-ref edge catalog, replacing the per-type resolver switch
+func ObjectFromWorkflowRef(ctx context.Context, ref *generated.WorkflowObjectRef) (objectType string, objectID string, ok bool) {
+	row, err := jsonx.ToRawMap(ref)
+	if err != nil {
+		logError(ctx, SchemaRef{Schema: SchemaWorkflowObjectRef.Snake, Operation: OpLoad, EntityID: ref.ID}, ErrDecodeFailed, err)
+
+		return "", "", false
+	}
+
+	for _, edge := range SchemaWorkflowObjectRef.Edges {
+		if !edge.Unique || edge.Field == "" || edge.Target == SchemaWorkflowInstance {
+			continue
+		}
+
+		id, err := jsonx.Decode[string](row[edge.Field])
+		if err != nil || id == "" {
+			continue
+		}
+
+		return edge.Target.Name, id, true
+	}
+
 	return "", "", false
+}
+
+// RefsByObject narrows a WorkflowObjectRef query to rows referencing the given object, using the
+// object-ref edge catalog in place of per-type predicate switches; ok is false when the schema has
+// no object-ref edge
+func RefsByObject(query *generated.WorkflowObjectRefQuery, schema *Schema, objectID string) (*generated.WorkflowObjectRefQuery, bool) {
+	edge, ok := workflowRefEdgeFor(schema)
+	if !ok {
+		return query, false
+	}
+
+	return query.Where(predicate.WorkflowObjectRef(func(s *sql.Selector) {
+		s.Where(sql.EQ(s.C(edge.Field), objectID))
+	})), true
 }
 
 // ExtractChangedEdges returns the workflow-eligible edges mutated by m, with the IDs added or removed

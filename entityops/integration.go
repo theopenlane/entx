@@ -41,12 +41,6 @@ type integrationFieldMeta struct {
 	InputKey string
 	// InputGoField is the exported Go struct field name for the input key on ent create inputs
 	InputGoField string
-	// Required reports whether the field is required (non-optional in ent)
-	Required bool
-	// UpsertKey reports whether the field participates in dedupe/upsert matching
-	UpsertKey bool
-	// LookupKey reports whether the field participates in stock ingest lookup matching
-	LookupKey bool
 	// FromIntegration reports whether the field value is injected from the integration record at ingest time
 	FromIntegration bool
 }
@@ -127,9 +121,6 @@ func collectIntegrationMapping(schema *load.Schema) (map[string]integrationField
 		meta[field.Name] = integrationFieldMeta{
 			InputKey:        key,
 			InputGoField:    goField,
-			Required:        !field.Optional,
-			UpsertKey:       ant != nil && ant.UpsertKey,
-			LookupKey:       ant != nil && ant.LookupKey,
 			FromIntegration: fromIntegration,
 		}
 

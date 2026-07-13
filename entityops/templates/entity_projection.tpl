@@ -2,8 +2,6 @@
 
 package {{ .PackageName }}
 
-import "reflect"
-
 {{ range $schema := .Schemas }}
 // {{ $schema.Name }}Projection is the flat, CEL- and jsonschema-facing view of a {{ $schema.Name }}: its
 // readable scalar fields (id, columns, foreign-key ids) with snake_case json tags matching the field
@@ -19,11 +17,3 @@ type {{ $schema.Name }}Projection struct {
 {{- end }}
 }
 {{ end }}
-
-// init registers each schema's projection type on its Schema, so the CEL native type for a target or
-// source entity is reachable through the single Schema object rather than a separate lookup table
-func init() {
-{{- range $schema := .Schemas }}
-	Schema{{ $schema.Name }}.ProjectionType = reflect.TypeFor[{{ $schema.Name }}Projection]()
-{{- end }}
-}

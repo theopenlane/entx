@@ -86,8 +86,6 @@ type EntitySchema struct {
 	Edges []EntityEdge
 	// WorkflowEligible indicates the schema participates in workflows via eligible fields or edges
 	WorkflowEligible bool
-	// WorkflowRefField is the WorkflowObjectRef struct field for this type (e.g. "Control"); empty if none
-	WorkflowRefField string
 	// IntegrationMapped indicates the schema participates in integration ingest mapping
 	IntegrationMapped bool
 	// StockPersist indicates the schema opts into the generated stock ingest persistence path
@@ -110,8 +108,6 @@ type EntityField struct {
 	Snake string
 	// Type is the ent field type string (e.g. "string", "bool", "time.Time")
 	Type string
-	// Immutable reports whether the field is set only at create time (excluded from update-input re-keying)
-	Immutable bool
 	// WorkflowEligible reports whether the field may drive workflow conditions and triggers
 	WorkflowEligible bool
 	// MatchKey reports whether the field is a plain-string indexed column usable as a cross-link match key
@@ -122,12 +118,6 @@ type EntityField struct {
 	InputKey string
 	// InputGoField is the exported Go struct field name for the input key on ent create inputs
 	InputGoField string
-	// Required reports whether the field is required (non-optional) on the create input
-	Required bool
-	// UpsertKey reports whether the field participates in integration dedupe/upsert matching
-	UpsertKey bool
-	// LookupKey reports whether the field participates in integration stock ingest lookup matching
-	LookupKey bool
 	// FromIntegration reports whether the field value is injected from the integration record at ingest time
 	FromIntegration bool
 }
@@ -138,25 +128,20 @@ type EntityEdge struct {
 	Name string
 	// TargetSchema is the target PascalCase name (e.g., "Control")
 	TargetSchema string
-	// Relationship is the ent relationship type from this side ("M2M", "O2M", "M2O", or "O2O")
-	Relationship string
-	// TargetEligible reports whether the target schema has its own entityops Schema
-	// (so a Target reference can be emitted); false for workflow-eligible edges whose
-	// target is not an entity-ops schema (e.g. group-permission edges to Group)
-	TargetEligible bool
 	// Unique reports whether this side references a single target, so linking sets one id
 	// (Set<Edge>ID) rather than adding many (Add<Edge>IDs)
 	Unique bool
-	// Optional reports whether the edge may be cleared; a required unique edge has no Clear<Edge>
-	// method on the update builder, so its unlink is a no-op
+	// Optional reports whether a unique edge may be cleared; gates ClearField emission since a
+	// required unique edge has no Clear<Edge> on the update input
 	Optional bool
-	// Inverse reports whether this is the back-reference (edge.From) side of the relationship
-	Inverse bool
-	// Immutable reports whether the edge is set only at create time; its Link/Unlink (UpdateOne-based)
-	// closures are not emitted because the update builder has no setter for an immutable edge
+	// Immutable reports whether the edge is set only at create time; gates the update-input
+	// mutation key emission and the runtime link-existing guard
 	Immutable bool
 	// WorkflowEligible reports whether the edge may drive workflow conditions and triggers
 	WorkflowEligible bool
+	// Field is the foreign-key storage column on this schema's table for unique owning edges
+	// (e.g. "control_id"); empty when the foreign key lives on the target table
+	Field string
 }
 
 // workflowEligibleMarkerField is the name of the WorkflowApprovalMixin carrier field that flags a
@@ -215,8 +200,6 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 			eligibleSchemas = append(eligibleSchemas, node.Name)
 		}
 	}
-
-	refFields := workflowRefFields(g)
 
 	for _, node := range g.Nodes {
 		if !slices.Contains(eligibleSchemas, node.Name) {
@@ -282,7 +265,6 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 				Name:             field.StructField(),
 				Snake:            field.StorageKey(),
 				Type:             fieldType,
-				Immutable:        field.Immutable,
 				WorkflowEligible: eligible,
 				MatchKey:         field.Type != nil && field.Type.Type == entfield.TypeString && !field.HasGoType(),
 			}
@@ -291,9 +273,6 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 				entityField.IntegrationMapped = true
 				entityField.InputKey = im.InputKey
 				entityField.InputGoField = im.InputGoField
-				entityField.Required = im.Required
-				entityField.UpsertKey = im.UpsertKey
-				entityField.LookupKey = im.LookupKey
 				entityField.FromIntegration = im.FromIntegration
 			}
 
@@ -305,13 +284,9 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		})
 
 		for _, edge := range node.Edges {
-			targetEligible := slices.Contains(eligibleSchemas, edge.Type.Name)
-			_, groupEdge := edge.Annotations[entx.WorkflowGroupEdgeAnnotationName]
-
 			// include every edge to an eligible target schema (cross-object linking, in either
-			// direction and at any cardinality) plus group-permission edges whose target is not an
-			// entityops schema, so the registry exposes a query closure for workflow group resolution
-			if !targetEligible && !groupEdge {
+			// direction and at any cardinality)
+			if !slices.Contains(eligibleSchemas, edge.Type.Name) {
 				continue
 			}
 
@@ -320,16 +295,19 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 			// immutable edges are included in the catalog (create-time injection can set them), but the
 			// registry emits no Link/Unlink for them since the update builder has no setter; consumers
 			// that mutate edges already nil-check Link
+			fkColumn := ""
+			if edge.Unique && edge.OwnFK() {
+				fkColumn = edge.Rel.Column()
+			}
+
 			entitySchema.Edges = append(entitySchema.Edges, EntityEdge{
 				Name:             edge.Name,
 				TargetSchema:     edge.Type.Name,
-				Relationship:     edge.Rel.Type.String(),
-				TargetEligible:   targetEligible,
 				Unique:           edge.Unique,
 				Optional:         edge.Optional,
-				Inverse:          edge.IsInverse(),
 				Immutable:        edge.Immutable,
 				WorkflowEligible: workflowEligible,
+				Field:            fkColumn,
 			})
 		}
 
@@ -342,7 +320,6 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		entitySchema.WorkflowEligible = workflowMarker ||
 			slices.ContainsFunc(entitySchema.ObjectFields, func(f EntityField) bool { return f.WorkflowEligible }) ||
 			slices.ContainsFunc(entitySchema.Edges, func(e EntityEdge) bool { return e.WorkflowEligible })
-		entitySchema.WorkflowRefField = refFieldFor(refFields, node.Name)
 
 		if hasCreate {
 			entitySchema.CreateInputType = "Create" + node.Name + "Input"
@@ -449,7 +426,6 @@ func generateEntityFiles(outputDir string, data EntityData) error {
 		{name: "entity_schema", filename: "entity_schema.go", tmplFile: "templates/entity_schema.tpl"},
 		{name: "entity_errors", filename: "entity_errors.go", tmplFile: "templates/entity_errors.tpl"},
 		{name: "entity_registry", filename: "entity_registry.go", tmplFile: "templates/entity_registry.tpl"},
-		{name: "entity_upsert", filename: "entity_upsert.go", tmplFile: "templates/entity_upsert.tpl"},
 		{name: "entity_handlers", filename: "entity_handlers.go", tmplFile: "templates/entity_handlers.tpl"},
 		{name: "entity_workflow", filename: "entity_workflow.go", tmplFile: "templates/entity_workflow.tpl"},
 		{name: "entity_links", filename: "entity_links.go", tmplFile: "templates/entity_links.tpl"},
@@ -575,47 +551,6 @@ func skipMutationUpdateInput(node *gen.Type) bool {
 	}
 
 	return true
-}
-
-// workflowRef pairs a workflow object type with its WorkflowObjectRef struct field
-type workflowRef struct {
-	// typeName is the target object type name (e.g. "Control")
-	typeName string
-	// field is the WorkflowObjectRef struct field for that type (e.g. "Control")
-	field string
-}
-
-// workflowRefFields returns, for each unique edge on the WorkflowObjectRef node, the
-// target type and its struct field — used to generate the object-ref resolver and filter
-func workflowRefFields(g *gen.Graph) []workflowRef {
-	var out []workflowRef
-
-	for _, node := range g.Nodes {
-		if node.Name != "WorkflowObjectRef" {
-			continue
-		}
-
-		for _, edge := range node.Edges {
-			if !edge.Unique {
-				continue
-			}
-
-			out = append(out, workflowRef{typeName: edge.Type.Name, field: edge.StructField()})
-		}
-	}
-
-	return out
-}
-
-// refFieldFor returns the WorkflowObjectRef struct field for a type, or "" if none
-func refFieldFor(refs []workflowRef, typeName string) string {
-	for _, r := range refs {
-		if r.typeName == typeName {
-			return r.field
-		}
-	}
-
-	return ""
 }
 
 // findSchema returns the schema for a given name from the graph

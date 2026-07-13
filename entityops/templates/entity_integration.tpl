@@ -65,18 +65,3 @@ func Prepare{{ $schema.Name }}Input(input generated.{{ $schema.CreateInputType }
 {{- end }}
 {{- end }}
 
-// init populates the integration mapping metadata on the schema registry
-func init() {
-{{- range $schema := .Schemas }}
-{{- if $schema.IntegrationMapped }}
-	Schema{{ $schema.Name }}.StockPersist = {{ $schema.StockPersist }}
-	Schema{{ $schema.Name }}.AllowedKeys = map[string]struct{}{
-{{- range $schema.ObjectFields }}
-{{- if .IntegrationMapped }}
-		{{ printf "%q" .InputKey }}: {},
-{{- end }}
-{{- end }}
-	}
-{{- end }}
-{{- end }}
-}

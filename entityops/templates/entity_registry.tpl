@@ -11,11 +11,14 @@ import (
 	"strings"
 	"sync"
 
+	"entgo.io/ent/dialect/sql"
 	"github.com/stoewer/go-strcase"
 
 	"{{ .CelxPackage }}"
 	"{{ .EntPackage }}"
+	"{{ .EntPackage }}/predicate"
 	"{{ .JsonxPackage }}"
+	"{{ .LogxPackage }}"
 {{- range .Schemas }}
 {{- if and .HasOwnerID .PredicateImport }}
 	"{{ .PredicateImport }}"
@@ -54,23 +57,14 @@ type Schema struct {
 	// SourceContext re-keys an ingest create-input payload into the snake_case source context that a
 	// cross-link rule's key-match and CEL expression read; set for every schema with a create input
 	SourceContext func(payload json.RawMessage) json.RawMessage
-	// AllowedKeys is the set of integration mapping input keys accepted for this schema; empty for
-	// schemas that do not participate in integration ingest mapping
+	// AllowedKeys is the set of integration mapping input keys accepted for this schema, derived at
+	// init from the unified field catalog; empty for schemas that do not participate in ingest mapping
 	AllowedKeys map[string]struct{}
 	// StockPersist reports whether the schema opts into the generated stock ingest persistence path
 	StockPersist bool
 	// ProjectionType is the reflect.Type of this schema's flat CEL/jsonschema projection struct
 	// ({Name}Projection); the registerable native-type view of the entity used for typed expressions
 	ProjectionType reflect.Type
-	// RefField is the WorkflowObjectRef struct field for this object type (e.g. "Control"); empty if
-	// the type has no workflow object-ref edge
-	RefField string
-	// RefMatch reports the object id and whether this schema owns the given WorkflowObjectRef row,
-	// replacing the per-type ObjectFromWorkflowRef switch; nil for non-workflow schemas
-	RefMatch func(ref *generated.WorkflowObjectRef) (string, bool)
-	// RefFilter adds this object type's predicate to a WorkflowObjectRef query, replacing the per-type
-	// ApplyWorkflowRefFilter switch; nil for non-workflow schemas
-	RefFilter func(query *generated.WorkflowObjectRefQuery, objectID string) *generated.WorkflowObjectRefQuery
 }
 
 // applyClears rewrites explicit null values in a snake_case payload to the generated Clear<Field>
@@ -107,6 +101,29 @@ func isJSONNull(raw json.RawMessage) bool {
 	return bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
 }
 
+// MatchKeyField reports whether field is a declared match-key column for this schema
+func (s *Schema) MatchKeyField(field string) bool {
+	for _, f := range s.Fields {
+		if f.MatchKey && f.Name == field {
+			return true
+		}
+	}
+
+	return false
+}
+
+// matchKeyIn returns a selector predicate matching the given match-key column against any of values
+func matchKeyIn(field string, values []string) func(*sql.Selector) {
+	return func(s *sql.Selector) {
+		args := make([]any, 0, len(values))
+		for _, v := range values {
+			args = append(args, v)
+		}
+
+		s.Where(sql.In(s.C(field), args...))
+	}
+}
+
 // --- Per-schema registrations ---
 
 var (
@@ -121,6 +138,10 @@ var (
 			Table:  "{{ .Table }}",
 			Label:  "{{ .Label }}",
 		},
+		ProjectionType: reflect.TypeFor[{{ .Name }}Projection](),
+{{- if .StockPersist }}
+		StockPersist: true,
+{{- end }}
 {{- if .HasCreate }}
 		Create: func(ctx context.Context, client *generated.Client, input json.RawMessage) (string, error) {
 			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpCreate}
@@ -179,44 +200,6 @@ var (
 			return results, nil
 		},
 {{- end }}
-{{- $hasMatchKey := false }}
-{{- range .ObjectFields }}{{- if .MatchKey }}{{- $hasMatchKey = true }}{{- end }}{{- end }}
-{{- if and .HasOwnerID $hasMatchKey }}
-		QueryByKey: func(ctx context.Context, client *generated.Client, orgID string, field string, values []string) ([]json.RawMessage, error) {
-			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpQuery}
-
-			query := client.{{ .Name }}.Query().Where({{ .PredicatePackage }}.OwnerID(orgID))
-
-			switch field {
-		{{- range .ObjectFields }}
-		{{- if .MatchKey }}
-			case "{{ .Snake }}":
-				query = query.Where({{ $schema.PredicatePackage }}.{{ .Name }}In(values...))
-		{{- end }}
-		{{- end }}
-			default:
-				return nil, fmt.Errorf("%w: %s.%s", ErrInvalidKeyField, "{{ .Snake }}", field)
-			}
-
-			entities, err := query.All(ctx)
-			if err != nil {
-				return nil, logError(ctx, ref, ErrQueryFailed, err)
-			}
-
-			results := make([]json.RawMessage, 0, len(entities))
-			for _, e := range entities {
-				data, err := json.Marshal(e)
-				if err != nil {
-					logError(ctx, ref, ErrMarshalFailed, err)
-					continue
-				}
-
-				results = append(results, data)
-			}
-
-			return results, nil
-		},
-{{- end }}
 		Load: func(ctx context.Context, client *generated.Client, entityID string) (json.RawMessage, error) {
 			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpLoad, EntityID: entityID}
 
@@ -242,7 +225,7 @@ func init() {
 {{- if .ObjectFields }}
 	Schema{{ $schema.Name }}.Fields = []FieldDescriptor{
 {{- range .ObjectFields }}
-		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .Immutable }}, Immutable: true{{ end }}{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}", Required: {{ .Required }}{{ if .UpsertKey }}, UpsertKey: true{{ end }}{{ if .LookupKey }}, LookupKey: true{{ end }}{{ end }}},
+		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}"{{ end }}},
 {{- end }}
 	}
 {{- end }}
@@ -254,65 +237,30 @@ func init() {
 		{
 			Name: "{{ .Name }}",
 			Label: "{{ .Name | pascal }}",
-{{- if .TargetEligible }}
 			Target: Schema{{ .TargetSchema }},
 			TargetType: "{{ .TargetSchema }}",
+{{- if .Immutable }}
+			Immutable: true,
 {{- end }}
-			Relationship: "{{ .Relationship }}",
 {{- if .Unique }}
 			Unique: true,
 			CreateField: "{{ .Name | camel }}ID",
+{{- if and .Optional (not .Immutable) }}
+			ClearField: "clear{{ .Name | pascal }}",
+{{- end }}
+{{- if .Field }}
+			Field: "{{ .Field }}",
+{{- end }}
 {{- else }}
 			CreateField: "{{ .Name | pascal | singular | camel }}IDs",
+{{- if not .Immutable }}
+			AddField: "add{{ .Name | pascal | singular }}IDs",
+			RemoveField: "remove{{ .Name | pascal | singular }}IDs",
 {{- end }}
-{{- if .Immutable }}
-			Immutable: true,
 {{- end }}
 {{- if .WorkflowEligible }}
 			WorkflowEligible: true,
 {{- end }}
-{{- if not .Immutable }}
-			Link: func(ctx context.Context, client *generated.Client, entityID string, targetIDs ...string) error {
-{{- if .Unique }}
-				if len(targetIDs) == 0 {
-					return nil
-				}
-
-				if err := client.{{ $schema.Name }}.UpdateOneID(entityID).Set{{ .Name | pascal }}ID(targetIDs[0]).Exec(ctx); err != nil {
-					return logPersistError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: OpLink, EntityID: entityID, Edge: "{{ .Name }}"}, ErrLinkFailed, err)
-				}
-{{- else }}
-				if err := client.{{ $schema.Name }}.UpdateOneID(entityID).Add{{ .Name | pascal | singular }}IDs(targetIDs...).Exec(ctx); err != nil {
-					return logPersistError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: OpLink, EntityID: entityID, Edge: "{{ .Name }}"}, ErrLinkFailed, err)
-				}
-{{- end }}
-
-				return nil
-			},
-			Unlink: func(ctx context.Context, client *generated.Client, entityID string, targetIDs ...string) error {
-{{- if .Unique }}
-{{- if .Optional }}
-				if err := client.{{ $schema.Name }}.UpdateOneID(entityID).Clear{{ .Name | pascal }}().Exec(ctx); err != nil {
-					return logPersistError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: OpUnlink, EntityID: entityID, Edge: "{{ .Name }}"}, ErrUnlinkFailed, err)
-				}
-{{- end }}
-{{- else }}
-				if err := client.{{ $schema.Name }}.UpdateOneID(entityID).Remove{{ .Name | pascal | singular }}IDs(targetIDs...).Exec(ctx); err != nil {
-					return logPersistError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: OpUnlink, EntityID: entityID, Edge: "{{ .Name }}"}, ErrUnlinkFailed, err)
-				}
-{{- end }}
-
-				return nil
-			},
-{{- end }}
-			Query: func(ctx context.Context, client *generated.Client, entityID string) ([]string, error) {
-				entity, err := client.{{ $schema.Name }}.Get(ctx, entityID)
-				if err != nil {
-					return nil, logError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: OpQuery, EntityID: entityID, Edge: "{{ .Name }}"}, ErrLoadFailed, err)
-				}
-
-				return entity.Query{{ .Name | pascal }}().IDs(ctx)
-			},
 		},
 {{- end }}
 	}
@@ -325,6 +273,56 @@ func init() {
 	}
 {{- end }}
 {{- end }}
+{{- range $schema := .Schemas }}
+{{- $hasMatchKey := false }}
+{{- range $schema.ObjectFields }}{{- if .MatchKey }}{{- $hasMatchKey = true }}{{- end }}{{- end }}
+{{- if and $schema.HasOwnerID $hasMatchKey }}
+	Schema{{ $schema.Name }}.QueryByKey = func(ctx context.Context, client *generated.Client, orgID string, field string, values []string) ([]json.RawMessage, error) {
+		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: OpQuery}
+
+		if !Schema{{ $schema.Name }}.MatchKeyField(field) {
+			return nil, logError(ctx, ref, ErrInvalidKeyField, fmt.Errorf("%s is not a match-key field on %s", field, "{{ $schema.Snake }}"))
+		}
+
+		entities, err := client.{{ $schema.Name }}.Query().
+			Where({{ $schema.PredicatePackage }}.OwnerID(orgID)).
+			Where(predicate.{{ $schema.Name }}(matchKeyIn(field, values))).
+			All(ctx)
+		if err != nil {
+			return nil, logError(ctx, ref, ErrQueryFailed, err)
+		}
+
+		results := make([]json.RawMessage, 0, len(entities))
+		for _, e := range entities {
+			data, err := json.Marshal(e)
+			if err != nil {
+				logError(ctx, ref, ErrMarshalFailed, err)
+				continue
+			}
+
+			results = append(results, data)
+		}
+
+		return results, nil
+	}
+{{- end }}
+{{- end }}
+
+	// AllowedKeys is derived from the unified field catalog: every integration-mapped field's
+	// input key is accepted for that schema
+	for _, schema := range allSchemas {
+		for _, field := range schema.Fields {
+			if field.InputKey == "" {
+				continue
+			}
+
+			if schema.AllowedKeys == nil {
+				schema.AllowedKeys = make(map[string]struct{})
+			}
+
+			schema.AllowedKeys[field.InputKey] = struct{}{}
+		}
+	}
 }
 
 // --- Lookup registry ---
@@ -386,7 +384,7 @@ func AllSchemas() []*Schema {
 func SelectTargets(ctx context.Context, client *generated.Client, orgID string, selector TargetSelector) ([]EntityRef, error) {
 	schema, ok := LookupSchema(selector.Schema.Name)
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrSchemaNotFound, selector.Schema.Name)
+		return nil, logError(ctx, SchemaRef{Schema: selector.Schema.Snake, Operation: OpQuery}, ErrSchemaNotFound, fmt.Errorf("schema %s is not registered", selector.Schema.Name))
 	}
 
 	entities, err := selectCandidates(ctx, client, schema, orgID, selector)
@@ -414,8 +412,12 @@ func SelectTargets(ctx context.Context, client *generated.Client, orgID string, 
 
 		eval, err = celx.NewNativeEntityEvaluator(envCfg, celx.FastEvalConfig(), schema.ProjectionType, sourceType)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %s: %w", ErrEvaluatorBuildFailed, schema.Name, err)
+			errorEvent(ctx, SchemaRef{Schema: schema.Snake, Operation: OpQuery}, err).Str(FieldExpression, selector.Expression).Msg(ErrEvaluatorBuildFailed.Error())
+
+			return nil, fmt.Errorf("%w: %w", ErrEvaluatorBuildFailed, err)
 		}
+
+		logx.FromContext(ctx).Debug().Str(FieldSchema, schema.Snake).Str(FieldExpression, selector.Expression).Int("candidates", len(entities)).Msg("entityops: filtering targets with expression")
 	}
 
 	excludeSet := make(map[string]struct{}, len(selector.ExcludeIDs))
@@ -453,7 +455,7 @@ func SelectTargets(ctx context.Context, client *generated.Client, orgID string, 
 			}
 
 			if evalErr != nil {
-				logError(ctx, SchemaRef{Schema: schema.Snake, Operation: OpQuery, EntityID: parsed.ID}, ErrEvaluationFailed, evalErr)
+				errorEvent(ctx, SchemaRef{Schema: schema.Snake, Operation: OpQuery, EntityID: parsed.ID}, evalErr).Str(FieldExpression, selector.Expression).Msg(ErrEvaluationFailed.Error())
 				continue
 			}
 
