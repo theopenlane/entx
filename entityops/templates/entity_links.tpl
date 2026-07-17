@@ -23,9 +23,7 @@ import (
 // workflow definition can set edges identically to an ingest mapping
 func InjectCreateLinks(ctx context.Context, client *generated.Client, ownerID string, schema *Schema, payload json.RawMessage, links []LinkSpec) (json.RawMessage, error) {
 	for _, link := range links {
-		edge, found := lo.Find(schema.Edges, func(e EdgeDescriptor) bool {
-			return e.Name == link.Edge
-		})
+		edge, found := schema.EdgeByName(link.Edge)
 		if !found {
 			return nil, logError(ctx, SchemaRef{Schema: schema.Snake, Operation: OpLink, Edge: link.Edge}, ErrEdgeNotFound, fmt.Errorf("%s has no linkable edge %s", schema.Name, link.Edge))
 		}
@@ -112,9 +110,7 @@ func UnlinkTargets(ctx context.Context, client *generated.Client, schema *Schema
 func updatableEdge(ctx context.Context, schema *Schema, entityID string, edgeName string, operation string) (EdgeDescriptor, error) {
 	ref := SchemaRef{Schema: schema.Snake, Operation: operation, EntityID: entityID, Edge: edgeName}
 
-	edge, found := lo.Find(schema.Edges, func(e EdgeDescriptor) bool {
-		return e.Name == edgeName
-	})
+	edge, found := schema.EdgeByName(edgeName)
 	if !found {
 		return EdgeDescriptor{}, logError(ctx, ref, ErrEdgeNotFound, fmt.Errorf("%s has no linkable edge %s", schema.Name, edgeName))
 	}

@@ -42,6 +42,8 @@ type EntityData struct {
 	ContextxPackage string
 	// CelxPackage is the celx package import path for typed entity expression evaluation
 	CelxPackage string
+	// EnumsPackageName is the Go package name for the generated WorkflowObjectType enum file
+	EnumsPackageName string
 	// Schemas contains all schemas eligible for entity operations
 	Schemas []EntitySchema
 }
@@ -120,6 +122,8 @@ type EntityField struct {
 	InputGoField string
 	// FromIntegration reports whether the field value is injected from the integration record at ingest time
 	FromIntegration bool
+	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
+	LookupKey bool
 }
 
 // EntityEdge represents one linkable edge on a schema, in either direction
@@ -173,14 +177,15 @@ func fieldWorkflowEligible(field *gen.Field) (eligible bool, marker bool, err er
 // either OPENLANE_WORKFLOW_ELIGIBLE fields or OPENLANE_INTEGRATION_MAPPING_SCHEMA
 func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 	data := EntityData{
-		PackageName:     c.PackageName,
-		EntPackage:      c.EntPackage,
-		GalaPackage:     c.GalaPackage,
-		JsonxPackage:    c.JsonxPackage,
-		LogxPackage:     c.LogxPackage,
-		ContextxPackage: c.ContextxPackage,
-		CelxPackage:     c.CelxPackage,
-		Schemas:         []EntitySchema{},
+		PackageName:      c.PackageName,
+		EntPackage:       c.EntPackage,
+		GalaPackage:      c.GalaPackage,
+		JsonxPackage:     c.JsonxPackage,
+		LogxPackage:      c.LogxPackage,
+		ContextxPackage:  c.ContextxPackage,
+		CelxPackage:      c.CelxPackage,
+		EnumsPackageName: c.EnumsPackageName,
+		Schemas:          []EntitySchema{},
 	}
 
 	var eligibleSchemas []string
@@ -274,6 +279,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 				entityField.InputKey = im.InputKey
 				entityField.InputGoField = im.InputGoField
 				entityField.FromIntegration = im.FromIntegration
+				entityField.LookupKey = im.LookupKey
 			}
 
 			entitySchema.ObjectFields = append(entitySchema.ObjectFields, entityField)
@@ -450,6 +456,22 @@ func generateEntityFiles(outputDir string, data EntityData) error {
 	}
 
 	return nil
+}
+
+// generateEnumFiles renders the WorkflowObjectType enum into the enums package, replacing the
+// standalone workflowgen enum output with the same catalog-driven eligibility
+func generateEnumFiles(outputDir string, data EntityData) error {
+	raw, err := _templates.ReadFile("templates/entity_enums.tpl")
+	if err != nil {
+		return fmt.Errorf("read template templates/entity_enums.tpl: %w", err)
+	}
+
+	tmpl, err := template.New("entity_enums").Funcs(gen.Funcs).Parse(string(raw))
+	if err != nil {
+		return fmt.Errorf("parse template entity_enums: %w", err)
+	}
+
+	return writeFile(outputDir, "workflow_object_type.go", tmpl, data)
 }
 
 // writeFile renders a template and writes the formatted output

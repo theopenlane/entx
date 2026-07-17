@@ -43,6 +43,10 @@ var (
 	ErrValidationFailed = errors.New("entityops: validation failed")
 	// ErrUpsertConflict indicates an upsert matched more than one existing record
 	ErrUpsertConflict = errors.New("entityops: upsert conflict")
+	// ErrUpsertKeyMissing indicates the payload omitted the schema's lookup key value
+	ErrUpsertKeyMissing = errors.New("entityops: upsert key missing")
+	// ErrUpsertUnsupported indicates the schema does not support catalog-driven upserts
+	ErrUpsertUnsupported = errors.New("entityops: upsert unsupported")
 	// ErrRoundTripFailed indicates a create-to-update JSON round-trip failed
 	ErrRoundTripFailed = errors.New("entityops: round-trip failed")
 	// ErrListenerRegistrationFailed indicates a gala listener could not be registered
@@ -78,6 +82,8 @@ const (
 	OpUnlink = "unlink"
 	// OpEmit identifies event emission operations
 	OpEmit = "emit"
+	// OpUpsert identifies catalog-driven upsert operations
+	OpUpsert = "upsert"
 )
 
 // --- Log field keys ---

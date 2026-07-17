@@ -43,6 +43,8 @@ type integrationFieldMeta struct {
 	InputGoField string
 	// FromIntegration reports whether the field value is injected from the integration record at ingest time
 	FromIntegration bool
+	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
+	LookupKey bool
 }
 
 // integrationSchemaMeta carries the schema-level integration mapping metadata folded onto EntitySchema
@@ -122,6 +124,7 @@ func collectIntegrationMapping(schema *load.Schema) (map[string]integrationField
 			InputKey:        key,
 			InputGoField:    goField,
 			FromIntegration: fromIntegration,
+			LookupKey:       ant != nil && ant.LookupKey,
 		}
 
 		if stockPersist && fromIntegration {

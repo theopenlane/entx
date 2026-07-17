@@ -54,14 +54,11 @@ type Schema struct {
 	Fields []FieldDescriptor
 	// Edges lists every edge to an entityops schema (and workflow group edges) for this schema
 	Edges []EdgeDescriptor
-	// SourceContext re-keys an ingest create-input payload into the snake_case source context that a
-	// cross-link rule's key-match and CEL expression read; set for every schema with a create input
-	SourceContext func(payload json.RawMessage) json.RawMessage
+	// edgesByName indexes Edges by edge name for O(1) resolution, built in init
+	edgesByName map[string]EdgeDescriptor
 	// AllowedKeys is the set of integration mapping input keys accepted for this schema, derived at
 	// init from the unified field catalog; empty for schemas that do not participate in ingest mapping
 	AllowedKeys map[string]struct{}
-	// StockPersist reports whether the schema opts into the generated stock ingest persistence path
-	StockPersist bool
 	// ProjectionType is the reflect.Type of this schema's flat CEL/jsonschema projection struct
 	// ({Name}Projection); the registerable native-type view of the entity used for typed expressions
 	ProjectionType reflect.Type
@@ -112,6 +109,13 @@ func (s *Schema) MatchKeyField(field string) bool {
 	return false
 }
 
+// EdgeByName returns the edge with the given name
+func (s *Schema) EdgeByName(name string) (EdgeDescriptor, bool) {
+	edge, ok := s.edgesByName[name]
+
+	return edge, ok
+}
+
 // matchKeyIn returns a selector predicate matching the given match-key column against any of values
 func matchKeyIn(field string, values []string) func(*sql.Selector) {
 	return func(s *sql.Selector) {
@@ -122,6 +126,140 @@ func matchKeyIn(field string, values []string) func(*sql.Selector) {
 
 		s.Where(sql.In(s.C(field), args...))
 	}
+}
+
+// LookupField returns the schema's single ingest upsert lookup field. It returns false when the
+// schema declares no lookup key or more than one, since priority between multiple lookup keys is
+// schema-specific and stays with hand-written persistence
+func (s *Schema) LookupField() (FieldDescriptor, bool) {
+	var (
+		found FieldDescriptor
+		count int
+	)
+
+	for _, f := range s.Fields {
+		if f.LookupKey {
+			found = f
+			count++
+		}
+	}
+
+	return found, count == 1
+}
+
+// Upsert persists one create-input payload by the schema's lookup key: the payload's lookup value
+// is matched against existing org-scoped records via the indexed key query, updating the single
+// match or creating the record when none exists, and returns the entity id. Matching more than one
+// record fails with ErrUpsertConflict rather than guessing. It composes the schema's catalog
+// closures, so unlike Create/Update/QueryByKey it needs no per-schema wiring. Schemas whose lookup
+// predicates are not a single org-scoped key column (integration-scoped lookups, multi-key
+// priority) keep hand-written persistence instead
+func (s *Schema) Upsert(ctx context.Context, client *generated.Client, ownerID string, payload json.RawMessage) (string, error) {
+	ref := SchemaRef{Schema: s.Snake, Operation: OpUpsert}
+
+	field, ok := s.LookupField()
+	if !ok {
+		return "", logError(ctx, ref, ErrUpsertUnsupported, fmt.Errorf("%s does not define exactly one lookup key", s.Name))
+	}
+
+	if s.Create == nil || s.Update == nil || s.QueryByKey == nil {
+		return "", logError(ctx, ref, ErrUpsertUnsupported, fmt.Errorf("%s does not support catalog create, update, and key queries", s.Name))
+	}
+
+	value := lookupValue(payload, field.InputKey)
+	if value == "" {
+		return "", ErrUpsertKeyMissing
+	}
+
+	rows, err := s.QueryByKey(ctx, client, ownerID, field.Name, []string{value})
+	if err != nil {
+		return "", err
+	}
+
+	switch len(rows) {
+	case 0:
+		return s.Create(ctx, client, payload)
+	case 1:
+		id := entityID(rows[0])
+		if id == "" {
+			return "", logError(ctx, ref, ErrDecodeFailed, fmt.Errorf("%s row matching %s=%s has no id", s.Name, field.Name, value))
+		}
+
+		return id, s.Update(ctx, client, id, s.rekeyEdgesForUpdate(payload))
+	default:
+		return "", logError(ctx, ref, ErrUpsertConflict, fmt.Errorf("%s lookup %s=%s matched %d records", s.Name, field.Name, value, len(rows)))
+	}
+}
+
+// rekeyEdgesForUpdate renames to-many edge keys in a create-input payload to their update-input add
+// keys, so cross-object links injected at map time also apply on the re-ingest update path. Links
+// are additive on update: edges carry no provenance, so targets no longer matched are never removed.
+// Unique edge keys are shared between create and update inputs and pass through unchanged; keys for
+// immutable edges have no update setter and are dropped by decode
+func (s *Schema) rekeyEdgesForUpdate(payload json.RawMessage) json.RawMessage {
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &doc); err != nil {
+		return payload
+	}
+
+	changed := false
+
+	for _, edge := range s.Edges {
+		if edge.AddField == "" {
+			continue
+		}
+
+		raw, ok := doc[edge.CreateField]
+		if !ok {
+			continue
+		}
+
+		doc[edge.AddField] = raw
+		delete(doc, edge.CreateField)
+		changed = true
+	}
+
+	if !changed {
+		return payload
+	}
+
+	rekeyed, err := json.Marshal(doc)
+	if err != nil {
+		return payload
+	}
+
+	return rekeyed
+}
+
+// lookupValue extracts the string value of one create-input key from the payload
+func lookupValue(payload json.RawMessage, key string) string {
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &doc); err != nil {
+		return ""
+	}
+
+	raw, ok := doc[key]
+	if !ok {
+		return ""
+	}
+
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(value)
+}
+
+// entityID extracts the id column from one marshaled entity row
+func entityID(row json.RawMessage) string {
+	var decoded struct {
+		ID string `json:"id"`
+	}
+
+	_ = json.Unmarshal(row, &decoded)
+
+	return decoded.ID
 }
 
 // --- Per-schema registrations ---
@@ -139,9 +277,6 @@ var (
 			Label:  "{{ .Label }}",
 		},
 		ProjectionType: reflect.TypeFor[{{ .Name }}Projection](),
-{{- if .StockPersist }}
-		StockPersist: true,
-{{- end }}
 {{- if .HasCreate }}
 		Create: func(ctx context.Context, client *generated.Client, input json.RawMessage) (string, error) {
 			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpCreate}
@@ -225,7 +360,7 @@ func init() {
 {{- if .ObjectFields }}
 	Schema{{ $schema.Name }}.Fields = []FieldDescriptor{
 {{- range .ObjectFields }}
-		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}"{{ end }}},
+		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}"{{ end }}{{ if .LookupKey }}, LookupKey: true{{ end }}},
 {{- end }}
 	}
 {{- end }}
@@ -244,7 +379,7 @@ func init() {
 {{- end }}
 {{- if .Unique }}
 			Unique: true,
-			CreateField: "{{ .Name | camel }}ID",
+			CreateField: "{{ .Name | snake }}_id",
 {{- if and .Optional (not .Immutable) }}
 			ClearField: "clear{{ .Name | pascal }}",
 {{- end }}
@@ -252,10 +387,10 @@ func init() {
 			Field: "{{ .Field }}",
 {{- end }}
 {{- else }}
-			CreateField: "{{ .Name | pascal | singular | camel }}IDs",
+			CreateField: "{{ .Name | pascal | singular | snake }}_ids",
 {{- if not .Immutable }}
-			AddField: "add{{ .Name | pascal | singular }}IDs",
-			RemoveField: "remove{{ .Name | pascal | singular }}IDs",
+			AddField: "add_{{ .Name | pascal | singular | snake }}_ids",
+			RemoveField: "remove_{{ .Name | pascal | singular | snake }}_ids",
 {{- end }}
 {{- end }}
 {{- if .WorkflowEligible }}
@@ -266,13 +401,12 @@ func init() {
 	}
 {{- end }}
 {{- end }}
-{{- range $schema := .Schemas }}
-{{- if .HasCreate }}
-	Schema{{ $schema.Name }}.SourceContext = func(payload json.RawMessage) json.RawMessage {
-		return payload
+	for _, s := range allSchemas {
+		s.edgesByName = make(map[string]EdgeDescriptor, len(s.Edges))
+		for _, e := range s.Edges {
+			s.edgesByName[e.Name] = e
+		}
 	}
-{{- end }}
-{{- end }}
 {{- range $schema := .Schemas }}
 {{- $hasMatchKey := false }}
 {{- range $schema.ObjectFields }}{{- if .MatchKey }}{{- $hasMatchKey = true }}{{- end }}{{- end }}
