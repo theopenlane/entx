@@ -54,11 +54,6 @@ type Schema struct {
 	Fields []FieldDescriptor
 	// Edges lists every edge to an entityops schema (and workflow group edges) for this schema
 	Edges []EdgeDescriptor
-	// edgesByName indexes Edges by edge name for O(1) resolution, built in init
-	edgesByName map[string]EdgeDescriptor
-	// AllowedKeys is the set of integration mapping input keys accepted for this schema, derived at
-	// init from the unified field catalog; empty for schemas that do not participate in ingest mapping
-	AllowedKeys map[string]struct{}
 	// ProjectionType is the reflect.Type of this schema's flat CEL/jsonschema projection struct
 	// ({Name}Projection); the registerable native-type view of the entity used for typed expressions
 	ProjectionType reflect.Type
@@ -111,9 +106,24 @@ func (s *Schema) MatchKeyField(field string) bool {
 
 // EdgeByName returns the edge with the given name
 func (s *Schema) EdgeByName(name string) (EdgeDescriptor, bool) {
-	edge, ok := s.edgesByName[name]
+	for _, e := range s.Edges {
+		if e.Name == name {
+			return e, true
+		}
+	}
 
-	return edge, ok
+	return EdgeDescriptor{}, false
+}
+
+// AllowedKey reports whether key is an integration mapping input key accepted for this schema
+func (s *Schema) AllowedKey(key string) bool {
+	for _, f := range s.Fields {
+		if f.InputKey != "" && f.InputKey == key {
+			return true
+		}
+	}
+
+	return false
 }
 
 // matchKeyIn returns a selector predicate matching the given match-key column against any of values
@@ -272,9 +282,6 @@ var (
 			Snake:  "{{ .Snake }}",
 			Camel:  "{{ .Camel }}",
 			Lower:  "{{ .Lower }}",
-			Plural: "{{ .Plural }}",
-			Table:  "{{ .Table }}",
-			Label:  "{{ .Label }}",
 		},
 		ProjectionType: reflect.TypeFor[{{ .Name }}Projection](),
 {{- if .HasCreate }}
@@ -401,12 +408,6 @@ func init() {
 	}
 {{- end }}
 {{- end }}
-	for _, s := range allSchemas {
-		s.edgesByName = make(map[string]EdgeDescriptor, len(s.Edges))
-		for _, e := range s.Edges {
-			s.edgesByName[e.Name] = e
-		}
-	}
 {{- range $schema := .Schemas }}
 {{- $hasMatchKey := false }}
 {{- range $schema.ObjectFields }}{{- if .MatchKey }}{{- $hasMatchKey = true }}{{- end }}{{- end }}
@@ -441,22 +442,6 @@ func init() {
 	}
 {{- end }}
 {{- end }}
-
-	// AllowedKeys is derived from the unified field catalog: every integration-mapped field's
-	// input key is accepted for that schema
-	for _, schema := range allSchemas {
-		for _, field := range schema.Fields {
-			if field.InputKey == "" {
-				continue
-			}
-
-			if schema.AllowedKeys == nil {
-				schema.AllowedKeys = make(map[string]struct{})
-			}
-
-			schema.AllowedKeys[field.InputKey] = struct{}{}
-		}
-	}
 }
 
 // --- Lookup registry ---

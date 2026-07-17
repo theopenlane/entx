@@ -17,12 +17,6 @@ type SchemaDescriptor struct {
 	Camel string `json:"-"`
 	// Lower is the lowercase no-separator form used for fuzzy lookup
 	Lower string `json:"-"`
-	// Plural is the PascalCase plural form
-	Plural string `json:"-"`
-	// Table is the database table name
-	Table string `json:"-"`
-	// Label is the human-readable display label
-	Label string `json:"-"`
 }
 
 // String returns the PascalCase canonical name

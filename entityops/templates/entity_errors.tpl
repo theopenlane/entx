@@ -47,8 +47,6 @@ var (
 	ErrUpsertKeyMissing = errors.New("entityops: upsert key missing")
 	// ErrUpsertUnsupported indicates the schema does not support catalog-driven upserts
 	ErrUpsertUnsupported = errors.New("entityops: upsert unsupported")
-	// ErrRoundTripFailed indicates a create-to-update JSON round-trip failed
-	ErrRoundTripFailed = errors.New("entityops: round-trip failed")
 	// ErrListenerRegistrationFailed indicates a gala listener could not be registered
 	ErrListenerRegistrationFailed = errors.New("entityops: listener registration failed")
 	// ErrClientResolveFailed indicates the ent client could not be resolved from the injector
@@ -141,12 +139,6 @@ func (r SchemaRef) MarshalZerologObject(e *zerolog.Event) {
 	if r.Edge != "" {
 		e.Str(FieldEdge, r.Edge)
 	}
-}
-
-// WithSchema enriches the context logger with the schema name so that all
-// downstream log calls via logx.FromContext automatically include it
-func WithSchema(ctx context.Context, schema string) context.Context {
-	return logx.WithField(ctx, FieldSchema, schema)
 }
 
 // --- Error wrapping ---
