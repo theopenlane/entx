@@ -22,6 +22,11 @@ import (
 // criteria. Both the integration ingest engine and the workflow CREATE_OBJECT action use this, so a
 // workflow definition can set edges identically to an ingest mapping
 func InjectCreateLinks(ctx context.Context, client *generated.Client, ownerID string, schema *Schema, payload json.RawMessage, links []LinkSpec) (json.RawMessage, error) {
+	// ids accumulate per edge so multiple rules targeting the same edge union their matches
+	// instead of the last rule overwriting the earlier ones
+	edgeIDs := map[string][]string{}
+	edges := map[string]EdgeDescriptor{}
+
 	for _, link := range links {
 		edge, found := schema.EdgeByName(link.Edge)
 		if !found {
@@ -41,18 +46,25 @@ func InjectCreateLinks(ctx context.Context, client *generated.Client, ownerID st
 			continue
 		}
 
-		ids := lo.Map(refs, func(ref EntityRef, _ int) string {
+		edges[edge.Name] = edge
+		edgeIDs[edge.Name] = append(edgeIDs[edge.Name], lo.Map(refs, func(ref EntityRef, _ int) string {
 			return ref.ID
-		})
+		})...)
+	}
 
-		var value any = ids
+	for name, ids := range edgeIDs {
+		edge := edges[name]
+
+		var value any = lo.Uniq(ids)
 		if edge.Unique {
 			value = ids[0]
 		}
 
+		var err error
+
 		payload, _, err = jsonx.SetObjectKey(payload, edge.CreateField, value)
 		if err != nil {
-			return nil, logError(ctx, SchemaRef{Schema: schema.Snake, Operation: OpLink, Edge: link.Edge}, ErrLinkFailed, err)
+			return nil, logError(ctx, SchemaRef{Schema: schema.Snake, Operation: OpLink, Edge: name}, ErrLinkFailed, err)
 		}
 	}
 
