@@ -54,14 +54,6 @@ type Schema struct {
 	Fields []FieldDescriptor
 	// Edges lists every edge to an entityops schema (and workflow group edges) for this schema
 	Edges []EdgeDescriptor
-	// SourceContext re-keys an ingest create-input payload into the snake_case source context that a
-	// cross-link rule's key-match and CEL expression read; set for every schema with a create input
-	SourceContext func(payload json.RawMessage) json.RawMessage
-	// AllowedKeys is the set of integration mapping input keys accepted for this schema, derived at
-	// init from the unified field catalog; empty for schemas that do not participate in ingest mapping
-	AllowedKeys map[string]struct{}
-	// StockPersist reports whether the schema opts into the generated stock ingest persistence path
-	StockPersist bool
 	// ProjectionType is the reflect.Type of this schema's flat CEL/jsonschema projection struct
 	// ({Name}Projection); the registerable native-type view of the entity used for typed expressions
 	ProjectionType reflect.Type
@@ -112,6 +104,28 @@ func (s *Schema) MatchKeyField(field string) bool {
 	return false
 }
 
+// EdgeByName returns the edge with the given name
+func (s *Schema) EdgeByName(name string) (EdgeDescriptor, bool) {
+	for _, e := range s.Edges {
+		if e.Name == name {
+			return e, true
+		}
+	}
+
+	return EdgeDescriptor{}, false
+}
+
+// AllowedKey reports whether key is an integration mapping input key accepted for this schema
+func (s *Schema) AllowedKey(key string) bool {
+	for _, f := range s.Fields {
+		if f.InputKey != "" && f.InputKey == key {
+			return true
+		}
+	}
+
+	return false
+}
+
 // matchKeyIn returns a selector predicate matching the given match-key column against any of values
 func matchKeyIn(field string, values []string) func(*sql.Selector) {
 	return func(s *sql.Selector) {
@@ -124,6 +138,140 @@ func matchKeyIn(field string, values []string) func(*sql.Selector) {
 	}
 }
 
+// LookupField returns the schema's single ingest upsert lookup field. It returns false when the
+// schema declares no lookup key or more than one, since priority between multiple lookup keys is
+// schema-specific and stays with hand-written persistence
+func (s *Schema) LookupField() (FieldDescriptor, bool) {
+	var (
+		found FieldDescriptor
+		count int
+	)
+
+	for _, f := range s.Fields {
+		if f.LookupKey {
+			found = f
+			count++
+		}
+	}
+
+	return found, count == 1
+}
+
+// Upsert persists one create-input payload by the schema's lookup key: the payload's lookup value
+// is matched against existing org-scoped records via the indexed key query, updating the single
+// match or creating the record when none exists, and returns the entity id. Matching more than one
+// record fails with ErrUpsertConflict rather than guessing. It composes the schema's catalog
+// closures, so unlike Create/Update/QueryByKey it needs no per-schema wiring. Schemas whose lookup
+// predicates are not a single org-scoped key column (integration-scoped lookups, multi-key
+// priority) keep hand-written persistence instead
+func (s *Schema) Upsert(ctx context.Context, client *generated.Client, ownerID string, payload json.RawMessage) (string, error) {
+	ref := SchemaRef{Schema: s.Snake, Operation: OpUpsert}
+
+	field, ok := s.LookupField()
+	if !ok {
+		return "", logError(ctx, ref, ErrUpsertUnsupported, fmt.Errorf("%s does not define exactly one lookup key", s.Name))
+	}
+
+	if s.Create == nil || s.Update == nil || s.QueryByKey == nil {
+		return "", logError(ctx, ref, ErrUpsertUnsupported, fmt.Errorf("%s does not support catalog create, update, and key queries", s.Name))
+	}
+
+	value := lookupValue(payload, field.InputKey)
+	if value == "" {
+		return "", ErrUpsertKeyMissing
+	}
+
+	rows, err := s.QueryByKey(ctx, client, ownerID, field.Name, []string{value})
+	if err != nil {
+		return "", err
+	}
+
+	switch len(rows) {
+	case 0:
+		return s.Create(ctx, client, payload)
+	case 1:
+		id := entityID(rows[0])
+		if id == "" {
+			return "", logError(ctx, ref, ErrDecodeFailed, fmt.Errorf("%s row matching %s=%s has no id", s.Name, field.Name, value))
+		}
+
+		return id, s.Update(ctx, client, id, s.rekeyEdgesForUpdate(payload))
+	default:
+		return "", logError(ctx, ref, ErrUpsertConflict, fmt.Errorf("%s lookup %s=%s matched %d records", s.Name, field.Name, value, len(rows)))
+	}
+}
+
+// rekeyEdgesForUpdate renames to-many edge keys in a create-input payload to their update-input add
+// keys, so cross-object links injected at map time also apply on the re-ingest update path. Links
+// are additive on update: edges carry no provenance, so targets no longer matched are never removed.
+// Unique edge keys are shared between create and update inputs and pass through unchanged; keys for
+// immutable edges have no update setter and are dropped by decode
+func (s *Schema) rekeyEdgesForUpdate(payload json.RawMessage) json.RawMessage {
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &doc); err != nil {
+		return payload
+	}
+
+	changed := false
+
+	for _, edge := range s.Edges {
+		if edge.AddField == "" {
+			continue
+		}
+
+		raw, ok := doc[edge.CreateField]
+		if !ok {
+			continue
+		}
+
+		doc[edge.AddField] = raw
+		delete(doc, edge.CreateField)
+		changed = true
+	}
+
+	if !changed {
+		return payload
+	}
+
+	rekeyed, err := json.Marshal(doc)
+	if err != nil {
+		return payload
+	}
+
+	return rekeyed
+}
+
+// lookupValue extracts the string value of one create-input key from the payload
+func lookupValue(payload json.RawMessage, key string) string {
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &doc); err != nil {
+		return ""
+	}
+
+	raw, ok := doc[key]
+	if !ok {
+		return ""
+	}
+
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(value)
+}
+
+// entityID extracts the id column from one marshaled entity row
+func entityID(row json.RawMessage) string {
+	var decoded struct {
+		ID string `json:"id"`
+	}
+
+	_ = json.Unmarshal(row, &decoded)
+
+	return decoded.ID
+}
+
 // --- Per-schema registrations ---
 
 var (
@@ -134,14 +282,8 @@ var (
 			Snake:  "{{ .Snake }}",
 			Camel:  "{{ .Camel }}",
 			Lower:  "{{ .Lower }}",
-			Plural: "{{ .Plural }}",
-			Table:  "{{ .Table }}",
-			Label:  "{{ .Label }}",
 		},
 		ProjectionType: reflect.TypeFor[{{ .Name }}Projection](),
-{{- if .StockPersist }}
-		StockPersist: true,
-{{- end }}
 {{- if .HasCreate }}
 		Create: func(ctx context.Context, client *generated.Client, input json.RawMessage) (string, error) {
 			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpCreate}
@@ -225,7 +367,7 @@ func init() {
 {{- if .ObjectFields }}
 	Schema{{ $schema.Name }}.Fields = []FieldDescriptor{
 {{- range .ObjectFields }}
-		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}"{{ end }}},
+		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}"{{ end }}{{ if .LookupKey }}, LookupKey: true{{ end }}},
 {{- end }}
 	}
 {{- end }}
@@ -244,7 +386,7 @@ func init() {
 {{- end }}
 {{- if .Unique }}
 			Unique: true,
-			CreateField: "{{ .Name | camel }}ID",
+			CreateField: "{{ .Name | snake }}_id",
 {{- if and .Optional (not .Immutable) }}
 			ClearField: "clear{{ .Name | pascal }}",
 {{- end }}
@@ -252,24 +394,30 @@ func init() {
 			Field: "{{ .Field }}",
 {{- end }}
 {{- else }}
-			CreateField: "{{ .Name | pascal | singular | camel }}IDs",
-{{- if not .Immutable }}
-			AddField: "add{{ .Name | pascal | singular }}IDs",
-			RemoveField: "remove{{ .Name | pascal | singular }}IDs",
+			CreateField: "{{ .Name | pascal | singular | snake }}_ids",
+{{- if and (not .Immutable) (not .ThroughType) }}
+			AddField: "add_{{ .Name | pascal | singular | snake }}_ids",
+			RemoveField: "remove_{{ .Name | pascal | singular | snake }}_ids",
 {{- end }}
+{{- end }}
+{{- if .ThroughType }}
+			Through: true,
+			LinkThrough: func(ctx context.Context, client *generated.Client, sourceID string, targetIDs []string) error {
+				for _, targetID := range targetIDs {
+					err := client.{{ .ThroughType }}.Create().{{ .ThroughSourceSetter }}(sourceID).{{ .ThroughTargetSetter }}(targetID).Exec(ctx)
+					if err != nil && !generated.IsConstraintError(err) {
+						return err
+					}
+				}
+
+				return nil
+			},
 {{- end }}
 {{- if .WorkflowEligible }}
 			WorkflowEligible: true,
 {{- end }}
 		},
 {{- end }}
-	}
-{{- end }}
-{{- end }}
-{{- range $schema := .Schemas }}
-{{- if .HasCreate }}
-	Schema{{ $schema.Name }}.SourceContext = func(payload json.RawMessage) json.RawMessage {
-		return payload
 	}
 {{- end }}
 {{- end }}
@@ -308,21 +456,103 @@ func init() {
 {{- end }}
 {{- end }}
 
-	// AllowedKeys is derived from the unified field catalog: every integration-mapped field's
-	// input key is accepted for that schema
-	for _, schema := range allSchemas {
-		for _, field := range schema.Fields {
-			if field.InputKey == "" {
-				continue
-			}
+	// through edges are linked by creating join entity rows — one per target, each with its own
+	// generated id — so wrap the create and update closures of schemas that have them: through-edge
+	// id lists are split out of the payload and applied as rows after the mutation succeeds
+	for _, s := range allSchemas {
+		if !slices.ContainsFunc(s.Edges, func(e EdgeDescriptor) bool { return e.Through }) {
+			continue
+		}
 
-			if schema.AllowedKeys == nil {
-				schema.AllowedKeys = make(map[string]struct{})
-			}
+		schema := s
 
-			schema.AllowedKeys[field.InputKey] = struct{}{}
+		if create := schema.Create; create != nil {
+			schema.Create = func(ctx context.Context, client *generated.Client, input json.RawMessage) (string, error) {
+				input, throughIDs := splitThroughEdgeIDs(schema, input)
+
+				id, err := create(ctx, client, input)
+				if err != nil {
+					return id, err
+				}
+
+				return id, applyThroughEdgeIDs(ctx, client, schema, id, throughIDs)
+			}
+		}
+
+		if update := schema.Update; update != nil {
+			schema.Update = func(ctx context.Context, client *generated.Client, entityID string, input json.RawMessage) error {
+				input, throughIDs := splitThroughEdgeIDs(schema, input)
+
+				if err := update(ctx, client, entityID, input); err != nil {
+					return err
+				}
+
+				return applyThroughEdgeIDs(ctx, client, schema, entityID, throughIDs)
+			}
 		}
 	}
+}
+
+// splitThroughEdgeIDs removes through-edge id lists from a create or update payload, returning the
+// cleaned payload and the target ids per edge name. Malformed values are left in place so input
+// validation rejects them instead of being silently discarded
+func splitThroughEdgeIDs(s *Schema, payload json.RawMessage) (json.RawMessage, map[string][]string) {
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &doc); err != nil {
+		return payload, nil
+	}
+
+	var ids map[string][]string
+
+	for _, edge := range s.Edges {
+		if !edge.Through {
+			continue
+		}
+
+		raw, ok := doc[edge.CreateField]
+		if !ok {
+			continue
+		}
+
+		var targetIDs []string
+		if err := json.Unmarshal(raw, &targetIDs); err != nil {
+			continue
+		}
+
+		if ids == nil {
+			ids = map[string][]string{}
+		}
+
+		ids[edge.Name] = targetIDs
+		delete(doc, edge.CreateField)
+	}
+
+	if ids == nil {
+		return payload, nil
+	}
+
+	cleaned, err := json.Marshal(doc)
+	if err != nil {
+		return payload, nil
+	}
+
+	return cleaned, ids
+}
+
+// applyThroughEdgeIDs creates the join entity rows for each split through edge
+func applyThroughEdgeIDs(ctx context.Context, client *generated.Client, s *Schema, sourceID string, ids map[string][]string) error {
+	for name, targetIDs := range ids {
+		edge, ok := s.EdgeByName(name)
+		if !ok || edge.LinkThrough == nil || len(targetIDs) == 0 {
+			continue
+		}
+
+		if err := edge.LinkThrough(ctx, client, sourceID, targetIDs); err != nil {
+			return logError(ctx, SchemaRef{Schema: s.Snake, Operation: OpLink, EntityID: sourceID, Edge: name}, ErrLinkFailed, err)
+		}
+	}
+
+	return nil
 }
 
 // --- Lookup registry ---

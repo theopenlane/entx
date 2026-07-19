@@ -15,6 +15,7 @@ import (
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/entc/load"
 	entfield "entgo.io/ent/schema/field"
+	"github.com/99designs/gqlgen/codegen/templates"
 	"github.com/stoewer/go-strcase"
 	"golang.org/x/tools/imports"
 
@@ -42,6 +43,8 @@ type EntityData struct {
 	ContextxPackage string
 	// CelxPackage is the celx package import path for typed entity expression evaluation
 	CelxPackage string
+	// EnumsPackageName is the Go package name for the generated WorkflowObjectType enum file
+	EnumsPackageName string
 	// Schemas contains all schemas eligible for entity operations
 	Schemas []EntitySchema
 }
@@ -120,6 +123,8 @@ type EntityField struct {
 	InputGoField string
 	// FromIntegration reports whether the field value is injected from the integration record at ingest time
 	FromIntegration bool
+	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
+	LookupKey bool
 }
 
 // EntityEdge represents one linkable edge on a schema, in either direction
@@ -142,6 +147,14 @@ type EntityEdge struct {
 	// Field is the foreign-key storage column on this schema's table for unique owning edges
 	// (e.g. "control_id"); empty when the foreign key lives on the target table
 	Field string
+	// ThroughType is the join entity's Go type name when the edge goes through an edge schema
+	// (e.g. "FindingControl"); empty for plain edges. Through edges are linked by creating join
+	// entity rows, since batch edge adds cannot generate per-row entity ids
+	ThroughType string
+	// ThroughSourceSetter is the join create-builder setter binding this schema's id (e.g. "SetFindingID")
+	ThroughSourceSetter string
+	// ThroughTargetSetter is the join create-builder setter binding the target's id (e.g. "SetControlID")
+	ThroughTargetSetter string
 }
 
 // workflowEligibleMarkerField is the name of the WorkflowApprovalMixin carrier field that flags a
@@ -173,14 +186,15 @@ func fieldWorkflowEligible(field *gen.Field) (eligible bool, marker bool, err er
 // either OPENLANE_WORKFLOW_ELIGIBLE fields or OPENLANE_INTEGRATION_MAPPING_SCHEMA
 func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 	data := EntityData{
-		PackageName:     c.PackageName,
-		EntPackage:      c.EntPackage,
-		GalaPackage:     c.GalaPackage,
-		JsonxPackage:    c.JsonxPackage,
-		LogxPackage:     c.LogxPackage,
-		ContextxPackage: c.ContextxPackage,
-		CelxPackage:     c.CelxPackage,
-		Schemas:         []EntitySchema{},
+		PackageName:      c.PackageName,
+		EntPackage:       c.EntPackage,
+		GalaPackage:      c.GalaPackage,
+		JsonxPackage:     c.JsonxPackage,
+		LogxPackage:      c.LogxPackage,
+		ContextxPackage:  c.ContextxPackage,
+		CelxPackage:      c.CelxPackage,
+		EnumsPackageName: c.EnumsPackageName,
+		Schemas:          []EntitySchema{},
 	}
 
 	var eligibleSchemas []string
@@ -274,6 +288,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 				entityField.InputKey = im.InputKey
 				entityField.InputGoField = im.InputGoField
 				entityField.FromIntegration = im.FromIntegration
+				entityField.LookupKey = im.LookupKey
 			}
 
 			entitySchema.ObjectFields = append(entitySchema.ObjectFields, entityField)
@@ -300,7 +315,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 				fkColumn = edge.Rel.Column()
 			}
 
-			entitySchema.Edges = append(entitySchema.Edges, EntityEdge{
+			entityEdge := EntityEdge{
 				Name:             edge.Name,
 				TargetSchema:     edge.Type.Name,
 				Unique:           edge.Unique,
@@ -308,7 +323,23 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 				Immutable:        edge.Immutable,
 				WorkflowEligible: workflowEligible,
 				Field:            fkColumn,
-			})
+			}
+
+			// through edges are linked by creating rows of the join entity, so capture the join
+			// type and the create-builder setters for each side; the relation columns are ordered
+			// owner-first, so the inverse side's own column is the second
+			if edge.Through != nil && len(edge.Rel.Columns) == 2 {
+				sourceColumn, targetColumn := edge.Rel.Columns[0], edge.Rel.Columns[1]
+				if edge.IsInverse() {
+					sourceColumn, targetColumn = targetColumn, sourceColumn
+				}
+
+				entityEdge.ThroughType = edge.Through.Name
+				entityEdge.ThroughSourceSetter = "Set" + templates.ToGo(sourceColumn)
+				entityEdge.ThroughTargetSetter = "Set" + templates.ToGo(targetColumn)
+			}
+
+			entitySchema.Edges = append(entitySchema.Edges, entityEdge)
 		}
 
 		slices.SortFunc(entitySchema.Edges, func(a, b EntityEdge) int {
@@ -450,6 +481,22 @@ func generateEntityFiles(outputDir string, data EntityData) error {
 	}
 
 	return nil
+}
+
+// generateEnumFiles renders the WorkflowObjectType enum into the enums package, replacing the
+// standalone workflowgen enum output with the same catalog-driven eligibility
+func generateEnumFiles(outputDir string, data EntityData) error {
+	raw, err := _templates.ReadFile("templates/entity_enums.tpl")
+	if err != nil {
+		return fmt.Errorf("read template templates/entity_enums.tpl: %w", err)
+	}
+
+	tmpl, err := template.New("entity_enums").Funcs(gen.Funcs).Parse(string(raw))
+	if err != nil {
+		return fmt.Errorf("parse template entity_enums: %w", err)
+	}
+
+	return writeFile(outputDir, "workflow_object_type.go", tmpl, data)
 }
 
 // writeFile renders a template and writes the formatted output

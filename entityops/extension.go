@@ -26,6 +26,10 @@ type Config struct {
 	ContextxPackage string
 	// CelxPackage is the celx package import path for typed entity expression evaluation
 	CelxPackage string
+	// EnumsOutputDir is the directory for the generated WorkflowObjectType enum; empty skips enum generation
+	EnumsOutputDir string
+	// EnumsPackageName is the Go package name for the generated enum file
+	EnumsPackageName string
 }
 
 // Extension implements entc.Extension for entity operations generation
@@ -105,6 +109,20 @@ func WithCelxPackage(path string) ExtensionOption {
 	}
 }
 
+// WithEnumsOutputDir sets the directory for the generated WorkflowObjectType enum
+func WithEnumsOutputDir(dir string) ExtensionOption {
+	return func(c *Config) {
+		c.EnumsOutputDir = dir
+	}
+}
+
+// WithEnumsPackageName sets the Go package name for the generated enum file
+func WithEnumsPackageName(name string) ExtensionOption {
+	return func(c *Config) {
+		c.EnumsPackageName = name
+	}
+}
+
 // Hooks satisfies the entc.Extension interface
 func (e Extension) Hooks() []gen.Hook {
 	return []gen.Hook{e.Hook()}
@@ -129,6 +147,12 @@ func (e Extension) Hook() gen.Hook {
 
 			if err := generateEntityFiles(e.config.OutputDir, data); err != nil {
 				return err
+			}
+
+			if e.config.EnumsOutputDir != "" {
+				if err := generateEnumFiles(e.config.EnumsOutputDir, data); err != nil {
+					return err
+				}
 			}
 
 			return next.Generate(g)
