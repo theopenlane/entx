@@ -3,8 +3,11 @@
 package {{ .PackageName }}
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+
+	"{{ .EntPackage }}"
 )
 
 // SchemaDescriptor is the canonical identity for an entity schema
@@ -109,6 +112,13 @@ type EdgeDescriptor struct {
 	// (e.g. "clearControl") because the generated clear booleans are untagged and bind by
 	// case-insensitive field name. Empty for to-many, required, or immutable edges
 	ClearField string `json:"clearField,omitempty"`
+	// Through reports whether the edge goes through a join entity (edge schema). Through edges
+	// are linked by creating join entity rows — one per target, each with its own generated id —
+	// because batch edge adds cannot produce per-row entity ids
+	Through bool `json:"through,omitempty"`
+	// LinkThrough creates the join entity rows binding the source to each target, skipping pairs
+	// that already exist; nil for plain edges
+	LinkThrough func(ctx context.Context, client *generated.Client, sourceID string, targetIDs []string) error `json:"-"`
 	// WorkflowEligible reports whether the edge may drive workflow conditions and triggers
 	WorkflowEligible bool `json:"workflowEligible,omitempty"`
 }

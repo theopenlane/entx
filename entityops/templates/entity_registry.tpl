@@ -395,10 +395,23 @@ func init() {
 {{- end }}
 {{- else }}
 			CreateField: "{{ .Name | pascal | singular | snake }}_ids",
-{{- if not .Immutable }}
+{{- if and (not .Immutable) (not .ThroughType) }}
 			AddField: "add_{{ .Name | pascal | singular | snake }}_ids",
 			RemoveField: "remove_{{ .Name | pascal | singular | snake }}_ids",
 {{- end }}
+{{- end }}
+{{- if .ThroughType }}
+			Through: true,
+			LinkThrough: func(ctx context.Context, client *generated.Client, sourceID string, targetIDs []string) error {
+				for _, targetID := range targetIDs {
+					err := client.{{ .ThroughType }}.Create().{{ .ThroughSourceSetter }}(sourceID).{{ .ThroughTargetSetter }}(targetID).Exec(ctx)
+					if err != nil && !generated.IsConstraintError(err) {
+						return err
+					}
+				}
+
+				return nil
+			},
 {{- end }}
 {{- if .WorkflowEligible }}
 			WorkflowEligible: true,
@@ -442,6 +455,104 @@ func init() {
 	}
 {{- end }}
 {{- end }}
+
+	// through edges are linked by creating join entity rows — one per target, each with its own
+	// generated id — so wrap the create and update closures of schemas that have them: through-edge
+	// id lists are split out of the payload and applied as rows after the mutation succeeds
+	for _, s := range allSchemas {
+		if !slices.ContainsFunc(s.Edges, func(e EdgeDescriptor) bool { return e.Through }) {
+			continue
+		}
+
+		schema := s
+
+		if create := schema.Create; create != nil {
+			schema.Create = func(ctx context.Context, client *generated.Client, input json.RawMessage) (string, error) {
+				input, throughIDs := splitThroughEdgeIDs(schema, input)
+
+				id, err := create(ctx, client, input)
+				if err != nil {
+					return id, err
+				}
+
+				return id, applyThroughEdgeIDs(ctx, client, schema, id, throughIDs)
+			}
+		}
+
+		if update := schema.Update; update != nil {
+			schema.Update = func(ctx context.Context, client *generated.Client, entityID string, input json.RawMessage) error {
+				input, throughIDs := splitThroughEdgeIDs(schema, input)
+
+				if err := update(ctx, client, entityID, input); err != nil {
+					return err
+				}
+
+				return applyThroughEdgeIDs(ctx, client, schema, entityID, throughIDs)
+			}
+		}
+	}
+}
+
+// splitThroughEdgeIDs removes through-edge id lists from a create or update payload, returning the
+// cleaned payload and the target ids per edge name. Malformed values are left in place so input
+// validation rejects them instead of being silently discarded
+func splitThroughEdgeIDs(s *Schema, payload json.RawMessage) (json.RawMessage, map[string][]string) {
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &doc); err != nil {
+		return payload, nil
+	}
+
+	var ids map[string][]string
+
+	for _, edge := range s.Edges {
+		if !edge.Through {
+			continue
+		}
+
+		raw, ok := doc[edge.CreateField]
+		if !ok {
+			continue
+		}
+
+		var targetIDs []string
+		if err := json.Unmarshal(raw, &targetIDs); err != nil {
+			continue
+		}
+
+		if ids == nil {
+			ids = map[string][]string{}
+		}
+
+		ids[edge.Name] = targetIDs
+		delete(doc, edge.CreateField)
+	}
+
+	if ids == nil {
+		return payload, nil
+	}
+
+	cleaned, err := json.Marshal(doc)
+	if err != nil {
+		return payload, nil
+	}
+
+	return cleaned, ids
+}
+
+// applyThroughEdgeIDs creates the join entity rows for each split through edge
+func applyThroughEdgeIDs(ctx context.Context, client *generated.Client, s *Schema, sourceID string, ids map[string][]string) error {
+	for name, targetIDs := range ids {
+		edge, ok := s.EdgeByName(name)
+		if !ok || edge.LinkThrough == nil || len(targetIDs) == 0 {
+			continue
+		}
+
+		if err := edge.LinkThrough(ctx, client, sourceID, targetIDs); err != nil {
+			return logError(ctx, SchemaRef{Schema: s.Snake, Operation: OpLink, EntityID: sourceID, Edge: name}, ErrLinkFailed, err)
+		}
+	}
+
+	return nil
 }
 
 // --- Lookup registry ---

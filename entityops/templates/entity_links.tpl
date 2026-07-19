@@ -84,6 +84,10 @@ func LinkTargets(ctx context.Context, client *generated.Client, schema *Schema, 
 		return nil
 	}
 
+	if edge.Through {
+		return edge.LinkThrough(ctx, client, entityID, targetIDs)
+	}
+
 	key := edge.AddField
 	var value any = targetIDs
 
@@ -101,6 +105,10 @@ func UnlinkTargets(ctx context.Context, client *generated.Client, schema *Schema
 	edge, err := updatableEdge(ctx, schema, entityID, edgeName, OpUnlink)
 	if err != nil {
 		return err
+	}
+
+	if edge.Through {
+		return logError(ctx, SchemaRef{Schema: schema.Snake, Operation: OpUnlink, EntityID: entityID, Edge: edgeName}, ErrLinkFailed, fmt.Errorf("%s.%s links through join entity rows; delete the rows directly", schema.Name, edgeName))
 	}
 
 	if edge.Unique {

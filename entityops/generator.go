@@ -15,6 +15,7 @@ import (
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/entc/load"
 	entfield "entgo.io/ent/schema/field"
+	"github.com/99designs/gqlgen/codegen/templates"
 	"github.com/stoewer/go-strcase"
 	"golang.org/x/tools/imports"
 
@@ -146,6 +147,14 @@ type EntityEdge struct {
 	// Field is the foreign-key storage column on this schema's table for unique owning edges
 	// (e.g. "control_id"); empty when the foreign key lives on the target table
 	Field string
+	// ThroughType is the join entity's Go type name when the edge goes through an edge schema
+	// (e.g. "FindingControl"); empty for plain edges. Through edges are linked by creating join
+	// entity rows, since batch edge adds cannot generate per-row entity ids
+	ThroughType string
+	// ThroughSourceSetter is the join create-builder setter binding this schema's id (e.g. "SetFindingID")
+	ThroughSourceSetter string
+	// ThroughTargetSetter is the join create-builder setter binding the target's id (e.g. "SetControlID")
+	ThroughTargetSetter string
 }
 
 // workflowEligibleMarkerField is the name of the WorkflowApprovalMixin carrier field that flags a
@@ -306,7 +315,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 				fkColumn = edge.Rel.Column()
 			}
 
-			entitySchema.Edges = append(entitySchema.Edges, EntityEdge{
+			entityEdge := EntityEdge{
 				Name:             edge.Name,
 				TargetSchema:     edge.Type.Name,
 				Unique:           edge.Unique,
@@ -314,7 +323,23 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 				Immutable:        edge.Immutable,
 				WorkflowEligible: workflowEligible,
 				Field:            fkColumn,
-			})
+			}
+
+			// through edges are linked by creating rows of the join entity, so capture the join
+			// type and the create-builder setters for each side; the relation columns are ordered
+			// owner-first, so the inverse side's own column is the second
+			if edge.Through != nil && len(edge.Rel.Columns) == 2 {
+				sourceColumn, targetColumn := edge.Rel.Columns[0], edge.Rel.Columns[1]
+				if edge.IsInverse() {
+					sourceColumn, targetColumn = targetColumn, sourceColumn
+				}
+
+				entityEdge.ThroughType = edge.Through.Name
+				entityEdge.ThroughSourceSetter = "Set" + templates.ToGo(sourceColumn)
+				entityEdge.ThroughTargetSetter = "Set" + templates.ToGo(targetColumn)
+			}
+
+			entitySchema.Edges = append(entitySchema.Edges, entityEdge)
 		}
 
 		slices.SortFunc(entitySchema.Edges, func(a, b EntityEdge) int {
