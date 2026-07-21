@@ -15,7 +15,7 @@ require (
 	github.com/theopenlane/iam v0.32.0
 	github.com/theopenlane/oscalot v0.1.0
 	github.com/theopenlane/utils v0.7.1
-	github.com/vektah/gqlparser/v2 v2.5.33
+	github.com/vektah/gqlparser/v2 v2.5.36
 	go.opentelemetry.io/otel v1.44.0
 	golang.org/x/tools v0.45.0
 )
