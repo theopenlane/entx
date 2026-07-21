@@ -138,10 +138,9 @@ const (
 type TaskRuleSpec struct {
 	// RuleID identifies which task template to render at rule evaluation time
 	RuleID string
-	// Expression is a CEL boolean expression; empty always fires. Ignored when EachElement is set
+	// Expression is a CEL boolean expression; empty always fires
 	Expression string
-	// EachElement, when set, is a CEL expression resolving to a list within the field's value; the
-	// rule expands to fire once per element instead of evaluating Expression as a single boolean
+	// EachElement, when set, is a CEL expression resolving to a list within "value"
 	EachElement string
 	// Trigger selects create-and-update (the default, zero value) or create-only evaluation
 	Trigger TaskRuleTrigger
