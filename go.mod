@@ -5,7 +5,7 @@ go 1.26.3
 require (
 	entgo.io/contrib v0.7.0
 	entgo.io/ent v0.14.6
-	github.com/99designs/gqlgen v0.17.90
+	github.com/99designs/gqlgen v0.17.94
 	github.com/XSAM/otelsql v0.42.0
 	github.com/brianvoe/gofakeit/v7 v7.15.0
 	github.com/gertd/go-pluralize v0.2.1
@@ -15,14 +15,14 @@ require (
 	github.com/theopenlane/iam v0.32.0
 	github.com/theopenlane/oscalot v0.1.0
 	github.com/theopenlane/utils v0.7.1
-	github.com/vektah/gqlparser/v2 v2.5.33
+	github.com/vektah/gqlparser/v2 v2.5.36
 	go.opentelemetry.io/otel v1.44.0
-	golang.org/x/tools v0.45.0
+	golang.org/x/tools v0.48.0
 )
 
 require (
+	github.com/coder/websocket v1.8.15 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 )
 
@@ -62,11 +62,11 @@ require (
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect
-	golang.org/x/mod v0.36.0 // indirect
+	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
