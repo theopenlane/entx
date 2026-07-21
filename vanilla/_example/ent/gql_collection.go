@@ -9,6 +9,8 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/orgmembership"
+	"github.com/theopenlane/entx/vanilla/_example/ent/workflowinstance"
+	"github.com/theopenlane/entx/vanilla/_example/ent/workflowobjectref"
 )
 
 // CollectFields tells the query-builder to eagerly load connected nodes by resolver context.
@@ -159,6 +161,11 @@ func (_q *OrganizationQuery) collectField(ctx context.Context, oneNode bool, opC
 				selectedFields = append(selectedFields, organization.FieldDescription)
 				fieldSeen[organization.FieldDescription] = struct{}{}
 			}
+		case "preferences":
+			if _, ok := fieldSeen[organization.FieldPreferences]; !ok {
+				selectedFields = append(selectedFields, organization.FieldPreferences)
+				fieldSeen[organization.FieldPreferences] = struct{}{}
+			}
 		case "id":
 		case "__typename":
 		default:
@@ -218,6 +225,175 @@ func newOrganizationPaginateArgs(rv map[string]any) *organizationPaginateArgs {
 	}
 	if v, ok := rv[whereField].(*OrganizationWhereInput); ok {
 		args.opts = append(args.opts, WithOrganizationFilter(v.Filter))
+	}
+	return args
+}
+
+// CollectFields tells the query-builder to eagerly load connected nodes by resolver context.
+func (_q *WorkflowInstanceQuery) CollectFields(ctx context.Context, satisfies ...string) (*WorkflowInstanceQuery, error) {
+	fc := graphql.GetFieldContext(ctx)
+	if fc == nil {
+		return _q, nil
+	}
+	if err := _q.collectField(ctx, false, graphql.GetOperationContext(ctx), fc.Field, nil, satisfies...); err != nil {
+		return nil, err
+	}
+	return _q, nil
+}
+
+func (_q *WorkflowInstanceQuery) collectField(ctx context.Context, oneNode bool, opCtx *graphql.OperationContext, collected graphql.CollectedField, path []string, satisfies ...string) error {
+	path = append([]string(nil), path...)
+	var (
+		unknownSeen    bool
+		fieldSeen      = make(map[string]struct{}, len(workflowinstance.Columns))
+		selectedFields = []string{workflowinstance.FieldID}
+	)
+	for _, field := range graphql.CollectFields(opCtx, collected.Selections, satisfies) {
+		switch field.Name {
+		case "status":
+			if _, ok := fieldSeen[workflowinstance.FieldStatus]; !ok {
+				selectedFields = append(selectedFields, workflowinstance.FieldStatus)
+				fieldSeen[workflowinstance.FieldStatus] = struct{}{}
+			}
+		case "id":
+		case "__typename":
+		default:
+			unknownSeen = true
+		}
+	}
+	if !unknownSeen {
+		_q.Select(selectedFields...)
+	}
+	return nil
+}
+
+type workflowinstancePaginateArgs struct {
+	first, last   *int
+	after, before *Cursor
+	opts          []WorkflowInstancePaginateOption
+}
+
+func newWorkflowInstancePaginateArgs(rv map[string]any) *workflowinstancePaginateArgs {
+	args := &workflowinstancePaginateArgs{}
+	if rv == nil {
+		return args
+	}
+	if v := rv[firstField]; v != nil {
+		args.first = v.(*int)
+	}
+	if v := rv[lastField]; v != nil {
+		args.last = v.(*int)
+	}
+	if v := rv[afterField]; v != nil {
+		args.after = v.(*Cursor)
+	}
+	if v := rv[beforeField]; v != nil {
+		args.before = v.(*Cursor)
+	}
+	if v, ok := rv[whereField].(*WorkflowInstanceWhereInput); ok {
+		args.opts = append(args.opts, WithWorkflowInstanceFilter(v.Filter))
+	}
+	return args
+}
+
+// CollectFields tells the query-builder to eagerly load connected nodes by resolver context.
+func (_q *WorkflowObjectRefQuery) CollectFields(ctx context.Context, satisfies ...string) (*WorkflowObjectRefQuery, error) {
+	fc := graphql.GetFieldContext(ctx)
+	if fc == nil {
+		return _q, nil
+	}
+	if err := _q.collectField(ctx, false, graphql.GetOperationContext(ctx), fc.Field, nil, satisfies...); err != nil {
+		return nil, err
+	}
+	return _q, nil
+}
+
+func (_q *WorkflowObjectRefQuery) collectField(ctx context.Context, oneNode bool, opCtx *graphql.OperationContext, collected graphql.CollectedField, path []string, satisfies ...string) error {
+	path = append([]string(nil), path...)
+	var (
+		unknownSeen    bool
+		fieldSeen      = make(map[string]struct{}, len(workflowobjectref.Columns))
+		selectedFields = []string{workflowobjectref.FieldID}
+	)
+	for _, field := range graphql.CollectFields(opCtx, collected.Selections, satisfies) {
+		switch field.Name {
+
+		case "workflowInstance":
+			var (
+				alias = field.Alias
+				path  = append(path, alias)
+				query = (&WorkflowInstanceClient{config: _q.config}).Query()
+			)
+			if err := query.collectField(ctx, oneNode, opCtx, field, path, mayAddCondition(satisfies, workflowinstanceImplementors)...); err != nil {
+				return err
+			}
+			_q.withWorkflowInstance = query
+			if _, ok := fieldSeen[workflowobjectref.FieldWorkflowInstanceID]; !ok {
+				selectedFields = append(selectedFields, workflowobjectref.FieldWorkflowInstanceID)
+				fieldSeen[workflowobjectref.FieldWorkflowInstanceID] = struct{}{}
+			}
+
+		case "organization":
+			var (
+				alias = field.Alias
+				path  = append(path, alias)
+				query = (&OrganizationClient{config: _q.config}).Query()
+			)
+			if err := query.collectField(ctx, oneNode, opCtx, field, path, mayAddCondition(satisfies, organizationImplementors)...); err != nil {
+				return err
+			}
+			_q.withOrganization = query
+			if _, ok := fieldSeen[workflowobjectref.FieldOrganizationID]; !ok {
+				selectedFields = append(selectedFields, workflowobjectref.FieldOrganizationID)
+				fieldSeen[workflowobjectref.FieldOrganizationID] = struct{}{}
+			}
+		case "workflowInstanceID":
+			if _, ok := fieldSeen[workflowobjectref.FieldWorkflowInstanceID]; !ok {
+				selectedFields = append(selectedFields, workflowobjectref.FieldWorkflowInstanceID)
+				fieldSeen[workflowobjectref.FieldWorkflowInstanceID] = struct{}{}
+			}
+		case "organizationID":
+			if _, ok := fieldSeen[workflowobjectref.FieldOrganizationID]; !ok {
+				selectedFields = append(selectedFields, workflowobjectref.FieldOrganizationID)
+				fieldSeen[workflowobjectref.FieldOrganizationID] = struct{}{}
+			}
+		case "id":
+		case "__typename":
+		default:
+			unknownSeen = true
+		}
+	}
+	if !unknownSeen {
+		_q.Select(selectedFields...)
+	}
+	return nil
+}
+
+type workflowobjectrefPaginateArgs struct {
+	first, last   *int
+	after, before *Cursor
+	opts          []WorkflowObjectRefPaginateOption
+}
+
+func newWorkflowObjectRefPaginateArgs(rv map[string]any) *workflowobjectrefPaginateArgs {
+	args := &workflowobjectrefPaginateArgs{}
+	if rv == nil {
+		return args
+	}
+	if v := rv[firstField]; v != nil {
+		args.first = v.(*int)
+	}
+	if v := rv[lastField]; v != nil {
+		args.last = v.(*int)
+	}
+	if v := rv[afterField]; v != nil {
+		args.after = v.(*Cursor)
+	}
+	if v := rv[beforeField]; v != nil {
+		args.before = v.(*Cursor)
+	}
+	if v, ok := rv[whereField].(*WorkflowObjectRefWhereInput); ok {
+		args.opts = append(args.opts, WithWorkflowObjectRefFilter(v.Filter))
 	}
 	return args
 }

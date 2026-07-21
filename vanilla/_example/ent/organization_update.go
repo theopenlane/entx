@@ -94,6 +94,18 @@ func (_u *OrganizationUpdate) ClearDescription() *OrganizationUpdate {
 	return _u
 }
 
+// SetPreferences sets the "preferences" field.
+func (_u *OrganizationUpdate) SetPreferences(v map[string]interface{}) *OrganizationUpdate {
+	_u.mutation.SetPreferences(v)
+	return _u
+}
+
+// ClearPreferences clears the value of the "preferences" field.
+func (_u *OrganizationUpdate) ClearPreferences() *OrganizationUpdate {
+	_u.mutation.ClearPreferences()
+	return _u
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (_u *OrganizationUpdate) Mutation() *OrganizationMutation {
 	return _u.mutation
@@ -190,6 +202,12 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if _u.mutation.DescriptionCleared() {
 		_spec.ClearField(organization.FieldDescription, field.TypeString)
 	}
+	if value, ok := _u.mutation.Preferences(); ok {
+		_spec.SetField(organization.FieldPreferences, field.TypeJSON, value)
+	}
+	if _u.mutation.PreferencesCleared() {
+		_spec.ClearField(organization.FieldPreferences, field.TypeJSON)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{organization.Label}
@@ -273,6 +291,18 @@ func (_u *OrganizationUpdateOne) SetNillableDescription(v *string) *Organization
 // ClearDescription clears the value of the "description" field.
 func (_u *OrganizationUpdateOne) ClearDescription() *OrganizationUpdateOne {
 	_u.mutation.ClearDescription()
+	return _u
+}
+
+// SetPreferences sets the "preferences" field.
+func (_u *OrganizationUpdateOne) SetPreferences(v map[string]interface{}) *OrganizationUpdateOne {
+	_u.mutation.SetPreferences(v)
+	return _u
+}
+
+// ClearPreferences clears the value of the "preferences" field.
+func (_u *OrganizationUpdateOne) ClearPreferences() *OrganizationUpdateOne {
+	_u.mutation.ClearPreferences()
 	return _u
 }
 
@@ -401,6 +431,12 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 	}
 	if _u.mutation.DescriptionCleared() {
 		_spec.ClearField(organization.FieldDescription, field.TypeString)
+	}
+	if value, ok := _u.mutation.Preferences(); ok {
+		_spec.SetField(organization.FieldPreferences, field.TypeJSON, value)
+	}
+	if _u.mutation.PreferencesCleared() {
+		_spec.ClearField(organization.FieldPreferences, field.TypeJSON)
 	}
 	_node = &Organization{config: _u.config}
 	_spec.Assign = _node.assignValues

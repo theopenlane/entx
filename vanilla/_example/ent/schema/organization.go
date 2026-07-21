@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	"github.com/theopenlane/entx"
 	"github.com/theopenlane/entx/mixin"
 )
 
@@ -23,6 +24,11 @@ func (Organization) Fields() []ent.Field {
 		field.String("description").
 			Comment("An optional description of the organization").
 			Optional(),
+		field.JSON("preferences", map[string]any{}).
+			Comment("free-form organization preferences, including compliance setup answers").
+			Optional().
+			// field level task rule based on the values set on the field
+			Annotations(entx.FieldTaskRule(organizationTaskRules...)),
 	}
 }
 
@@ -37,6 +43,8 @@ func (Organization) Indexes() []ent.Index {
 func (Organization) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		entgql.Mutations(entgql.MutationCreate(), entgql.MutationUpdate()),
+		// schema level task rule that happens on create of the organization
+		entx.SchemaTaskRule("setup-payment-method"),
 	}
 }
 
@@ -48,4 +56,17 @@ func (Organization) Mixin() []ent.Mixin {
 		},
 		mixin.AuditMixin{},
 	}
+}
+
+// organizationTaskRules are suggested-task rules driven by organization preferences
+var organizationTaskRules = []entx.TaskRuleSpec{
+	{
+		RuleID:     "import-existing-policies",
+		Expression: `value.policies.has_existing == true`,
+		Trigger:    entx.TaskRuleOnCreateOnly,
+	},
+	{
+		RuleID:      "framework",
+		EachElement: `value.frameworks`,
+	},
 }

@@ -1,0 +1,21 @@
+rules:
+  framework:
+    title: Set up your compliance program
+    details: |
+      Create the compliance program and start mapping the required controls,
+      policies, and evidence.
+    priority: 10
+
+  import-existing-policies:
+    title: Import existing policies
+    details: |
+      Bring your documented policies into the organization and connect them
+      to your compliance program.
+    priority: 20
+
+  setup-payment-method:
+    title: Set up payment method
+    details: |
+      Add a payment method before the trial ends to keep paid modules
+      active.
+    priority: 90

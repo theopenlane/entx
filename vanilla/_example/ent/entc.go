@@ -8,6 +8,7 @@ import (
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
 	"github.com/theopenlane/entx/accessmap"
+	"github.com/theopenlane/entx/entityops"
 	"github.com/theopenlane/entx/genhooks"
 
 	"entgo.io/ent/entc"
@@ -33,6 +34,17 @@ func main() {
 
 	accessExt := accessmap.New(
 		accessmap.WithGeneratedDir(entGeneratedDir),
+		accessmap.WithPackageName("ent"),
+	)
+
+	entityOpsExt := entityops.New(
+		entityops.WithOutputDir(entGeneratedDir+"entityops"),
+		entityops.WithPackageName("entityops"),
+		entityops.WithEntPackage("github.com/theopenlane/entx/vanilla/_example/ent"),
+		entityops.WithGalaPackage("github.com/theopenlane/entx/vanilla/_example/pkg/gala"),
+		entityops.WithJsonxPackage("github.com/theopenlane/entx/vanilla/_example/pkg/jsonx"),
+		entityops.WithLogxPackage("github.com/theopenlane/entx/vanilla/_example/pkg/logx"),
+		entityops.WithCelxPackage("github.com/theopenlane/entx/vanilla/_example/pkg/celx"),
 	)
 
 	if err := entc.Generate("./schema",
@@ -42,6 +54,7 @@ func main() {
 				genhooks.GenSchema(graphSchemaDir),
 				genhooks.GenQuery(graphQueryDir, graphSchemaDir),
 				accessExt.Hook(),
+				entityOpsExt.Hook(),
 			},
 		},
 		entc.Extensions(

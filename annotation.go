@@ -35,6 +35,9 @@ var FeatureVisibilityAnnotationName = "OPENLANE_SCHEMA_VISIBILITY"
 // WorkflowEligibleAnnotationName is the annotation name for workflow-eligible fields
 var WorkflowEligibleAnnotationName = "OPENLANE_WORKFLOW_ELIGIBLE"
 
+// TaskRuleAnnotationName is the annotation name for suggested-task generation rules
+var TaskRuleAnnotationName = "OPENLANE_TASK_RULE"
+
 // WebhookPayloadFieldAnnotationName is the annotation name for fields to include in webhook payloads
 var WebhookPayloadFieldAnnotationName = "OPENLANE_WEBHOOK_PAYLOAD_FIELD"
 
@@ -116,6 +119,39 @@ type SearchFieldAnnotation struct {
 type WorkflowEligibleAnnotation struct {
 	// Eligible indicates that the field can be included in workflow definitions and modified via proposed changes
 	Eligible bool
+}
+
+// TaskRuleTrigger selects which mutation operations a TaskRuleSpec is evaluated on
+type TaskRuleTrigger string
+
+const (
+	// TaskRuleOnCreateOrUpdate evaluates the rule on both create and update. This is the default
+	// when Trigger is left unset, since most fields remain editable after creation
+	TaskRuleOnCreateOrUpdate TaskRuleTrigger = "createOrUpdate"
+	// TaskRuleOnCreateOnly evaluates the rule only when the entity is created; opt into this for
+	// fields that can't change afterward (e.g. onboarding's answers)
+	TaskRuleOnCreateOnly TaskRuleTrigger = "createOnly"
+)
+
+// TaskRuleSpec declares one suggested-task trigger: a CEL condition plus the RuleID a runtime
+// engine uses to look up the task's template content
+type TaskRuleSpec struct {
+	// RuleID identifies which task template to render at rule evaluation time
+	RuleID string
+	// Expression is a CEL boolean expression; empty always fires. Ignored when EachElement is set
+	Expression string
+	// EachElement, when set, is a CEL expression resolving to a list within the field's value; the
+	// rule expands to fire once per element instead of evaluating Expression as a single boolean
+	EachElement string
+	// Trigger selects create-and-update (the default, zero value) or create-only evaluation
+	Trigger TaskRuleTrigger
+}
+
+// TaskRuleAnnotation marks a field (or schema, via SchemaTaskRule) as a source of suggested-task
+// generation. Each rule is evaluated independently when the owning entity is created (or updated,
+// for consumers that opt a schema into update-triggering)
+type TaskRuleAnnotation struct {
+	Rules []TaskRuleSpec
 }
 
 // WebhookPayloadFieldAnnotation is an annotation used to indicate that a field should be included in webhook payloads
@@ -224,6 +260,11 @@ func (a SearchFieldAnnotation) Name() string {
 // Name returns the name of the WorkflowEligibleAnnotation
 func (a WorkflowEligibleAnnotation) Name() string {
 	return WorkflowEligibleAnnotationName
+}
+
+// Name returns the name of the TaskRuleAnnotation
+func (a TaskRuleAnnotation) Name() string {
+	return TaskRuleAnnotationName
 }
 
 // Name returns the name of the WebhookPayloadFieldAnnotation
@@ -454,6 +495,17 @@ func FieldWorkflowEligible() *WorkflowEligibleAnnotation {
 	}
 }
 
+// FieldTaskRule attaches one or more suggested-task rules to a field
+func FieldTaskRule(rules ...TaskRuleSpec) *TaskRuleAnnotation {
+	return &TaskRuleAnnotation{Rules: rules}
+}
+
+// SchemaTaskRule attaches an unconditional suggested-task rule to the schema itself, fired once
+// per entity create regardless of field values
+func SchemaTaskRule(ruleID string) *TaskRuleAnnotation {
+	return &TaskRuleAnnotation{Rules: []TaskRuleSpec{{RuleID: ruleID}}}
+}
+
 // FieldWebhookPayloadField returns a new WebhookPayloadFieldAnnotation with the include flag set
 func FieldWebhookPayloadField() *WebhookPayloadFieldAnnotation {
 	return &WebhookPayloadFieldAnnotation{
@@ -597,6 +649,11 @@ func (a *SearchFieldAnnotation) Decode(annotation any) error {
 
 // Decode unmarshalls the WorkflowEligibleAnnotation
 func (a *WorkflowEligibleAnnotation) Decode(annotation any) error {
+	return DecodeAnnotation(annotation, a)
+}
+
+// Decode unmarshalls the TaskRuleAnnotation
+func (a *TaskRuleAnnotation) Decode(annotation any) error {
 	return DecodeAnnotation(annotation, a)
 }
 

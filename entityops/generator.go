@@ -101,6 +101,8 @@ type EntitySchema struct {
 	IngestRequestType string
 	// IngestTopicVar is the generated Go variable name for this schema's typed ingest topic
 	IngestTopicVar string
+	// TaskRules are schema-level (unconditional) suggested-task rules declared via entx.SchemaTaskRule
+	TaskRules []entx.TaskRuleSpec
 }
 
 // EntityField represents a field with its name variations and capability flags
@@ -125,6 +127,8 @@ type EntityField struct {
 	FromIntegration bool
 	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
 	LookupKey bool
+	// TaskRules are suggested-task rules declared on this field via entx.FieldTaskRule
+	TaskRules []entx.TaskRuleSpec
 }
 
 // EntityEdge represents one linkable edge on a schema, in either direction
@@ -182,8 +186,100 @@ func fieldWorkflowEligible(field *gen.Field) (eligible bool, marker bool, err er
 	return ann.Eligible, false, nil
 }
 
+// fieldTaskRules decodes the OPENLANE_TASK_RULE annotation on a field if it exists
+func fieldTaskRules(field *gen.Field) ([]entx.TaskRuleSpec, error) {
+	raw, ok := field.Annotations[entx.TaskRuleAnnotationName]
+	if !ok {
+		return nil, nil
+	}
+
+	ann := &entx.TaskRuleAnnotation{}
+	if err := ann.Decode(raw); err != nil {
+		return nil, err
+	}
+
+	return ann.Rules, nil
+}
+
+// schemaTaskRules decodes the OPENLANE_TASK_RULE annotation on the schema itself if it exists
+func schemaTaskRules(schema *load.Schema) ([]entx.TaskRuleSpec, error) {
+	if schema == nil {
+		return nil, nil
+	}
+
+	raw, ok := schema.Annotations[entx.TaskRuleAnnotationName]
+	if !ok {
+		return nil, nil
+	}
+
+	ann := &entx.TaskRuleAnnotation{}
+	if err := ann.Decode(raw); err != nil {
+		return nil, err
+	}
+
+	return ann.Rules, nil
+}
+
+// hasTaskRuleAnnotation reports whether a schema carries a task rule via a field or the schema itself
+func hasTaskRuleAnnotation(node *gen.Type, schema *load.Schema) bool {
+	for _, field := range node.Fields {
+		if _, ok := field.Annotations[entx.TaskRuleAnnotationName]; ok {
+			return true
+		}
+	}
+
+	if schema == nil {
+		return false
+	}
+
+	_, ok := schema.Annotations[entx.TaskRuleAnnotationName]
+
+	return ok
+}
+
+// buildEntityField constructs one field's catalog entry: capability flags decoded from its
+// workflow/task-rule annotations, folded with its integration mapping metadata if any. marker
+// reports whether this is the WorkflowApprovalMixin carrier field (see fieldWorkflowEligible)
+func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[string]integrationFieldMeta) (entityField EntityField, marker bool, err error) {
+	eligible, marker, err := fieldWorkflowEligible(field)
+	if err != nil {
+		return EntityField{}, false, fmt.Errorf("decode workflow eligible annotation on %s.%s: %w", node.Name, field.Name, err)
+	}
+
+	taskRules, err := fieldTaskRules(field)
+	if err != nil {
+		return EntityField{}, false, fmt.Errorf("decode task rule annotation on %s.%s: %w", node.Name, field.Name, err)
+	}
+
+	fieldType := ""
+	if field.Type != nil {
+		fieldType = field.Type.String()
+	}
+
+	// MatchKey: plain-string indexed columns (e.g. external_id, ref_code) usable as cross-link
+	// match keys; custom Go types and enums are excluded because their In predicates reject plain strings
+	entityField = EntityField{
+		Name:             field.StructField(),
+		Snake:            field.StorageKey(),
+		Type:             fieldType,
+		WorkflowEligible: eligible,
+		MatchKey:         field.Type != nil && field.Type.Type == entfield.TypeString && !field.HasGoType(),
+		TaskRules:        taskRules,
+	}
+
+	if im, ok := integrationFields[field.Name]; ok {
+		entityField.IntegrationMapped = true
+		entityField.InputKey = im.InputKey
+		entityField.InputGoField = im.InputGoField
+		entityField.FromIntegration = im.FromIntegration
+		entityField.LookupKey = im.LookupKey
+	}
+
+	return entityField, marker, nil
+}
+
 // collectEntityData iterates the ent graph and collects schemas annotated with
-// either OPENLANE_WORKFLOW_ELIGIBLE fields or OPENLANE_INTEGRATION_MAPPING_SCHEMA
+// OPENLANE_WORKFLOW_ELIGIBLE fields, OPENLANE_INTEGRATION_MAPPING_SCHEMA, or OPENLANE_TASK_RULE
 func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 	data := EntityData{
 		PackageName:      c.PackageName,
@@ -210,7 +306,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		}
 
 		source := classifySource(node, schema)
-		if source.Workflow || source.Integration {
+		if source.Workflow || source.Integration || source.TaskRules {
 			eligibleSchemas = append(eligibleSchemas, node.Name)
 		}
 	}
@@ -247,6 +343,13 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 			HasOwnerID:       hasField(schema, "owner_id"),
 		}
 
+		schemaRules, err := schemaTaskRules(schema)
+		if err != nil {
+			return EntityData{}, fmt.Errorf("decode schema task rule annotation on %s: %w", node.Name, err)
+		}
+
+		entitySchema.TaskRules = schemaRules
+
 		// ObjectFields is the unified field catalog: every field with its type and capability flags,
 		// consumed by both the workflow builder and the integration cross-link config
 		var workflowMarker bool
@@ -259,36 +362,13 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		}
 
 		for _, field := range node.Fields {
-			eligible, marker, err := fieldWorkflowEligible(field)
+			entityField, marker, err := buildEntityField(node, field, integrationFields)
 			if err != nil {
-				return EntityData{}, fmt.Errorf("decode workflow eligible annotation on %s.%s: %w", node.Name, field.Name, err)
+				return EntityData{}, err
 			}
 
 			if marker {
 				workflowMarker = true
-			}
-
-			fieldType := ""
-			if field.Type != nil {
-				fieldType = field.Type.String()
-			}
-
-			// MatchKey: plain-string indexed columns (e.g. external_id, ref_code) usable as cross-link
-			// match keys; custom Go types and enums are excluded because their In predicates reject plain strings
-			entityField := EntityField{
-				Name:             field.StructField(),
-				Snake:            field.StorageKey(),
-				Type:             fieldType,
-				WorkflowEligible: eligible,
-				MatchKey:         field.Type != nil && field.Type.Type == entfield.TypeString && !field.HasGoType(),
-			}
-
-			if im, ok := integrationFields[field.Name]; ok {
-				entityField.IntegrationMapped = true
-				entityField.InputKey = im.InputKey
-				entityField.InputGoField = im.InputGoField
-				entityField.FromIntegration = im.FromIntegration
-				entityField.LookupKey = im.LookupKey
 			}
 
 			entitySchema.ObjectFields = append(entitySchema.ObjectFields, entityField)
@@ -384,6 +464,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 type schemaSource struct {
 	Workflow    bool
 	Integration bool
+	TaskRules   bool
 }
 
 // classifySource determines why a schema should be included
@@ -406,6 +487,10 @@ func classifySource(node *gen.Type, schema *load.Schema) schemaSource {
 
 	if hasIntegrationMappingAnnotation(schema) {
 		source.Integration = true
+	}
+
+	if hasTaskRuleAnnotation(node, schema) {
+		source.TaskRules = true
 	}
 
 	return source
@@ -459,6 +544,7 @@ func generateEntityFiles(outputDir string, data EntityData) error {
 		{name: "entity_registry", filename: "entity_registry.go", tmplFile: "templates/entity_registry.tpl"},
 		{name: "entity_handlers", filename: "entity_handlers.go", tmplFile: "templates/entity_handlers.tpl"},
 		{name: "entity_workflow", filename: "entity_workflow.go", tmplFile: "templates/entity_workflow.tpl"},
+		{name: "entity_tasks", filename: "entity_tasks.go", tmplFile: "templates/entity_tasks.tpl"},
 		{name: "entity_links", filename: "entity_links.go", tmplFile: "templates/entity_links.tpl"},
 		{name: "entity_integration", filename: "entity_integration.go", tmplFile: "templates/entity_integration.tpl"},
 		{name: "entity_projection", filename: "entity_projection.go", tmplFile: "templates/entity_projection.tpl"},

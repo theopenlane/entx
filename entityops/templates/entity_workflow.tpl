@@ -6,10 +6,10 @@ import (
 	"context"
 	"slices"
 
-	"entgo.io/ent"
+	stdent "entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 
-	"{{ .EntPackage }}"
+	generated "{{ .EntPackage }}"
 	"{{ .EntPackage }}/predicate"
 	"{{ .JsonxPackage }}"
 )
@@ -133,7 +133,7 @@ func RefsByObject(query *generated.WorkflowObjectRefQuery, schema *Schema, objec
 }
 
 // ExtractChangedEdges returns the workflow-eligible edges mutated by m, with the IDs added or removed
-func ExtractChangedEdges(m ent.Mutation) []EdgeChange {
+func ExtractChangedEdges(m stdent.Mutation) []EdgeChange {
 	schema, ok := LookupSchema(m.Type())
 	if !ok {
 		return nil
@@ -174,7 +174,7 @@ func ExtractChangedEdges(m ent.Mutation) []EdgeChange {
 }
 
 // changedEdgeNames returns the names of all edges touched by the mutation
-func changedEdgeNames(m ent.Mutation) []string {
+func changedEdgeNames(m stdent.Mutation) []string {
 	var names []string
 
 	names = append(names, m.AddedEdges()...)
@@ -185,7 +185,7 @@ func changedEdgeNames(m ent.Mutation) []string {
 }
 
 // toStringIDs converts ent edge ID values to strings, dropping any non-string IDs
-func toStringIDs(values []ent.Value) []string {
+func toStringIDs(values []stdent.Value) []string {
 	if len(values) == 0 {
 		return nil
 	}

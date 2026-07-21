@@ -15,7 +15,7 @@ import (
 	"github.com/stoewer/go-strcase"
 
 	"{{ .CelxPackage }}"
-	"{{ .EntPackage }}"
+	generated "{{ .EntPackage }}"
 	"{{ .EntPackage }}/predicate"
 	"{{ .JsonxPackage }}"
 	"{{ .LogxPackage }}"
@@ -54,6 +54,8 @@ type Schema struct {
 	Fields []FieldDescriptor
 	// Edges lists every edge to an entityops schema (and workflow group edges) for this schema
 	Edges []EdgeDescriptor
+	// TaskRules are schema-level (unconditional) suggested-task rules declared via entx.SchemaTaskRule
+	TaskRules []TaskRuleDescriptor
 	// ProjectionType is the reflect.Type of this schema's flat CEL/jsonschema projection struct
 	// ({Name}Projection); the registerable native-type view of the entity used for typed expressions
 	ProjectionType reflect.Type
@@ -367,7 +369,16 @@ func init() {
 {{- if .ObjectFields }}
 	Schema{{ $schema.Name }}.Fields = []FieldDescriptor{
 {{- range .ObjectFields }}
-		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}"{{ end }}{{ if .LookupKey }}, LookupKey: true{{ end }}},
+		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}"{{ end }}{{ if .LookupKey }}, LookupKey: true{{ end }}{{ if .TaskRules }}, TaskRules: []TaskRuleDescriptor{ {{ range .TaskRules }}{RuleID: {{ printf "%q" .RuleID }}{{ if .Expression }}, Expression: {{ printf "%q" .Expression }}{{ end }}{{ if .EachElement }}, EachElement: {{ printf "%q" .EachElement }}{{ end }}{{ if .Trigger }}, Trigger: {{ printf "%q" .Trigger }}{{ end }}}, {{ end }} }{{ end }}},
+{{- end }}
+	}
+{{- end }}
+{{- end }}
+{{- range $schema := .Schemas }}
+{{- if .TaskRules }}
+	Schema{{ $schema.Name }}.TaskRules = []TaskRuleDescriptor{
+{{- range .TaskRules }}
+		{RuleID: {{ printf "%q" .RuleID }}{{ if .Expression }}, Expression: {{ printf "%q" .Expression }}{{ end }}{{ if .EachElement }}, EachElement: {{ printf "%q" .EachElement }}{{ end }}{{ if .Trigger }}, Trigger: {{ printf "%q" .Trigger }}{{ end }}},
 {{- end }}
 	}
 {{- end }}

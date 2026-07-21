@@ -9,7 +9,7 @@ import (
 
 	"github.com/samber/lo"
 
-	"{{ .EntPackage }}"
+	generated "{{ .EntPackage }}"
 	"{{ .JsonxPackage }}"
 )
 

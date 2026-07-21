@@ -11,6 +11,8 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/orgmembership"
+	"github.com/theopenlane/entx/vanilla/_example/ent/workflowinstance"
+	"github.com/theopenlane/entx/vanilla/_example/ent/workflowobjectref"
 )
 
 // Noder wraps the basic Node method.
@@ -27,6 +29,16 @@ var organizationImplementors = []string{"Organization", "Node"}
 
 // IsNode implements the Node interface check for GQLGen.
 func (*Organization) IsNode() {}
+
+var workflowinstanceImplementors = []string{"WorkflowInstance", "Node"}
+
+// IsNode implements the Node interface check for GQLGen.
+func (*WorkflowInstance) IsNode() {}
+
+var workflowobjectrefImplementors = []string{"WorkflowObjectRef", "Node"}
+
+// IsNode implements the Node interface check for GQLGen.
+func (*WorkflowObjectRef) IsNode() {}
 
 var errNodeInvalidID = &NotFoundError{"node"}
 
@@ -100,6 +112,24 @@ func (c *Client) noder(ctx context.Context, table string, id string) (Noder, err
 			Where(organization.ID(id))
 		if fc := graphql.GetFieldContext(ctx); fc != nil {
 			if err := query.collectField(ctx, true, graphql.GetOperationContext(ctx), fc.Field, nil, organizationImplementors...); err != nil {
+				return nil, err
+			}
+		}
+		return query.Only(ctx)
+	case workflowinstance.Table:
+		query := c.WorkflowInstance.Query().
+			Where(workflowinstance.ID(id))
+		if fc := graphql.GetFieldContext(ctx); fc != nil {
+			if err := query.collectField(ctx, true, graphql.GetOperationContext(ctx), fc.Field, nil, workflowinstanceImplementors...); err != nil {
+				return nil, err
+			}
+		}
+		return query.Only(ctx)
+	case workflowobjectref.Table:
+		query := c.WorkflowObjectRef.Query().
+			Where(workflowobjectref.ID(id))
+		if fc := graphql.GetFieldContext(ctx); fc != nil {
+			if err := query.collectField(ctx, true, graphql.GetOperationContext(ctx), fc.Field, nil, workflowobjectrefImplementors...); err != nil {
 				return nil, err
 			}
 		}
@@ -197,6 +227,38 @@ func (c *Client) noders(ctx context.Context, table string, ids []string) ([]Node
 		query := c.Organization.Query().
 			Where(organization.IDIn(ids...))
 		query, err := query.CollectFields(ctx, organizationImplementors...)
+		if err != nil {
+			return nil, err
+		}
+		nodes, err := query.All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, node := range nodes {
+			for _, noder := range idmap[node.ID] {
+				*noder = node
+			}
+		}
+	case workflowinstance.Table:
+		query := c.WorkflowInstance.Query().
+			Where(workflowinstance.IDIn(ids...))
+		query, err := query.CollectFields(ctx, workflowinstanceImplementors...)
+		if err != nil {
+			return nil, err
+		}
+		nodes, err := query.All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, node := range nodes {
+			for _, noder := range idmap[node.ID] {
+				*noder = node
+			}
+		}
+	case workflowobjectref.Table:
+		query := c.WorkflowObjectRef.Query().
+			Where(workflowobjectref.IDIn(ids...))
+		query, err := query.CollectFields(ctx, workflowobjectrefImplementors...)
 		if err != nil {
 			return nil, err
 		}

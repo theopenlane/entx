@@ -11,6 +11,8 @@ import (
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/orgmembership"
 	"github.com/theopenlane/entx/vanilla/_example/ent/predicate"
+	"github.com/theopenlane/entx/vanilla/_example/ent/workflowinstance"
+	"github.com/theopenlane/entx/vanilla/_example/ent/workflowobjectref"
 )
 
 // OrgMembershipWhereInput represents a where input for filtering OrgMembership queries.
@@ -800,5 +802,491 @@ func (i *OrganizationWhereInput) P() (predicate.Organization, error) {
 		return predicates[0], nil
 	default:
 		return organization.And(predicates...), nil
+	}
+}
+
+// WorkflowInstanceWhereInput represents a where input for filtering WorkflowInstance queries.
+type WorkflowInstanceWhereInput struct {
+	Predicates []predicate.WorkflowInstance  `json:"-"`
+	Not        *WorkflowInstanceWhereInput   `json:"not,omitempty"`
+	Or         []*WorkflowInstanceWhereInput `json:"or,omitempty"`
+	And        []*WorkflowInstanceWhereInput `json:"and,omitempty"`
+
+	// "id" field predicates.
+	ID             *string  `json:"id,omitempty"`
+	IDNEQ          *string  `json:"idNEQ,omitempty"`
+	IDIn           []string `json:"idIn,omitempty"`
+	IDNotIn        []string `json:"idNotIn,omitempty"`
+	IDGT           *string  `json:"idGT,omitempty"`
+	IDGTE          *string  `json:"idGTE,omitempty"`
+	IDLT           *string  `json:"idLT,omitempty"`
+	IDLTE          *string  `json:"idLTE,omitempty"`
+	IDEqualFold    *string  `json:"idEqualFold,omitempty"`
+	IDContainsFold *string  `json:"idContainsFold,omitempty"`
+
+	// "status" field predicates.
+	Status             *string  `json:"status,omitempty"`
+	StatusNEQ          *string  `json:"statusNEQ,omitempty"`
+	StatusIn           []string `json:"statusIn,omitempty"`
+	StatusNotIn        []string `json:"statusNotIn,omitempty"`
+	StatusGT           *string  `json:"statusGT,omitempty"`
+	StatusGTE          *string  `json:"statusGTE,omitempty"`
+	StatusLT           *string  `json:"statusLT,omitempty"`
+	StatusLTE          *string  `json:"statusLTE,omitempty"`
+	StatusContains     *string  `json:"statusContains,omitempty"`
+	StatusHasPrefix    *string  `json:"statusHasPrefix,omitempty"`
+	StatusHasSuffix    *string  `json:"statusHasSuffix,omitempty"`
+	StatusIsNil        bool     `json:"statusIsNil,omitempty"`
+	StatusNotNil       bool     `json:"statusNotNil,omitempty"`
+	StatusEqualFold    *string  `json:"statusEqualFold,omitempty"`
+	StatusContainsFold *string  `json:"statusContainsFold,omitempty"`
+}
+
+// AddPredicates adds custom predicates to the where input to be used during the filtering phase.
+func (i *WorkflowInstanceWhereInput) AddPredicates(predicates ...predicate.WorkflowInstance) {
+	i.Predicates = append(i.Predicates, predicates...)
+}
+
+// Filter applies the WorkflowInstanceWhereInput filter on the WorkflowInstanceQuery builder.
+func (i *WorkflowInstanceWhereInput) Filter(q *WorkflowInstanceQuery) (*WorkflowInstanceQuery, error) {
+	if i == nil {
+		return q, nil
+	}
+	p, err := i.P()
+	if err != nil {
+		if err == ErrEmptyWorkflowInstanceWhereInput {
+			return q, nil
+		}
+		return nil, err
+	}
+	return q.Where(p), nil
+}
+
+// ErrEmptyWorkflowInstanceWhereInput is returned in case the WorkflowInstanceWhereInput is empty.
+var ErrEmptyWorkflowInstanceWhereInput = errors.New("ent: empty predicate WorkflowInstanceWhereInput")
+
+// P returns a predicate for filtering workflowinstances.
+// An error is returned if the input is empty or invalid.
+func (i *WorkflowInstanceWhereInput) P() (predicate.WorkflowInstance, error) {
+	var predicates []predicate.WorkflowInstance
+	if i.Not != nil {
+		p, err := i.Not.P()
+		if err != nil {
+			return nil, fmt.Errorf("%w: field 'not'", err)
+		}
+		predicates = append(predicates, workflowinstance.Not(p))
+	}
+	switch n := len(i.Or); {
+	case n == 1:
+		p, err := i.Or[0].P()
+		if err != nil {
+			return nil, fmt.Errorf("%w: field 'or'", err)
+		}
+		predicates = append(predicates, p)
+	case n > 1:
+		or := make([]predicate.WorkflowInstance, 0, n)
+		for _, w := range i.Or {
+			p, err := w.P()
+			if err != nil {
+				return nil, fmt.Errorf("%w: field 'or'", err)
+			}
+			or = append(or, p)
+		}
+		predicates = append(predicates, workflowinstance.Or(or...))
+	}
+	switch n := len(i.And); {
+	case n == 1:
+		p, err := i.And[0].P()
+		if err != nil {
+			return nil, fmt.Errorf("%w: field 'and'", err)
+		}
+		predicates = append(predicates, p)
+	case n > 1:
+		and := make([]predicate.WorkflowInstance, 0, n)
+		for _, w := range i.And {
+			p, err := w.P()
+			if err != nil {
+				return nil, fmt.Errorf("%w: field 'and'", err)
+			}
+			and = append(and, p)
+		}
+		predicates = append(predicates, workflowinstance.And(and...))
+	}
+	predicates = append(predicates, i.Predicates...)
+	if i.ID != nil {
+		predicates = append(predicates, workflowinstance.IDEQ(*i.ID))
+	}
+	if i.IDNEQ != nil {
+		predicates = append(predicates, workflowinstance.IDNEQ(*i.IDNEQ))
+	}
+	if len(i.IDIn) > 0 {
+		predicates = append(predicates, workflowinstance.IDIn(i.IDIn...))
+	}
+	if len(i.IDNotIn) > 0 {
+		predicates = append(predicates, workflowinstance.IDNotIn(i.IDNotIn...))
+	}
+	if i.IDGT != nil {
+		predicates = append(predicates, workflowinstance.IDGT(*i.IDGT))
+	}
+	if i.IDGTE != nil {
+		predicates = append(predicates, workflowinstance.IDGTE(*i.IDGTE))
+	}
+	if i.IDLT != nil {
+		predicates = append(predicates, workflowinstance.IDLT(*i.IDLT))
+	}
+	if i.IDLTE != nil {
+		predicates = append(predicates, workflowinstance.IDLTE(*i.IDLTE))
+	}
+	if i.IDEqualFold != nil {
+		predicates = append(predicates, workflowinstance.IDEqualFold(*i.IDEqualFold))
+	}
+	if i.IDContainsFold != nil {
+		predicates = append(predicates, workflowinstance.IDContainsFold(*i.IDContainsFold))
+	}
+	if i.Status != nil {
+		predicates = append(predicates, workflowinstance.StatusEQ(*i.Status))
+	}
+	if i.StatusNEQ != nil {
+		predicates = append(predicates, workflowinstance.StatusNEQ(*i.StatusNEQ))
+	}
+	if len(i.StatusIn) > 0 {
+		predicates = append(predicates, workflowinstance.StatusIn(i.StatusIn...))
+	}
+	if len(i.StatusNotIn) > 0 {
+		predicates = append(predicates, workflowinstance.StatusNotIn(i.StatusNotIn...))
+	}
+	if i.StatusGT != nil {
+		predicates = append(predicates, workflowinstance.StatusGT(*i.StatusGT))
+	}
+	if i.StatusGTE != nil {
+		predicates = append(predicates, workflowinstance.StatusGTE(*i.StatusGTE))
+	}
+	if i.StatusLT != nil {
+		predicates = append(predicates, workflowinstance.StatusLT(*i.StatusLT))
+	}
+	if i.StatusLTE != nil {
+		predicates = append(predicates, workflowinstance.StatusLTE(*i.StatusLTE))
+	}
+	if i.StatusContains != nil {
+		predicates = append(predicates, workflowinstance.StatusContains(*i.StatusContains))
+	}
+	if i.StatusHasPrefix != nil {
+		predicates = append(predicates, workflowinstance.StatusHasPrefix(*i.StatusHasPrefix))
+	}
+	if i.StatusHasSuffix != nil {
+		predicates = append(predicates, workflowinstance.StatusHasSuffix(*i.StatusHasSuffix))
+	}
+	if i.StatusIsNil {
+		predicates = append(predicates, workflowinstance.StatusIsNil())
+	}
+	if i.StatusNotNil {
+		predicates = append(predicates, workflowinstance.StatusNotNil())
+	}
+	if i.StatusEqualFold != nil {
+		predicates = append(predicates, workflowinstance.StatusEqualFold(*i.StatusEqualFold))
+	}
+	if i.StatusContainsFold != nil {
+		predicates = append(predicates, workflowinstance.StatusContainsFold(*i.StatusContainsFold))
+	}
+
+	switch len(predicates) {
+	case 0:
+		return nil, ErrEmptyWorkflowInstanceWhereInput
+	case 1:
+		return predicates[0], nil
+	default:
+		return workflowinstance.And(predicates...), nil
+	}
+}
+
+// WorkflowObjectRefWhereInput represents a where input for filtering WorkflowObjectRef queries.
+type WorkflowObjectRefWhereInput struct {
+	Predicates []predicate.WorkflowObjectRef  `json:"-"`
+	Not        *WorkflowObjectRefWhereInput   `json:"not,omitempty"`
+	Or         []*WorkflowObjectRefWhereInput `json:"or,omitempty"`
+	And        []*WorkflowObjectRefWhereInput `json:"and,omitempty"`
+
+	// "id" field predicates.
+	ID             *string  `json:"id,omitempty"`
+	IDNEQ          *string  `json:"idNEQ,omitempty"`
+	IDIn           []string `json:"idIn,omitempty"`
+	IDNotIn        []string `json:"idNotIn,omitempty"`
+	IDGT           *string  `json:"idGT,omitempty"`
+	IDGTE          *string  `json:"idGTE,omitempty"`
+	IDLT           *string  `json:"idLT,omitempty"`
+	IDLTE          *string  `json:"idLTE,omitempty"`
+	IDEqualFold    *string  `json:"idEqualFold,omitempty"`
+	IDContainsFold *string  `json:"idContainsFold,omitempty"`
+
+	// "workflow_instance_id" field predicates.
+	WorkflowInstanceID             *string  `json:"workflowInstanceID,omitempty"`
+	WorkflowInstanceIDNEQ          *string  `json:"workflowInstanceIDNEQ,omitempty"`
+	WorkflowInstanceIDIn           []string `json:"workflowInstanceIDIn,omitempty"`
+	WorkflowInstanceIDNotIn        []string `json:"workflowInstanceIDNotIn,omitempty"`
+	WorkflowInstanceIDGT           *string  `json:"workflowInstanceIDGT,omitempty"`
+	WorkflowInstanceIDGTE          *string  `json:"workflowInstanceIDGTE,omitempty"`
+	WorkflowInstanceIDLT           *string  `json:"workflowInstanceIDLT,omitempty"`
+	WorkflowInstanceIDLTE          *string  `json:"workflowInstanceIDLTE,omitempty"`
+	WorkflowInstanceIDContains     *string  `json:"workflowInstanceIDContains,omitempty"`
+	WorkflowInstanceIDHasPrefix    *string  `json:"workflowInstanceIDHasPrefix,omitempty"`
+	WorkflowInstanceIDHasSuffix    *string  `json:"workflowInstanceIDHasSuffix,omitempty"`
+	WorkflowInstanceIDEqualFold    *string  `json:"workflowInstanceIDEqualFold,omitempty"`
+	WorkflowInstanceIDContainsFold *string  `json:"workflowInstanceIDContainsFold,omitempty"`
+
+	// "organization_id" field predicates.
+	OrganizationID             *string  `json:"organizationID,omitempty"`
+	OrganizationIDNEQ          *string  `json:"organizationIDNEQ,omitempty"`
+	OrganizationIDIn           []string `json:"organizationIDIn,omitempty"`
+	OrganizationIDNotIn        []string `json:"organizationIDNotIn,omitempty"`
+	OrganizationIDGT           *string  `json:"organizationIDGT,omitempty"`
+	OrganizationIDGTE          *string  `json:"organizationIDGTE,omitempty"`
+	OrganizationIDLT           *string  `json:"organizationIDLT,omitempty"`
+	OrganizationIDLTE          *string  `json:"organizationIDLTE,omitempty"`
+	OrganizationIDContains     *string  `json:"organizationIDContains,omitempty"`
+	OrganizationIDHasPrefix    *string  `json:"organizationIDHasPrefix,omitempty"`
+	OrganizationIDHasSuffix    *string  `json:"organizationIDHasSuffix,omitempty"`
+	OrganizationIDIsNil        bool     `json:"organizationIDIsNil,omitempty"`
+	OrganizationIDNotNil       bool     `json:"organizationIDNotNil,omitempty"`
+	OrganizationIDEqualFold    *string  `json:"organizationIDEqualFold,omitempty"`
+	OrganizationIDContainsFold *string  `json:"organizationIDContainsFold,omitempty"`
+
+	// "workflow_instance" edge predicates.
+	HasWorkflowInstance     *bool                         `json:"hasWorkflowInstance,omitempty"`
+	HasWorkflowInstanceWith []*WorkflowInstanceWhereInput `json:"hasWorkflowInstanceWith,omitempty"`
+
+	// "organization" edge predicates.
+	HasOrganization     *bool                     `json:"hasOrganization,omitempty"`
+	HasOrganizationWith []*OrganizationWhereInput `json:"hasOrganizationWith,omitempty"`
+}
+
+// AddPredicates adds custom predicates to the where input to be used during the filtering phase.
+func (i *WorkflowObjectRefWhereInput) AddPredicates(predicates ...predicate.WorkflowObjectRef) {
+	i.Predicates = append(i.Predicates, predicates...)
+}
+
+// Filter applies the WorkflowObjectRefWhereInput filter on the WorkflowObjectRefQuery builder.
+func (i *WorkflowObjectRefWhereInput) Filter(q *WorkflowObjectRefQuery) (*WorkflowObjectRefQuery, error) {
+	if i == nil {
+		return q, nil
+	}
+	p, err := i.P()
+	if err != nil {
+		if err == ErrEmptyWorkflowObjectRefWhereInput {
+			return q, nil
+		}
+		return nil, err
+	}
+	return q.Where(p), nil
+}
+
+// ErrEmptyWorkflowObjectRefWhereInput is returned in case the WorkflowObjectRefWhereInput is empty.
+var ErrEmptyWorkflowObjectRefWhereInput = errors.New("ent: empty predicate WorkflowObjectRefWhereInput")
+
+// P returns a predicate for filtering workflowobjectrefs.
+// An error is returned if the input is empty or invalid.
+func (i *WorkflowObjectRefWhereInput) P() (predicate.WorkflowObjectRef, error) {
+	var predicates []predicate.WorkflowObjectRef
+	if i.Not != nil {
+		p, err := i.Not.P()
+		if err != nil {
+			return nil, fmt.Errorf("%w: field 'not'", err)
+		}
+		predicates = append(predicates, workflowobjectref.Not(p))
+	}
+	switch n := len(i.Or); {
+	case n == 1:
+		p, err := i.Or[0].P()
+		if err != nil {
+			return nil, fmt.Errorf("%w: field 'or'", err)
+		}
+		predicates = append(predicates, p)
+	case n > 1:
+		or := make([]predicate.WorkflowObjectRef, 0, n)
+		for _, w := range i.Or {
+			p, err := w.P()
+			if err != nil {
+				return nil, fmt.Errorf("%w: field 'or'", err)
+			}
+			or = append(or, p)
+		}
+		predicates = append(predicates, workflowobjectref.Or(or...))
+	}
+	switch n := len(i.And); {
+	case n == 1:
+		p, err := i.And[0].P()
+		if err != nil {
+			return nil, fmt.Errorf("%w: field 'and'", err)
+		}
+		predicates = append(predicates, p)
+	case n > 1:
+		and := make([]predicate.WorkflowObjectRef, 0, n)
+		for _, w := range i.And {
+			p, err := w.P()
+			if err != nil {
+				return nil, fmt.Errorf("%w: field 'and'", err)
+			}
+			and = append(and, p)
+		}
+		predicates = append(predicates, workflowobjectref.And(and...))
+	}
+	predicates = append(predicates, i.Predicates...)
+	if i.ID != nil {
+		predicates = append(predicates, workflowobjectref.IDEQ(*i.ID))
+	}
+	if i.IDNEQ != nil {
+		predicates = append(predicates, workflowobjectref.IDNEQ(*i.IDNEQ))
+	}
+	if len(i.IDIn) > 0 {
+		predicates = append(predicates, workflowobjectref.IDIn(i.IDIn...))
+	}
+	if len(i.IDNotIn) > 0 {
+		predicates = append(predicates, workflowobjectref.IDNotIn(i.IDNotIn...))
+	}
+	if i.IDGT != nil {
+		predicates = append(predicates, workflowobjectref.IDGT(*i.IDGT))
+	}
+	if i.IDGTE != nil {
+		predicates = append(predicates, workflowobjectref.IDGTE(*i.IDGTE))
+	}
+	if i.IDLT != nil {
+		predicates = append(predicates, workflowobjectref.IDLT(*i.IDLT))
+	}
+	if i.IDLTE != nil {
+		predicates = append(predicates, workflowobjectref.IDLTE(*i.IDLTE))
+	}
+	if i.IDEqualFold != nil {
+		predicates = append(predicates, workflowobjectref.IDEqualFold(*i.IDEqualFold))
+	}
+	if i.IDContainsFold != nil {
+		predicates = append(predicates, workflowobjectref.IDContainsFold(*i.IDContainsFold))
+	}
+	if i.WorkflowInstanceID != nil {
+		predicates = append(predicates, workflowobjectref.WorkflowInstanceIDEQ(*i.WorkflowInstanceID))
+	}
+	if i.WorkflowInstanceIDNEQ != nil {
+		predicates = append(predicates, workflowobjectref.WorkflowInstanceIDNEQ(*i.WorkflowInstanceIDNEQ))
+	}
+	if len(i.WorkflowInstanceIDIn) > 0 {
+		predicates = append(predicates, workflowobjectref.WorkflowInstanceIDIn(i.WorkflowInstanceIDIn...))
+	}
+	if len(i.WorkflowInstanceIDNotIn) > 0 {
+		predicates = append(predicates, workflowobjectref.WorkflowInstanceIDNotIn(i.WorkflowInstanceIDNotIn...))
+	}
+	if i.WorkflowInstanceIDGT != nil {
+		predicates = append(predicates, workflowobjectref.WorkflowInstanceIDGT(*i.WorkflowInstanceIDGT))
+	}
+	if i.WorkflowInstanceIDGTE != nil {
+		predicates = append(predicates, workflowobjectref.WorkflowInstanceIDGTE(*i.WorkflowInstanceIDGTE))
+	}
+	if i.WorkflowInstanceIDLT != nil {
+		predicates = append(predicates, workflowobjectref.WorkflowInstanceIDLT(*i.WorkflowInstanceIDLT))
+	}
+	if i.WorkflowInstanceIDLTE != nil {
+		predicates = append(predicates, workflowobjectref.WorkflowInstanceIDLTE(*i.WorkflowInstanceIDLTE))
+	}
+	if i.WorkflowInstanceIDContains != nil {
+		predicates = append(predicates, workflowobjectref.WorkflowInstanceIDContains(*i.WorkflowInstanceIDContains))
+	}
+	if i.WorkflowInstanceIDHasPrefix != nil {
+		predicates = append(predicates, workflowobjectref.WorkflowInstanceIDHasPrefix(*i.WorkflowInstanceIDHasPrefix))
+	}
+	if i.WorkflowInstanceIDHasSuffix != nil {
+		predicates = append(predicates, workflowobjectref.WorkflowInstanceIDHasSuffix(*i.WorkflowInstanceIDHasSuffix))
+	}
+	if i.WorkflowInstanceIDEqualFold != nil {
+		predicates = append(predicates, workflowobjectref.WorkflowInstanceIDEqualFold(*i.WorkflowInstanceIDEqualFold))
+	}
+	if i.WorkflowInstanceIDContainsFold != nil {
+		predicates = append(predicates, workflowobjectref.WorkflowInstanceIDContainsFold(*i.WorkflowInstanceIDContainsFold))
+	}
+	if i.OrganizationID != nil {
+		predicates = append(predicates, workflowobjectref.OrganizationIDEQ(*i.OrganizationID))
+	}
+	if i.OrganizationIDNEQ != nil {
+		predicates = append(predicates, workflowobjectref.OrganizationIDNEQ(*i.OrganizationIDNEQ))
+	}
+	if len(i.OrganizationIDIn) > 0 {
+		predicates = append(predicates, workflowobjectref.OrganizationIDIn(i.OrganizationIDIn...))
+	}
+	if len(i.OrganizationIDNotIn) > 0 {
+		predicates = append(predicates, workflowobjectref.OrganizationIDNotIn(i.OrganizationIDNotIn...))
+	}
+	if i.OrganizationIDGT != nil {
+		predicates = append(predicates, workflowobjectref.OrganizationIDGT(*i.OrganizationIDGT))
+	}
+	if i.OrganizationIDGTE != nil {
+		predicates = append(predicates, workflowobjectref.OrganizationIDGTE(*i.OrganizationIDGTE))
+	}
+	if i.OrganizationIDLT != nil {
+		predicates = append(predicates, workflowobjectref.OrganizationIDLT(*i.OrganizationIDLT))
+	}
+	if i.OrganizationIDLTE != nil {
+		predicates = append(predicates, workflowobjectref.OrganizationIDLTE(*i.OrganizationIDLTE))
+	}
+	if i.OrganizationIDContains != nil {
+		predicates = append(predicates, workflowobjectref.OrganizationIDContains(*i.OrganizationIDContains))
+	}
+	if i.OrganizationIDHasPrefix != nil {
+		predicates = append(predicates, workflowobjectref.OrganizationIDHasPrefix(*i.OrganizationIDHasPrefix))
+	}
+	if i.OrganizationIDHasSuffix != nil {
+		predicates = append(predicates, workflowobjectref.OrganizationIDHasSuffix(*i.OrganizationIDHasSuffix))
+	}
+	if i.OrganizationIDIsNil {
+		predicates = append(predicates, workflowobjectref.OrganizationIDIsNil())
+	}
+	if i.OrganizationIDNotNil {
+		predicates = append(predicates, workflowobjectref.OrganizationIDNotNil())
+	}
+	if i.OrganizationIDEqualFold != nil {
+		predicates = append(predicates, workflowobjectref.OrganizationIDEqualFold(*i.OrganizationIDEqualFold))
+	}
+	if i.OrganizationIDContainsFold != nil {
+		predicates = append(predicates, workflowobjectref.OrganizationIDContainsFold(*i.OrganizationIDContainsFold))
+	}
+
+	if i.HasWorkflowInstance != nil {
+		p := workflowobjectref.HasWorkflowInstance()
+		if !*i.HasWorkflowInstance {
+			p = workflowobjectref.Not(p)
+		}
+		predicates = append(predicates, p)
+	}
+	if len(i.HasWorkflowInstanceWith) > 0 {
+		with := make([]predicate.WorkflowInstance, 0, len(i.HasWorkflowInstanceWith))
+		for _, w := range i.HasWorkflowInstanceWith {
+			p, err := w.P()
+			if err != nil {
+				return nil, fmt.Errorf("%w: field 'HasWorkflowInstanceWith'", err)
+			}
+			with = append(with, p)
+		}
+		predicates = append(predicates, workflowobjectref.HasWorkflowInstanceWith(with...))
+	}
+	if i.HasOrganization != nil {
+		p := workflowobjectref.HasOrganization()
+		if !*i.HasOrganization {
+			p = workflowobjectref.Not(p)
+		}
+		predicates = append(predicates, p)
+	}
+	if len(i.HasOrganizationWith) > 0 {
+		with := make([]predicate.Organization, 0, len(i.HasOrganizationWith))
+		for _, w := range i.HasOrganizationWith {
+			p, err := w.P()
+			if err != nil {
+				return nil, fmt.Errorf("%w: field 'HasOrganizationWith'", err)
+			}
+			with = append(with, p)
+		}
+		predicates = append(predicates, workflowobjectref.HasOrganizationWith(with...))
+	}
+	switch len(predicates) {
+	case 0:
+		return nil, ErrEmptyWorkflowObjectRefWhereInput
+	case 1:
+		return predicates[0], nil
+	default:
+		return workflowobjectref.And(predicates...), nil
 	}
 }

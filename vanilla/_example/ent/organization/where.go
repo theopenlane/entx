@@ -554,6 +554,16 @@ func DescriptionContainsFold(v string) predicate.Organization {
 	return predicate.Organization(sql.FieldContainsFold(FieldDescription, v))
 }
 
+// PreferencesIsNil applies the IsNil predicate on the "preferences" field.
+func PreferencesIsNil() predicate.Organization {
+	return predicate.Organization(sql.FieldIsNull(FieldPreferences))
+}
+
+// PreferencesNotNil applies the NotNil predicate on the "preferences" field.
+func PreferencesNotNil() predicate.Organization {
+	return predicate.Organization(sql.FieldNotNull(FieldPreferences))
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Organization) predicate.Organization {
 	return predicate.Organization(sql.AndPredicates(predicates...))

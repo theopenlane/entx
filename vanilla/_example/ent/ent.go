@@ -14,6 +14,8 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/orgmembership"
+	"github.com/theopenlane/entx/vanilla/_example/ent/workflowinstance"
+	"github.com/theopenlane/entx/vanilla/_example/ent/workflowobjectref"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -74,8 +76,10 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			orgmembership.Table: orgmembership.ValidColumn,
-			organization.Table:  organization.ValidColumn,
+			orgmembership.Table:     orgmembership.ValidColumn,
+			organization.Table:      organization.ValidColumn,
+			workflowinstance.Table:  workflowinstance.ValidColumn,
+			workflowobjectref.Table: workflowobjectref.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

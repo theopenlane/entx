@@ -13,3 +13,19 @@ func (_m *OrgMembership) Organization(ctx context.Context) (*Organization, error
 	}
 	return result, err
 }
+
+func (_m *WorkflowObjectRef) WorkflowInstance(ctx context.Context) (*WorkflowInstance, error) {
+	result, err := _m.Edges.WorkflowInstanceOrErr()
+	if IsNotLoaded(err) {
+		result, err = _m.QueryWorkflowInstance().Only(ctx)
+	}
+	return result, err
+}
+
+func (_m *WorkflowObjectRef) Organization(ctx context.Context) (*Organization, error) {
+	result, err := _m.Edges.OrganizationOrErr()
+	if IsNotLoaded(err) {
+		result, err = _m.QueryOrganization().Only(ctx)
+	}
+	return result, MaskNotFound(err)
+}
