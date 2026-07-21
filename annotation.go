@@ -145,6 +145,8 @@ type TaskRuleSpec struct {
 	EachElement string
 	// Trigger selects create-and-update (the default, zero value) or create-only evaluation
 	Trigger TaskRuleTrigger
+	// Source categorizes the generated task (e.g. "recommendations", "onboarding")
+	Source string
 }
 
 // TaskRuleAnnotation marks a field (or schema, via SchemaTaskRule) as a source of suggested-task
@@ -500,10 +502,10 @@ func FieldTaskRule(rules ...TaskRuleSpec) *TaskRuleAnnotation {
 	return &TaskRuleAnnotation{Rules: rules}
 }
 
-// SchemaTaskRule attaches an unconditional suggested-task rule to the schema itself, fired once
-// per entity create regardless of field values
-func SchemaTaskRule(ruleID string) *TaskRuleAnnotation {
-	return &TaskRuleAnnotation{Rules: []TaskRuleSpec{{RuleID: ruleID}}}
+// SchemaTaskRule attaches one or more unconditional suggested-task rules to the schema itself,
+// fired regardless of field values
+func SchemaTaskRule(rules ...TaskRuleSpec) *TaskRuleAnnotation {
+	return &TaskRuleAnnotation{Rules: rules}
 }
 
 // FieldWebhookPayloadField returns a new WebhookPayloadFieldAnnotation with the include flag set

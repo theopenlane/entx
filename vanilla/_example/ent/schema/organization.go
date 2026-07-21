@@ -44,7 +44,7 @@ func (Organization) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		entgql.Mutations(entgql.MutationCreate(), entgql.MutationUpdate()),
 		// schema level task rule that happens on create of the organization
-		entx.SchemaTaskRule("setup-payment-method"),
+		entx.SchemaTaskRule(entx.TaskRuleSpec{RuleID: "setup-payment-method"}),
 	}
 }
 

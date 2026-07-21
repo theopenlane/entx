@@ -95,6 +95,8 @@ type TaskRuleDescriptor struct {
 	EachElement string `json:"eachElement,omitempty"`
 	// Trigger selects create-and-update (empty) or create-only evaluation
 	Trigger string `json:"trigger,omitempty"`
+	// Source categorizes the generated task (e.g. "recommendations", "onboarding")
+	Source string `json:"source,omitempty"`
 }
 
 // EdgeDescriptor describes an edge on a schema. It is the single edge-capability record shared by
