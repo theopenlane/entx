@@ -9,7 +9,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 
-	"{{ .EntPackage }}"
+	generated "{{ .EntPackage }}"
 	"{{ .EntPackage }}/predicate"
 	"{{ .JsonxPackage }}"
 )

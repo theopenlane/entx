@@ -28,6 +28,8 @@ const (
 	FieldName = "name"
 	// FieldDescription holds the string denoting the description field in the database.
 	FieldDescription = "description"
+	// FieldPreferences holds the string denoting the preferences field in the database.
+	FieldPreferences = "preferences"
 	// Table holds the table name of the organization in the database.
 	Table = "organizations"
 )
@@ -42,6 +44,7 @@ var Columns = []string{
 	FieldUpdatedBy,
 	FieldName,
 	FieldDescription,
+	FieldPreferences,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).

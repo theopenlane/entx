@@ -7,6 +7,7 @@ mutation CreateBulkCSVOrganization ($input: Upload!) {
 			displayID
 			id
 			name
+			preferences
 			updatedAt
 			updatedBy
 		}
@@ -21,6 +22,7 @@ mutation CreateBulkOrganization ($input: [CreateOrganizationInput!]) {
 			displayID
 			id
 			name
+			preferences
 			updatedAt
 			updatedBy
 		}
@@ -35,6 +37,7 @@ mutation CreateOrganization ($input: CreateOrganizationInput!) {
 			displayID
 			id
 			name
+			preferences
 			updatedAt
 			updatedBy
 		}
@@ -76,6 +79,7 @@ query GetOrganizationByID ($organizationId: ID!) {
 		displayID
 		id
 		name
+		preferences
 		updatedAt
 		updatedBy
 	}
@@ -112,6 +116,7 @@ mutation UpdateOrganization ($updateOrganizationId: ID!, $input: UpdateOrganizat
 			displayID
 			id
 			name
+			preferences
 			updatedAt
 			updatedBy
 		}

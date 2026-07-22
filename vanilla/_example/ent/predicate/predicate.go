@@ -11,3 +11,9 @@ type OrgMembership func(*sql.Selector)
 
 // Organization is the predicate function for organization builders.
 type Organization func(*sql.Selector)
+
+// WorkflowInstance is the predicate function for workflowinstance builders.
+type WorkflowInstance func(*sql.Selector)
+
+// WorkflowObjectRef is the predicate function for workflowobjectref builders.
+type WorkflowObjectRef func(*sql.Selector)

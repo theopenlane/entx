@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -30,7 +31,9 @@ type Organization struct {
 	// the name of the organization
 	Name string `json:"name,omitempty"`
 	// An optional description of the organization
-	Description  string `json:"description,omitempty"`
+	Description string `json:"description,omitempty"`
+	// free-form organization preferences, including compliance setup answers
+	Preferences  map[string]interface{} `json:"preferences,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -39,6 +42,8 @@ func (*Organization) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case organization.FieldPreferences:
+			values[i] = new([]byte)
 		case organization.FieldID, organization.FieldDisplayID, organization.FieldCreatedBy, organization.FieldUpdatedBy, organization.FieldName, organization.FieldDescription:
 			values[i] = new(sql.NullString)
 		case organization.FieldCreatedAt, organization.FieldUpdatedAt:
@@ -106,6 +111,14 @@ func (_m *Organization) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Description = value.String
 			}
+		case organization.FieldPreferences:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field preferences", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Preferences); err != nil {
+					return fmt.Errorf("unmarshal field preferences: %w", err)
+				}
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -162,6 +175,9 @@ func (_m *Organization) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("description=")
 	builder.WriteString(_m.Description)
+	builder.WriteString(", ")
+	builder.WriteString("preferences=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Preferences))
 	builder.WriteByte(')')
 	return builder.String()
 }

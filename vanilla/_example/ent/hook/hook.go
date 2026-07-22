@@ -33,6 +33,30 @@ func (f OrganizationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.OrganizationMutation", m)
 }
 
+// The WorkflowInstanceFunc type is an adapter to allow the use of ordinary
+// function as WorkflowInstance mutator.
+type WorkflowInstanceFunc func(context.Context, *ent.WorkflowInstanceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkflowInstanceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkflowInstanceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkflowInstanceMutation", m)
+}
+
+// The WorkflowObjectRefFunc type is an adapter to allow the use of ordinary
+// function as WorkflowObjectRef mutator.
+type WorkflowObjectRefFunc func(context.Context, *ent.WorkflowObjectRefMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkflowObjectRefFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkflowObjectRefMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkflowObjectRefMutation", m)
+}
+
 // Condition is a hook condition function.
 type Condition func(context.Context, ent.Mutation) bool
 

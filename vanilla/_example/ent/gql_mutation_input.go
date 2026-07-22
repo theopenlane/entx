@@ -56,6 +56,7 @@ func (c *OrgMembershipUpdateOne) SetInput(i UpdateOrgMembershipInput) *OrgMember
 type CreateOrganizationInput struct {
 	Name        string
 	Description *string
+	Preferences map[string]interface{}
 }
 
 // Mutate applies the CreateOrganizationInput on the OrganizationMutation builder.
@@ -63,6 +64,9 @@ func (i *CreateOrganizationInput) Mutate(m *OrganizationMutation) {
 	m.SetName(i.Name)
 	if v := i.Description; v != nil {
 		m.SetDescription(*v)
+	}
+	if v := i.Preferences; v != nil {
+		m.SetPreferences(v)
 	}
 }
 
@@ -77,6 +81,8 @@ type UpdateOrganizationInput struct {
 	Name             *string
 	ClearDescription bool
 	Description      *string
+	ClearPreferences bool
+	Preferences      map[string]interface{}
 }
 
 // Mutate applies the UpdateOrganizationInput on the OrganizationMutation builder.
@@ -89,6 +95,12 @@ func (i *UpdateOrganizationInput) Mutate(m *OrganizationMutation) {
 	}
 	if v := i.Description; v != nil {
 		m.SetDescription(*v)
+	}
+	if i.ClearPreferences {
+		m.ClearPreferences()
+	}
+	if v := i.Preferences; v != nil {
+		m.SetPreferences(v)
 	}
 }
 

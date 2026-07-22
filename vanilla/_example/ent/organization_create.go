@@ -102,6 +102,12 @@ func (_c *OrganizationCreate) SetNillableDescription(v *string) *OrganizationCre
 	return _c
 }
 
+// SetPreferences sets the "preferences" field.
+func (_c *OrganizationCreate) SetPreferences(v map[string]interface{}) *OrganizationCreate {
+	_c.mutation.SetPreferences(v)
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *OrganizationCreate) SetID(v string) *OrganizationCreate {
 	_c.mutation.SetID(v)
@@ -257,6 +263,10 @@ func (_c *OrganizationCreate) createSpec() (*Organization, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.Description(); ok {
 		_spec.SetField(organization.FieldDescription, field.TypeString, value)
 		_node.Description = value
+	}
+	if value, ok := _c.mutation.Preferences(); ok {
+		_spec.SetField(organization.FieldPreferences, field.TypeJSON, value)
+		_node.Preferences = value
 	}
 	return _node, _spec
 }

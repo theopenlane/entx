@@ -9,7 +9,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"{{ .EntPackage }}"
+	generated "{{ .EntPackage }}"
 	"{{ .GalaPackage }}"
 	"{{ .LogxPackage }}"
 )

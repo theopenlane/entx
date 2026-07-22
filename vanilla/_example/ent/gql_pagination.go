@@ -16,6 +16,8 @@ import (
 	"github.com/99designs/gqlgen/graphql/errcode"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/orgmembership"
+	"github.com/theopenlane/entx/vanilla/_example/ent/workflowinstance"
+	"github.com/theopenlane/entx/vanilla/_example/ent/workflowobjectref"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
@@ -657,6 +659,504 @@ func (_m *Organization) ToEdge(order *OrganizationOrder) *OrganizationEdge {
 		order = DefaultOrganizationOrder
 	}
 	return &OrganizationEdge{
+		Node:   _m,
+		Cursor: order.Field.toCursor(_m),
+	}
+}
+
+// WorkflowInstanceEdge is the edge representation of WorkflowInstance.
+type WorkflowInstanceEdge struct {
+	Node   *WorkflowInstance `json:"node"`
+	Cursor Cursor            `json:"cursor"`
+}
+
+// WorkflowInstanceConnection is the connection containing edges to WorkflowInstance.
+type WorkflowInstanceConnection struct {
+	Edges      []*WorkflowInstanceEdge `json:"edges"`
+	PageInfo   PageInfo                `json:"pageInfo"`
+	TotalCount int                     `json:"totalCount"`
+}
+
+func (c *WorkflowInstanceConnection) build(nodes []*WorkflowInstance, pager *workflowinstancePager, after *Cursor, first *int, before *Cursor, last *int) {
+	c.PageInfo.HasNextPage = before != nil
+	c.PageInfo.HasPreviousPage = after != nil
+	if first != nil && *first+1 == len(nodes) {
+		c.PageInfo.HasNextPage = true
+		nodes = nodes[:len(nodes)-1]
+	} else if last != nil && *last+1 == len(nodes) {
+		c.PageInfo.HasPreviousPage = true
+		nodes = nodes[:len(nodes)-1]
+	}
+	var nodeAt func(int) *WorkflowInstance
+	if last != nil {
+		n := len(nodes) - 1
+		nodeAt = func(i int) *WorkflowInstance {
+			return nodes[n-i]
+		}
+	} else {
+		nodeAt = func(i int) *WorkflowInstance {
+			return nodes[i]
+		}
+	}
+	c.Edges = make([]*WorkflowInstanceEdge, len(nodes))
+	for i := range nodes {
+		node := nodeAt(i)
+		c.Edges[i] = &WorkflowInstanceEdge{
+			Node:   node,
+			Cursor: pager.toCursor(node),
+		}
+	}
+	if l := len(c.Edges); l > 0 {
+		c.PageInfo.StartCursor = &c.Edges[0].Cursor
+		c.PageInfo.EndCursor = &c.Edges[l-1].Cursor
+	}
+	if c.TotalCount == 0 {
+		c.TotalCount = len(nodes)
+	}
+}
+
+// WorkflowInstancePaginateOption enables pagination customization.
+type WorkflowInstancePaginateOption func(*workflowinstancePager) error
+
+// WithWorkflowInstanceOrder configures pagination ordering.
+func WithWorkflowInstanceOrder(order *WorkflowInstanceOrder) WorkflowInstancePaginateOption {
+	if order == nil {
+		order = DefaultWorkflowInstanceOrder
+	}
+	o := *order
+	return func(pager *workflowinstancePager) error {
+		if err := o.Direction.Validate(); err != nil {
+			return err
+		}
+		if o.Field == nil {
+			o.Field = DefaultWorkflowInstanceOrder.Field
+		}
+		pager.order = &o
+		return nil
+	}
+}
+
+// WithWorkflowInstanceFilter configures pagination filter.
+func WithWorkflowInstanceFilter(filter func(*WorkflowInstanceQuery) (*WorkflowInstanceQuery, error)) WorkflowInstancePaginateOption {
+	return func(pager *workflowinstancePager) error {
+		if filter == nil {
+			return errors.New("WorkflowInstanceQuery filter cannot be nil")
+		}
+		pager.filter = filter
+		return nil
+	}
+}
+
+type workflowinstancePager struct {
+	reverse bool
+	order   *WorkflowInstanceOrder
+	filter  func(*WorkflowInstanceQuery) (*WorkflowInstanceQuery, error)
+}
+
+func newWorkflowInstancePager(opts []WorkflowInstancePaginateOption, reverse bool) (*workflowinstancePager, error) {
+	pager := &workflowinstancePager{reverse: reverse}
+	for _, opt := range opts {
+		if err := opt(pager); err != nil {
+			return nil, err
+		}
+	}
+	if pager.order == nil {
+		pager.order = DefaultWorkflowInstanceOrder
+	}
+	return pager, nil
+}
+
+func (p *workflowinstancePager) applyFilter(query *WorkflowInstanceQuery) (*WorkflowInstanceQuery, error) {
+	if p.filter != nil {
+		return p.filter(query)
+	}
+	return query, nil
+}
+
+func (p *workflowinstancePager) toCursor(_m *WorkflowInstance) Cursor {
+	return p.order.Field.toCursor(_m)
+}
+
+func (p *workflowinstancePager) applyCursors(query *WorkflowInstanceQuery, after, before *Cursor) (*WorkflowInstanceQuery, error) {
+	direction := p.order.Direction
+	if p.reverse {
+		direction = direction.Reverse()
+	}
+	for _, predicate := range entgql.CursorsPredicate(after, before, DefaultWorkflowInstanceOrder.Field.column, p.order.Field.column, direction) {
+		query = query.Where(predicate)
+	}
+	return query, nil
+}
+
+func (p *workflowinstancePager) applyOrder(query *WorkflowInstanceQuery) *WorkflowInstanceQuery {
+	direction := p.order.Direction
+	if p.reverse {
+		direction = direction.Reverse()
+	}
+	query = query.Order(p.order.Field.toTerm(direction.OrderTermOption()))
+	if p.order.Field != DefaultWorkflowInstanceOrder.Field {
+		query = query.Order(DefaultWorkflowInstanceOrder.Field.toTerm(direction.OrderTermOption()))
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(p.order.Field.column)
+	}
+	return query
+}
+
+func (p *workflowinstancePager) orderExpr(query *WorkflowInstanceQuery) sql.Querier {
+	direction := p.order.Direction
+	if p.reverse {
+		direction = direction.Reverse()
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(p.order.Field.column)
+	}
+	return sql.ExprFunc(func(b *sql.Builder) {
+		b.Ident(p.order.Field.column).Pad().WriteString(string(direction))
+		if p.order.Field != DefaultWorkflowInstanceOrder.Field {
+			b.Comma().Ident(DefaultWorkflowInstanceOrder.Field.column).Pad().WriteString(string(direction))
+		}
+	})
+}
+
+// Paginate executes the query and returns a relay based cursor connection to WorkflowInstance.
+func (_m *WorkflowInstanceQuery) Paginate(
+	ctx context.Context, after *Cursor, first *int,
+	before *Cursor, last *int, opts ...WorkflowInstancePaginateOption,
+) (*WorkflowInstanceConnection, error) {
+	if err := validateFirstLast(first, last); err != nil {
+		return nil, err
+	}
+	pager, err := newWorkflowInstancePager(opts, last != nil)
+	if err != nil {
+		return nil, err
+	}
+	if _m, err = pager.applyFilter(_m); err != nil {
+		return nil, err
+	}
+	conn := &WorkflowInstanceConnection{Edges: []*WorkflowInstanceEdge{}}
+	ignoredEdges := !hasCollectedField(ctx, edgesField)
+	if hasCollectedField(ctx, totalCountField) || hasCollectedField(ctx, pageInfoField) {
+		hasPagination := after != nil || first != nil || before != nil || last != nil
+		if hasPagination || ignoredEdges {
+			c := _m.Clone()
+			c.ctx.Fields = nil
+			if conn.TotalCount, err = c.Count(ctx); err != nil {
+				return nil, err
+			}
+			conn.PageInfo.HasNextPage = first != nil && conn.TotalCount > 0
+			conn.PageInfo.HasPreviousPage = last != nil && conn.TotalCount > 0
+		}
+	}
+	if ignoredEdges || (first != nil && *first == 0) || (last != nil && *last == 0) {
+		return conn, nil
+	}
+	if _m, err = pager.applyCursors(_m, after, before); err != nil {
+		return nil, err
+	}
+	limit := paginateLimit(first, last)
+	if limit != 0 {
+		_m.Limit(limit)
+	}
+	if field := collectedField(ctx, edgesField, nodeField); field != nil {
+		if err := _m.collectField(ctx, limit == 1, graphql.GetOperationContext(ctx), *field, []string{edgesField, nodeField}); err != nil {
+			return nil, err
+		}
+	}
+	_m = pager.applyOrder(_m)
+	nodes, err := _m.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	conn.build(nodes, pager, after, first, before, last)
+	return conn, nil
+}
+
+// WorkflowInstanceOrderField defines the ordering field of WorkflowInstance.
+type WorkflowInstanceOrderField struct {
+	// Value extracts the ordering value from the given WorkflowInstance.
+	Value    func(*WorkflowInstance) (ent.Value, error)
+	column   string // field or computed.
+	toTerm   func(...sql.OrderTermOption) workflowinstance.OrderOption
+	toCursor func(*WorkflowInstance) Cursor
+}
+
+// WorkflowInstanceOrder defines the ordering of WorkflowInstance.
+type WorkflowInstanceOrder struct {
+	Direction OrderDirection              `json:"direction"`
+	Field     *WorkflowInstanceOrderField `json:"field"`
+}
+
+// DefaultWorkflowInstanceOrder is the default ordering of WorkflowInstance.
+var DefaultWorkflowInstanceOrder = &WorkflowInstanceOrder{
+	Direction: entgql.OrderDirectionAsc,
+	Field: &WorkflowInstanceOrderField{
+		Value: func(_m *WorkflowInstance) (ent.Value, error) {
+			return _m.ID, nil
+		},
+		column: workflowinstance.FieldID,
+		toTerm: workflowinstance.ByID,
+		toCursor: func(_m *WorkflowInstance) Cursor {
+			return Cursor{ID: _m.ID}
+		},
+	},
+}
+
+// ToEdge converts WorkflowInstance into WorkflowInstanceEdge.
+func (_m *WorkflowInstance) ToEdge(order *WorkflowInstanceOrder) *WorkflowInstanceEdge {
+	if order == nil {
+		order = DefaultWorkflowInstanceOrder
+	}
+	return &WorkflowInstanceEdge{
+		Node:   _m,
+		Cursor: order.Field.toCursor(_m),
+	}
+}
+
+// WorkflowObjectRefEdge is the edge representation of WorkflowObjectRef.
+type WorkflowObjectRefEdge struct {
+	Node   *WorkflowObjectRef `json:"node"`
+	Cursor Cursor             `json:"cursor"`
+}
+
+// WorkflowObjectRefConnection is the connection containing edges to WorkflowObjectRef.
+type WorkflowObjectRefConnection struct {
+	Edges      []*WorkflowObjectRefEdge `json:"edges"`
+	PageInfo   PageInfo                 `json:"pageInfo"`
+	TotalCount int                      `json:"totalCount"`
+}
+
+func (c *WorkflowObjectRefConnection) build(nodes []*WorkflowObjectRef, pager *workflowobjectrefPager, after *Cursor, first *int, before *Cursor, last *int) {
+	c.PageInfo.HasNextPage = before != nil
+	c.PageInfo.HasPreviousPage = after != nil
+	if first != nil && *first+1 == len(nodes) {
+		c.PageInfo.HasNextPage = true
+		nodes = nodes[:len(nodes)-1]
+	} else if last != nil && *last+1 == len(nodes) {
+		c.PageInfo.HasPreviousPage = true
+		nodes = nodes[:len(nodes)-1]
+	}
+	var nodeAt func(int) *WorkflowObjectRef
+	if last != nil {
+		n := len(nodes) - 1
+		nodeAt = func(i int) *WorkflowObjectRef {
+			return nodes[n-i]
+		}
+	} else {
+		nodeAt = func(i int) *WorkflowObjectRef {
+			return nodes[i]
+		}
+	}
+	c.Edges = make([]*WorkflowObjectRefEdge, len(nodes))
+	for i := range nodes {
+		node := nodeAt(i)
+		c.Edges[i] = &WorkflowObjectRefEdge{
+			Node:   node,
+			Cursor: pager.toCursor(node),
+		}
+	}
+	if l := len(c.Edges); l > 0 {
+		c.PageInfo.StartCursor = &c.Edges[0].Cursor
+		c.PageInfo.EndCursor = &c.Edges[l-1].Cursor
+	}
+	if c.TotalCount == 0 {
+		c.TotalCount = len(nodes)
+	}
+}
+
+// WorkflowObjectRefPaginateOption enables pagination customization.
+type WorkflowObjectRefPaginateOption func(*workflowobjectrefPager) error
+
+// WithWorkflowObjectRefOrder configures pagination ordering.
+func WithWorkflowObjectRefOrder(order *WorkflowObjectRefOrder) WorkflowObjectRefPaginateOption {
+	if order == nil {
+		order = DefaultWorkflowObjectRefOrder
+	}
+	o := *order
+	return func(pager *workflowobjectrefPager) error {
+		if err := o.Direction.Validate(); err != nil {
+			return err
+		}
+		if o.Field == nil {
+			o.Field = DefaultWorkflowObjectRefOrder.Field
+		}
+		pager.order = &o
+		return nil
+	}
+}
+
+// WithWorkflowObjectRefFilter configures pagination filter.
+func WithWorkflowObjectRefFilter(filter func(*WorkflowObjectRefQuery) (*WorkflowObjectRefQuery, error)) WorkflowObjectRefPaginateOption {
+	return func(pager *workflowobjectrefPager) error {
+		if filter == nil {
+			return errors.New("WorkflowObjectRefQuery filter cannot be nil")
+		}
+		pager.filter = filter
+		return nil
+	}
+}
+
+type workflowobjectrefPager struct {
+	reverse bool
+	order   *WorkflowObjectRefOrder
+	filter  func(*WorkflowObjectRefQuery) (*WorkflowObjectRefQuery, error)
+}
+
+func newWorkflowObjectRefPager(opts []WorkflowObjectRefPaginateOption, reverse bool) (*workflowobjectrefPager, error) {
+	pager := &workflowobjectrefPager{reverse: reverse}
+	for _, opt := range opts {
+		if err := opt(pager); err != nil {
+			return nil, err
+		}
+	}
+	if pager.order == nil {
+		pager.order = DefaultWorkflowObjectRefOrder
+	}
+	return pager, nil
+}
+
+func (p *workflowobjectrefPager) applyFilter(query *WorkflowObjectRefQuery) (*WorkflowObjectRefQuery, error) {
+	if p.filter != nil {
+		return p.filter(query)
+	}
+	return query, nil
+}
+
+func (p *workflowobjectrefPager) toCursor(_m *WorkflowObjectRef) Cursor {
+	return p.order.Field.toCursor(_m)
+}
+
+func (p *workflowobjectrefPager) applyCursors(query *WorkflowObjectRefQuery, after, before *Cursor) (*WorkflowObjectRefQuery, error) {
+	direction := p.order.Direction
+	if p.reverse {
+		direction = direction.Reverse()
+	}
+	for _, predicate := range entgql.CursorsPredicate(after, before, DefaultWorkflowObjectRefOrder.Field.column, p.order.Field.column, direction) {
+		query = query.Where(predicate)
+	}
+	return query, nil
+}
+
+func (p *workflowobjectrefPager) applyOrder(query *WorkflowObjectRefQuery) *WorkflowObjectRefQuery {
+	direction := p.order.Direction
+	if p.reverse {
+		direction = direction.Reverse()
+	}
+	query = query.Order(p.order.Field.toTerm(direction.OrderTermOption()))
+	if p.order.Field != DefaultWorkflowObjectRefOrder.Field {
+		query = query.Order(DefaultWorkflowObjectRefOrder.Field.toTerm(direction.OrderTermOption()))
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(p.order.Field.column)
+	}
+	return query
+}
+
+func (p *workflowobjectrefPager) orderExpr(query *WorkflowObjectRefQuery) sql.Querier {
+	direction := p.order.Direction
+	if p.reverse {
+		direction = direction.Reverse()
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(p.order.Field.column)
+	}
+	return sql.ExprFunc(func(b *sql.Builder) {
+		b.Ident(p.order.Field.column).Pad().WriteString(string(direction))
+		if p.order.Field != DefaultWorkflowObjectRefOrder.Field {
+			b.Comma().Ident(DefaultWorkflowObjectRefOrder.Field.column).Pad().WriteString(string(direction))
+		}
+	})
+}
+
+// Paginate executes the query and returns a relay based cursor connection to WorkflowObjectRef.
+func (_m *WorkflowObjectRefQuery) Paginate(
+	ctx context.Context, after *Cursor, first *int,
+	before *Cursor, last *int, opts ...WorkflowObjectRefPaginateOption,
+) (*WorkflowObjectRefConnection, error) {
+	if err := validateFirstLast(first, last); err != nil {
+		return nil, err
+	}
+	pager, err := newWorkflowObjectRefPager(opts, last != nil)
+	if err != nil {
+		return nil, err
+	}
+	if _m, err = pager.applyFilter(_m); err != nil {
+		return nil, err
+	}
+	conn := &WorkflowObjectRefConnection{Edges: []*WorkflowObjectRefEdge{}}
+	ignoredEdges := !hasCollectedField(ctx, edgesField)
+	if hasCollectedField(ctx, totalCountField) || hasCollectedField(ctx, pageInfoField) {
+		hasPagination := after != nil || first != nil || before != nil || last != nil
+		if hasPagination || ignoredEdges {
+			c := _m.Clone()
+			c.ctx.Fields = nil
+			if conn.TotalCount, err = c.Count(ctx); err != nil {
+				return nil, err
+			}
+			conn.PageInfo.HasNextPage = first != nil && conn.TotalCount > 0
+			conn.PageInfo.HasPreviousPage = last != nil && conn.TotalCount > 0
+		}
+	}
+	if ignoredEdges || (first != nil && *first == 0) || (last != nil && *last == 0) {
+		return conn, nil
+	}
+	if _m, err = pager.applyCursors(_m, after, before); err != nil {
+		return nil, err
+	}
+	limit := paginateLimit(first, last)
+	if limit != 0 {
+		_m.Limit(limit)
+	}
+	if field := collectedField(ctx, edgesField, nodeField); field != nil {
+		if err := _m.collectField(ctx, limit == 1, graphql.GetOperationContext(ctx), *field, []string{edgesField, nodeField}); err != nil {
+			return nil, err
+		}
+	}
+	_m = pager.applyOrder(_m)
+	nodes, err := _m.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	conn.build(nodes, pager, after, first, before, last)
+	return conn, nil
+}
+
+// WorkflowObjectRefOrderField defines the ordering field of WorkflowObjectRef.
+type WorkflowObjectRefOrderField struct {
+	// Value extracts the ordering value from the given WorkflowObjectRef.
+	Value    func(*WorkflowObjectRef) (ent.Value, error)
+	column   string // field or computed.
+	toTerm   func(...sql.OrderTermOption) workflowobjectref.OrderOption
+	toCursor func(*WorkflowObjectRef) Cursor
+}
+
+// WorkflowObjectRefOrder defines the ordering of WorkflowObjectRef.
+type WorkflowObjectRefOrder struct {
+	Direction OrderDirection               `json:"direction"`
+	Field     *WorkflowObjectRefOrderField `json:"field"`
+}
+
+// DefaultWorkflowObjectRefOrder is the default ordering of WorkflowObjectRef.
+var DefaultWorkflowObjectRefOrder = &WorkflowObjectRefOrder{
+	Direction: entgql.OrderDirectionAsc,
+	Field: &WorkflowObjectRefOrderField{
+		Value: func(_m *WorkflowObjectRef) (ent.Value, error) {
+			return _m.ID, nil
+		},
+		column: workflowobjectref.FieldID,
+		toTerm: workflowobjectref.ByID,
+		toCursor: func(_m *WorkflowObjectRef) Cursor {
+			return Cursor{ID: _m.ID}
+		},
+	},
+}
+
+// ToEdge converts WorkflowObjectRef into WorkflowObjectRefEdge.
+func (_m *WorkflowObjectRef) ToEdge(order *WorkflowObjectRefOrder) *WorkflowObjectRefEdge {
+	if order == nil {
+		order = DefaultWorkflowObjectRefOrder
+	}
+	return &WorkflowObjectRefEdge{
 		Node:   _m,
 		Cursor: order.Field.toCursor(_m),
 	}

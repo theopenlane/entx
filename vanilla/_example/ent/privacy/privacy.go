@@ -157,3 +157,51 @@ func (f OrganizationMutationRuleFunc) EvalMutation(ctx context.Context, m ent.Mu
 	}
 	return Denyf("ent/privacy: unexpected mutation type %T, expect *ent.OrganizationMutation", m)
 }
+
+// The WorkflowInstanceQueryRuleFunc type is an adapter to allow the use of ordinary
+// functions as a query rule.
+type WorkflowInstanceQueryRuleFunc func(context.Context, *ent.WorkflowInstanceQuery) error
+
+// EvalQuery return f(ctx, q).
+func (f WorkflowInstanceQueryRuleFunc) EvalQuery(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.WorkflowInstanceQuery); ok {
+		return f(ctx, q)
+	}
+	return Denyf("ent/privacy: unexpected query type %T, expect *ent.WorkflowInstanceQuery", q)
+}
+
+// The WorkflowInstanceMutationRuleFunc type is an adapter to allow the use of ordinary
+// functions as a mutation rule.
+type WorkflowInstanceMutationRuleFunc func(context.Context, *ent.WorkflowInstanceMutation) error
+
+// EvalMutation calls f(ctx, m).
+func (f WorkflowInstanceMutationRuleFunc) EvalMutation(ctx context.Context, m ent.Mutation) error {
+	if m, ok := m.(*ent.WorkflowInstanceMutation); ok {
+		return f(ctx, m)
+	}
+	return Denyf("ent/privacy: unexpected mutation type %T, expect *ent.WorkflowInstanceMutation", m)
+}
+
+// The WorkflowObjectRefQueryRuleFunc type is an adapter to allow the use of ordinary
+// functions as a query rule.
+type WorkflowObjectRefQueryRuleFunc func(context.Context, *ent.WorkflowObjectRefQuery) error
+
+// EvalQuery return f(ctx, q).
+func (f WorkflowObjectRefQueryRuleFunc) EvalQuery(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.WorkflowObjectRefQuery); ok {
+		return f(ctx, q)
+	}
+	return Denyf("ent/privacy: unexpected query type %T, expect *ent.WorkflowObjectRefQuery", q)
+}
+
+// The WorkflowObjectRefMutationRuleFunc type is an adapter to allow the use of ordinary
+// functions as a mutation rule.
+type WorkflowObjectRefMutationRuleFunc func(context.Context, *ent.WorkflowObjectRefMutation) error
+
+// EvalMutation calls f(ctx, m).
+func (f WorkflowObjectRefMutationRuleFunc) EvalMutation(ctx context.Context, m ent.Mutation) error {
+	if m, ok := m.(*ent.WorkflowObjectRefMutation); ok {
+		return f(ctx, m)
+	}
+	return Denyf("ent/privacy: unexpected mutation type %T, expect *ent.WorkflowObjectRefMutation", m)
+}

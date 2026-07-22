@@ -46,6 +46,7 @@ var (
 		{Name: "updated_by", Type: field.TypeString, Nullable: true},
 		{Name: "name", Type: field.TypeString},
 		{Name: "description", Type: field.TypeString, Nullable: true},
+		{Name: "preferences", Type: field.TypeJSON, Nullable: true},
 	}
 	// OrganizationsTable holds the schema information for the "organizations" table.
 	OrganizationsTable = &schema.Table{
@@ -60,13 +61,54 @@ var (
 			},
 		},
 	}
+	// WorkflowInstancesColumns holds the columns for the "workflow_instances" table.
+	WorkflowInstancesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString, Nullable: true},
+	}
+	// WorkflowInstancesTable holds the schema information for the "workflow_instances" table.
+	WorkflowInstancesTable = &schema.Table{
+		Name:       "workflow_instances",
+		Columns:    WorkflowInstancesColumns,
+		PrimaryKey: []*schema.Column{WorkflowInstancesColumns[0]},
+	}
+	// WorkflowObjectRefsColumns holds the columns for the "workflow_object_refs" table.
+	WorkflowObjectRefsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "workflow_instance_id", Type: field.TypeString},
+		{Name: "organization_id", Type: field.TypeString, Nullable: true},
+	}
+	// WorkflowObjectRefsTable holds the schema information for the "workflow_object_refs" table.
+	WorkflowObjectRefsTable = &schema.Table{
+		Name:       "workflow_object_refs",
+		Columns:    WorkflowObjectRefsColumns,
+		PrimaryKey: []*schema.Column{WorkflowObjectRefsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "workflow_object_refs_workflow_instances_workflow_instance",
+				Columns:    []*schema.Column{WorkflowObjectRefsColumns[1]},
+				RefColumns: []*schema.Column{WorkflowInstancesColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "workflow_object_refs_organizations_organization",
+				Columns:    []*schema.Column{WorkflowObjectRefsColumns[2]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		OrgMembershipsTable,
 		OrganizationsTable,
+		WorkflowInstancesTable,
+		WorkflowObjectRefsTable,
 	}
 )
 
 func init() {
 	OrgMembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable
+	WorkflowObjectRefsTable.ForeignKeys[0].RefTable = WorkflowInstancesTable
+	WorkflowObjectRefsTable.ForeignKeys[1].RefTable = OrganizationsTable
 }

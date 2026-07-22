@@ -16,6 +16,10 @@ type Tx struct {
 	OrgMembership *OrgMembershipClient
 	// Organization is the client for interacting with the Organization builders.
 	Organization *OrganizationClient
+	// WorkflowInstance is the client for interacting with the WorkflowInstance builders.
+	WorkflowInstance *WorkflowInstanceClient
+	// WorkflowObjectRef is the client for interacting with the WorkflowObjectRef builders.
+	WorkflowObjectRef *WorkflowObjectRefClient
 
 	// lazily loaded.
 	client     *Client
@@ -149,6 +153,8 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.OrgMembership = NewOrgMembershipClient(tx.config)
 	tx.Organization = NewOrganizationClient(tx.config)
+	tx.WorkflowInstance = NewWorkflowInstanceClient(tx.config)
+	tx.WorkflowObjectRef = NewWorkflowObjectRefClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.
