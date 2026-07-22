@@ -30,6 +30,9 @@ type {{ $schema.IngestRequestType }} struct {
 	OperationContext gala.OperationContext `json:"operationContext"`
 	// Input is the ent create input for the record to persist
 	Input generated.{{ $schema.CreateInputType }} `json:"input"`
+	// ThroughEdgeIDs carries cross-object link target ids per through edge, which have no field
+	// on the create input and are applied as join entity rows after the record persists
+	ThroughEdgeIDs map[string][]string `json:"throughEdgeIds,omitempty"`
 }
 
 // {{ $schema.IngestTopicVar }} is the typed gala topic for {{ $schema.Name }} ingest requests
