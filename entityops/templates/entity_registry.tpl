@@ -369,7 +369,7 @@ func init() {
 {{- if .ObjectFields }}
 	Schema{{ $schema.Name }}.Fields = []FieldDescriptor{
 {{- range .ObjectFields }}
-		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}"{{ end }}{{ if .LookupKey }}, LookupKey: true{{ end }}{{ if .TaskRules }}, TaskRules: []TaskRuleDescriptor{ {{ range .TaskRules }}{RuleID: {{ printf "%q" .RuleID }}{{ if .Expression }}, Expression: {{ printf "%q" .Expression }}{{ end }}{{ if .EachElement }}, EachElement: {{ printf "%q" .EachElement }}{{ end }}{{ if .Trigger }}, Trigger: {{ printf "%q" .Trigger }}{{ end }}{{ if .Source }}, Source: {{ printf "%q" .Source }}{{ end }}}, {{ end }} }{{ end }}},
+		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}"{{ end }}{{ if .LookupKey }}, LookupKey: true{{ end }}{{ if .TaskRules }}, TaskRules: []TaskRuleDescriptor{ {{ range .TaskRules }}{RuleID: {{ printf "%q" .RuleID }}{{ if .Expression }}, Expression: {{ printf "%q" .Expression }}{{ end }}{{ if .EachElement }}, EachElement: {{ printf "%q" .EachElement }}{{ end }}{{ if .Trigger }}, Trigger: {{ printf "%q" .Trigger }}{{ end }}}, {{ end }} }{{ end }}},
 {{- end }}
 	}
 {{- end }}
@@ -378,7 +378,7 @@ func init() {
 {{- if .TaskRules }}
 	Schema{{ $schema.Name }}.TaskRules = []TaskRuleDescriptor{
 {{- range .TaskRules }}
-		{RuleID: {{ printf "%q" .RuleID }}{{ if .Expression }}, Expression: {{ printf "%q" .Expression }}{{ end }}{{ if .EachElement }}, EachElement: {{ printf "%q" .EachElement }}{{ end }}{{ if .Trigger }}, Trigger: {{ printf "%q" .Trigger }}{{ end }}{{ if .Source }}, Source: {{ printf "%q" .Source }}{{ end }}},
+		{RuleID: {{ printf "%q" .RuleID }}{{ if .Expression }}, Expression: {{ printf "%q" .Expression }}{{ end }}{{ if .EachElement }}, EachElement: {{ printf "%q" .EachElement }}{{ end }}{{ if .Trigger }}, Trigger: {{ printf "%q" .Trigger }}{{ end }}},
 {{- end }}
 	}
 {{- end }}

@@ -144,8 +144,6 @@ type TaskRuleSpec struct {
 	EachElement string
 	// Trigger selects create-and-update (the default, zero value) or create-only evaluation
 	Trigger TaskRuleTrigger
-	// Source categorizes the generated task (e.g. "recommendations", "onboarding")
-	Source string
 }
 
 // TaskRuleAnnotation marks a field (or schema, via SchemaTaskRule) as a source of suggested-task

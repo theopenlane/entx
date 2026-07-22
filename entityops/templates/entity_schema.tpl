@@ -81,6 +81,14 @@ type FieldDescriptor struct {
 	TaskRules []TaskRuleDescriptor `json:"taskRules,omitempty"`
 }
 
+// Task rule Trigger values (see TaskRuleDescriptor.Trigger)
+const (
+	// TaskRuleOnCreateOrUpdate evaluates a rule on both create and update; the default (empty Trigger)
+	TaskRuleOnCreateOrUpdate = "createOrUpdate"
+	// TaskRuleOnCreateOnly evaluates a rule only when the entity is created
+	TaskRuleOnCreateOnly = "createOnly"
+)
+
 // TaskRuleDescriptor describes one suggested-task trigger: a CEL condition plus the RuleID a
 // runtime engine uses to look up the task's template content
 type TaskRuleDescriptor struct {
@@ -95,8 +103,6 @@ type TaskRuleDescriptor struct {
 	EachElement string `json:"eachElement,omitempty"`
 	// Trigger selects create-and-update (empty) or create-only evaluation
 	Trigger string `json:"trigger,omitempty"`
-	// Source categorizes the generated task (e.g. "recommendations", "onboarding")
-	Source string `json:"source,omitempty"`
 }
 
 // EdgeDescriptor describes an edge on a schema. It is the single edge-capability record shared by
