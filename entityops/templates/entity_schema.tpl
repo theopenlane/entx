@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/theopenlane/entx"
+
 	generated "{{ .EntPackage }}"
 )
 
@@ -81,14 +83,6 @@ type FieldDescriptor struct {
 	TaskRules []TaskRuleDescriptor `json:"taskRules,omitempty"`
 }
 
-// Task rule Trigger values (see TaskRuleDescriptor.Trigger)
-const (
-	// TaskRuleOnCreateOrUpdate evaluates a rule on both create and update; the default (empty Trigger)
-	TaskRuleOnCreateOrUpdate = "createOrUpdate"
-	// TaskRuleOnCreateOnly evaluates a rule only when the entity is created
-	TaskRuleOnCreateOnly = "createOnly"
-)
-
 // TaskRuleDescriptor describes one suggested-task trigger: a CEL condition plus the RuleID a
 // runtime engine uses to look up the task's template content
 type TaskRuleDescriptor struct {
@@ -101,8 +95,9 @@ type TaskRuleDescriptor struct {
 	// EachElement, when set, is a CEL expression resolving to a list within the field's value; the
 	// rule expands to fire once per element instead of evaluating Expression as a single boolean
 	EachElement string `json:"eachElement,omitempty"`
-	// Trigger selects create-and-update (empty) or create-only evaluation
-	Trigger string `json:"trigger,omitempty"`
+	// Trigger selects create-and-update (empty) or create-only evaluation; compare against
+	// entx.TaskRuleOnCreateOnly / entx.TaskRuleOnCreateOrUpdate
+	Trigger entx.TaskRuleTrigger `json:"trigger,omitempty"`
 }
 
 // EdgeDescriptor describes an edge on a schema. It is the single edge-capability record shared by

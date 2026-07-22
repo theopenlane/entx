@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/theopenlane/entx"
+
 	generated "github.com/theopenlane/entx/vanilla/_example/ent"
 )
 
@@ -93,10 +95,9 @@ type TaskRuleDescriptor struct {
 	// EachElement, when set, is a CEL expression resolving to a list within the field's value; the
 	// rule expands to fire once per element instead of evaluating Expression as a single boolean
 	EachElement string `json:"eachElement,omitempty"`
-	// Trigger selects create-and-update (empty) or create-only evaluation
-	Trigger string `json:"trigger,omitempty"`
-	// Source categorizes the generated task (e.g. "recommendations", "onboarding")
-	Source string `json:"source,omitempty"`
+	// Trigger selects create-and-update (empty) or create-only evaluation; compare against
+	// entx.TaskRuleOnCreateOnly / entx.TaskRuleOnCreateOrUpdate
+	Trigger entx.TaskRuleTrigger `json:"trigger,omitempty"`
 }
 
 // EdgeDescriptor describes an edge on a schema. It is the single edge-capability record shared by
