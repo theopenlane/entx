@@ -1,6 +1,8 @@
 package entityops
 
 import (
+	"slices"
+
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/load"
 	"github.com/99designs/gqlgen/codegen/templates"
@@ -141,11 +143,40 @@ func collectIntegrationMapping(schema *load.Schema) (map[string]integrationField
 		}
 	}
 
+	if len(meta) > 0 {
+		if ownerDefault, ok := implicitOwnerDefault(schema, runtimeDefaults); ok {
+			runtimeDefaults = append(runtimeDefaults, ownerDefault)
+		}
+	}
+
 	schemaMeta.Mapped = len(meta) > 0
 	schemaMeta.StockPersist = stockPersist
 	schemaMeta.RuntimeDefaults = runtimeDefaults
 
 	return meta, schemaMeta, nil
+}
+
+// implicitOwnerDefault returns an owner_id runtime default for mapped schemas that declare an
+// owner_id field without an explicit FromIntegration annotation, so every generated Prepare
+// function stamps the integration's owning organization uniformly
+func implicitOwnerDefault(schema *load.Schema, runtimeDefaults []EntityRuntimeDefault) (EntityRuntimeDefault, bool) {
+	if slices.ContainsFunc(runtimeDefaults, func(d EntityRuntimeDefault) bool { return d.GoField == "OwnerID" }) {
+		return EntityRuntimeDefault{}, false
+	}
+
+	for _, field := range schema.Fields {
+		if field.Name != "owner_id" {
+			continue
+		}
+
+		return EntityRuntimeDefault{
+			GoField:          "OwnerID",
+			Required:         !field.Optional,
+			IntegrationField: "OwnerID",
+		}, true
+	}
+
+	return EntityRuntimeDefault{}, false
 }
 
 // integrationFieldIncluded reports whether a field should be collected given the schema's

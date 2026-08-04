@@ -34,8 +34,6 @@ type SchemaHandlerConfig[TInput any, TEvent any] struct {
 	Schema *Schema
 	// Topic is the Gala topic for this schema's events
 	Topic gala.Topic[TEvent]
-	// Prepare transforms the input before persistence or emission
-	Prepare func(context.Context, TInput) TInput
 	// Wrap constructs a typed event from operation context, input, and through-edge link ids
 	Wrap func(gala.OperationContext, TInput, map[string][]string) TEvent
 	// Unwrap extracts operation context, input, and through-edge link ids from a typed event
@@ -50,7 +48,7 @@ func BuildSchemaHandler[TInput any, TEvent any](cfg SchemaHandlerConfig[TInput, 
 
 	return SchemaHandler{
 		Register: func(runtime *gala.Gala) error {
-			_, err := gala.RegisterListeners(runtime.Registry(), gala.Definition[TEvent]{
+			_, err := gala.Register(runtime, gala.Definition[TEvent]{
 				Topic: cfg.Topic,
 				Name:  schema,
 				Handle: func(ctx gala.HandlerContext, payload TEvent) error {
@@ -62,9 +60,8 @@ func BuildSchemaHandler[TInput any, TEvent any](cfg SchemaHandlerConfig[TInput, 
 					}
 
 					_, input, throughIDs := cfg.Unwrap(payload)
-					prepared := cfg.Prepare(ctx.Context, input)
 
-					id, err := cfg.Persist(ctx.Context, client, prepared)
+					id, err := cfg.Persist(ctx.Context, client, input)
 					if err != nil {
 						return logPersistError(ctx.Context, ref, ErrPersistFailed, err)
 					}
@@ -93,8 +90,7 @@ func BuildSchemaHandler[TInput any, TEvent any](cfg SchemaHandlerConfig[TInput, 
 				return logError(ctx, ref, ErrDecodeFailed, err)
 			}
 
-			prepared := cfg.Prepare(ctx, decoded)
-			event := cfg.Wrap(oc, prepared, throughIDs)
+			event := cfg.Wrap(oc, decoded, throughIDs)
 
 			if headers.Metadata == nil {
 				raw, marshalErr := json.Marshal(oc)
@@ -107,9 +103,8 @@ func BuildSchemaHandler[TInput any, TEvent any](cfg SchemaHandlerConfig[TInput, 
 
 			ctx = gala.WithOperationContext(ctx, oc)
 
-			receipt := runtime.EmitWithHeaders(ctx, cfg.Topic.Name, event, headers)
-			if receipt.Err != nil {
-				return logError(ctx, ref, ErrEmitFailed, receipt.Err)
+			if _, err := runtime.Emit(ctx, cfg.Topic.Name, event, gala.WithHeaders(headers)); err != nil {
+				return logError(ctx, ref, ErrEmitFailed, err)
 			}
 
 			return nil
@@ -124,9 +119,7 @@ func BuildSchemaHandler[TInput any, TEvent any](cfg SchemaHandlerConfig[TInput, 
 				return "", logError(ctx, ref, ErrDecodeFailed, err)
 			}
 
-			prepared := cfg.Prepare(ctx, decoded)
-
-			id, err := cfg.Persist(ctx, client, prepared)
+			id, err := cfg.Persist(ctx, client, decoded)
 			if err != nil {
 				return "", logPersistError(ctx, ref, ErrPersistFailed, err)
 			}
@@ -139,3 +132,24 @@ func BuildSchemaHandler[TInput any, TEvent any](cfg SchemaHandlerConfig[TInput, 
 		},
 	}
 }
+
+{{- range $schema := .Schemas }}
+{{- if and $schema.IntegrationMapped $schema.HasCreate }}
+
+// {{ $schema.Name }}IngestHandler builds the shared ingest schema handler for {{ $schema.Name }}
+// from the schema-specific persistence closure
+func {{ $schema.Name }}IngestHandler(persist func(context.Context, *generated.Client, generated.{{ $schema.CreateInputType }}) (string, error)) SchemaHandler {
+	return BuildSchemaHandler(SchemaHandlerConfig[generated.{{ $schema.CreateInputType }}, {{ $schema.IngestRequestType }}]{
+		Schema: Schema{{ $schema.Name }},
+		Topic:  {{ $schema.IngestTopicVar }},
+		Wrap: func(oc gala.OperationContext, input generated.{{ $schema.CreateInputType }}, throughIDs map[string][]string) {{ $schema.IngestRequestType }} {
+			return {{ $schema.IngestRequestType }}{OperationContext: oc, Input: input, ThroughEdgeIDs: throughIDs}
+		},
+		Unwrap: func(event {{ $schema.IngestRequestType }}) (gala.OperationContext, generated.{{ $schema.CreateInputType }}, map[string][]string) {
+			return event.OperationContext, event.Input, event.ThroughEdgeIDs
+		},
+		Persist: persist,
+	})
+}
+{{- end }}
+{{- end }}
