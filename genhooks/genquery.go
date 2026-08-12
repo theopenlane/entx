@@ -19,7 +19,6 @@ import (
 
 	"github.com/theopenlane/entx"
 
-	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/formatter"
 	"github.com/vektah/gqlparser/v2/parser"
@@ -44,13 +43,13 @@ func GenQuery(graphSchemaDir, schemaDir string) gen.Hook {
 			// create schema query
 			tmpl := createQuery()
 
-			schema, err := loadSchemasFromDir(schemaDir)
+			schemaDoc, err := loadSchemasFromDir(schemaDir)
 			if err != nil {
 				log.Fatalf("unable to load schemas: %v", err)
 			}
 
 			// schemaToFields collects the extended flat fields for each schema
-			schemaToFields := mapFieldsToSchema(schema)
+			schemaToFields := mapFieldsToSchema(schemaDoc)
 
 			// loop through all nodes and generate schema if not specified to be skipped
 			for _, node := range g.Nodes {
@@ -63,20 +62,40 @@ func GenQuery(graphSchemaDir, schemaDir string) gen.Hook {
 }
 
 // mapFieldsToSchema creates a mapping of schema to the fields that should be avoided deleting in the query update process
-func mapFieldsToSchema(schema *ast.Schema) map[string]map[string]bool {
+// it works off the parsed schema document rather than a validated schema so that references to types
+// that have not been generated yet (e.g. a brand new ent schema whose types are not in ent.graphql
+// until the entgql extension runs later in the same generate pass) do not fail the run
+func mapFieldsToSchema(doc *ast.SchemaDocument) map[string]map[string]bool {
 	schemaToFields := make(map[string]map[string]bool)
 
-	for _, field := range schema.Types["Mutation"].Fields {
-		path := field.Position.Src.Name
+	definitions := make(map[string]*ast.Definition, len(doc.Definitions))
+	for _, def := range doc.Definitions {
+		definitions[def.Name] = def
+	}
 
-		schemaName := strings.ToLower(path[strings.LastIndex(path, "/")+1 : strings.LastIndex(path, ".graphql")])
+	for _, def := range append(doc.Definitions, doc.Extensions...) {
+		if def.Name != "Mutation" {
+			continue
+		}
 
-		for _, flatFields := range schema.Types[field.Type.Name()].Fields {
-			if schemaToFields[schemaName] == nil {
-				schemaToFields[schemaName] = make(map[string]bool)
+		for _, field := range def.Fields {
+			path := field.Position.Src.Name
+
+			schemaName := strings.ToLower(path[strings.LastIndex(path, "/")+1 : strings.LastIndex(path, ".graphql")])
+
+			payload, ok := definitions[field.Type.Name()]
+			if !ok {
+				// payload type is not defined yet, skip it
+				continue
 			}
 
-			schemaToFields[schemaName][flatFields.Name] = true
+			for _, flatFields := range payload.Fields {
+				if schemaToFields[schemaName] == nil {
+					schemaToFields[schemaName] = make(map[string]bool)
+				}
+
+				schemaToFields[schemaName][flatFields.Name] = true
+			}
 		}
 	}
 
@@ -119,8 +138,9 @@ func generateQuery(fieldsToAvoidDeleting map[string]bool, node *gen.Type, tmpl *
 	}
 }
 
-// loadSchemasFromDir loads all the schemas from a root directory
-func loadSchemasFromDir(dir string) (*ast.Schema, error) {
+// loadSchemasFromDir parses all the schemas from a root directory without validating
+// type references, so files generated ahead of the entgql schema do not fail the load
+func loadSchemasFromDir(dir string) (*ast.SchemaDocument, error) {
 	var sources []*ast.Source
 
 	fsys := os.DirFS(dir)
@@ -154,7 +174,7 @@ func loadSchemasFromDir(dir string) (*ast.Schema, error) {
 		return nil, err
 	}
 
-	return gqlparser.LoadSchema(sources...)
+	return parser.ParseSchemas(sources...)
 }
 
 // updateQuery updates the query by keeping old edges and updating flat fields
