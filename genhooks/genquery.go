@@ -68,34 +68,28 @@ func GenQuery(graphSchemaDir, schemaDir string) gen.Hook {
 func mapFieldsToSchema(doc *ast.SchemaDocument) map[string]map[string]bool {
 	schemaToFields := make(map[string]map[string]bool)
 
-	definitions := make(map[string]*ast.Definition, len(doc.Definitions))
-	for _, def := range doc.Definitions {
-		definitions[def.Name] = def
+	fieldsByType := make(map[string]ast.FieldList)
+	for _, def := range append(doc.Definitions, doc.Extensions...) {
+		fieldsByType[def.Name] = append(fieldsByType[def.Name], def.Fields...)
 	}
 
-	for _, def := range append(doc.Definitions, doc.Extensions...) {
-		if def.Name != "Mutation" {
+	for _, field := range fieldsByType["Mutation"] {
+		path := field.Position.Src.Name
+
+		schemaName := strings.ToLower(path[strings.LastIndex(path, "/")+1 : strings.LastIndex(path, ".graphql")])
+
+		payloadFields, ok := fieldsByType[field.Type.Name()]
+		if !ok {
+			// payload type is not defined yet, skip it
 			continue
 		}
 
-		for _, field := range def.Fields {
-			path := field.Position.Src.Name
-
-			schemaName := strings.ToLower(path[strings.LastIndex(path, "/")+1 : strings.LastIndex(path, ".graphql")])
-
-			payload, ok := definitions[field.Type.Name()]
-			if !ok {
-				// payload type is not defined yet, skip it
-				continue
+		for _, flatFields := range payloadFields {
+			if schemaToFields[schemaName] == nil {
+				schemaToFields[schemaName] = make(map[string]bool)
 			}
 
-			for _, flatFields := range payload.Fields {
-				if schemaToFields[schemaName] == nil {
-					schemaToFields[schemaName] = make(map[string]bool)
-				}
-
-				schemaToFields[schemaName][flatFields.Name] = true
-			}
+			schemaToFields[schemaName][flatFields.Name] = true
 		}
 	}
 
