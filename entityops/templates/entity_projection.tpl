@@ -11,7 +11,7 @@ type {{ $schema.Name }}Projection struct {
 	// ID is the entity identifier, exposed to expressions as "id"
 	ID string `json:"id,omitempty"`
 {{- range $schema.ObjectFields }}
-{{- if ne .Snake "id" }}
+	{{- if and .Projectable (ne .Snake "id") }}
 	{{ .Name }} {{ .Type }} `json:"{{ .Snake }},omitempty"`
 {{- end }}
 {{- end }}

@@ -19,10 +19,11 @@ import (
 	"{{ .CelxPackage }}"
 	generated "{{ .EntPackage }}"
 	"{{ .EntPackage }}/predicate"
+	"{{ .GalaPackage }}"
 	"{{ .JsonxPackage }}"
 	"{{ .LogxPackage }}"
 {{- range .Schemas }}
-{{- if and .HasOwnerID .PredicateImport }}
+{{- if .PredicateImport }}
 	"{{ .PredicateImport }}"
 {{- end }}
 {{- end }}
@@ -34,6 +35,33 @@ type EntityRef struct {
 	ID string
 	// Schema is the entity's schema descriptor
 	Schema SchemaDescriptor
+}
+
+// IngestRequest is the durable schema-ingest command. Defaults are resolved through the schema
+// field catalog, so operation-specific values do not become fields on the ingest machinery.
+type IngestRequest struct {
+	OperationContext gala.OperationContext `json:"operationContext"`
+	Input            json.RawMessage        `json:"input"`
+	ThroughEdgeIDs   map[string][]string    `json:"throughEdgeIds,omitempty"`
+	Defaults         map[string]any         `json:"defaults,omitempty"`
+	Links            []LinkSpec             `json:"links,omitempty"`
+}
+
+// IngestIntegrationResolver loads the integration referenced by the durable operation context.
+// The application owns terminal-error classification for integrations removed while work is queued.
+type IngestIntegrationResolver func(context.Context, *generated.Client, gala.OperationContext) (*generated.Integration, error)
+
+// IngestPersist is the type-erased persistence operation bound to a schema at startup.
+type IngestPersist func(context.Context, *generated.Client, *generated.Integration, json.RawMessage) (string, error)
+
+// TypedIngestPersist is the typed persistence operation adapted by BindIngest.
+type TypedIngestPersist[T any] func(context.Context, *generated.Client, *generated.Integration, T) (string, error)
+
+// IngestCapability is the schema's single asynchronous ingest control surface.
+type IngestCapability struct {
+	Topic   gala.Topic[IngestRequest]
+	prepare func(context.Context, *generated.Integration, json.RawMessage) (json.RawMessage, error)
+	persist IngestPersist
 }
 
 // Schema is the runtime representation of a registered entity schema.
@@ -51,6 +79,10 @@ type Schema struct {
 	QueryByKey func(ctx context.Context, client *generated.Client, orgID string, field string, values []string) ([]json.RawMessage, error)
 	// Load loads a single entity by ID and returns its JSON representation
 	Load func(ctx context.Context, client *generated.Client, entityID string) (json.RawMessage, error)
+	// LoadMany loads entities by ID in one query and indexes their JSON by entity ID
+	LoadMany func(ctx context.Context, client *generated.Client, entityIDs []string) (map[string]json.RawMessage, error)
+	// LoadObject loads the native generated Ent object for consumers that require its interfaces
+	LoadObject func(ctx context.Context, client *generated.Client, entityID string) (any, error)
 	// Fields is the unified field catalog for this schema, consumed by the workflow builder and the
 	// integration cross-link config; workflow-eligible and match-key views are filtered from it
 	Fields []FieldDescriptor
@@ -61,6 +93,248 @@ type Schema struct {
 	// ProjectionType is the reflect.Type of this schema's flat CEL/jsonschema projection struct
 	// ({Name}Projection); the registerable native-type view of the entity used for typed expressions
 	ProjectionType reflect.Type
+	// Ingest is present when this schema supports mapped integration ingestion
+	Ingest *IngestCapability
+	// ConsoleRoute is present only when the schema explicitly declares a console route
+	ConsoleRoute *ConsoleRoute
+	// MentionSpec is present only when the schema explicitly declares mention scanning
+	MentionSpec *MentionSpec
+}
+
+// BindIngest binds typed persistence to a generated schema capability. Topic, registration,
+// emission, preparation, and delivery remain schema-owned.
+func BindIngest[T any](schema *Schema, persist TypedIngestPersist[T]) error {
+	if schema == nil || schema.Ingest == nil {
+		return ErrIngestUnsupported
+	}
+
+	if persist == nil {
+		return ErrIngestPersistRequired
+	}
+
+	if schema.Ingest.persist != nil {
+		return ErrIngestAlreadyBound
+	}
+
+	schema.Ingest.persist = func(ctx context.Context, client *generated.Client, integration *generated.Integration, payload json.RawMessage) (string, error) {
+		decoded, err := jsonx.Decode[T](payload)
+		if err != nil {
+			return "", logError(ctx, SchemaRef{Schema: schema.Snake, Operation: refOpCreate}, ErrDecodeFailed, err)
+		}
+
+		return persist(ctx, client, integration, decoded)
+	}
+
+	return nil
+}
+
+// RegisterIngest attaches the schema's durable ingest consumer.
+func (s *Schema) RegisterIngest(runtime *gala.Gala, resolveIntegration IngestIntegrationResolver) error {
+	if s == nil || s.Ingest == nil || s.Ingest.prepare == nil {
+		return ErrIngestUnsupported
+	}
+
+	if resolveIntegration == nil {
+		return ErrIngestResolverRequired
+	}
+
+	if s.Ingest.persist == nil {
+		return ErrIngestNotBound
+	}
+
+	_, err := gala.Register(runtime, gala.Definition[IngestRequest]{
+		Topic: s.Ingest.Topic,
+		Name:  s.Name + ".ingest",
+		Handle: func(handlerCtx gala.HandlerContext, request IngestRequest) error {
+			client := generated.FromContext(handlerCtx.Context)
+			if client == nil {
+				return logError(handlerCtx.Context, SchemaRef{Schema: s.Snake, Operation: refOpCreate}, ErrClientResolveFailed, fmt.Errorf("ent client missing from restored handler context"))
+			}
+
+			return s.handleIngest(handlerCtx.Context, client, resolveIntegration, request)
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrListenerRegistrationFailed, err)
+	}
+
+	return nil
+}
+
+// RegisterIngestListeners attaches every generated schema-ingest consumer.
+func RegisterIngestListeners(runtime *gala.Gala, resolveIntegration IngestIntegrationResolver) error {
+	for _, schema := range allSchemas {
+		if schema.Ingest == nil {
+			continue
+		}
+
+		if err := schema.RegisterIngest(runtime, resolveIntegration); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// EmitIngest queues one durable schema-ingest command.
+func (s *Schema) EmitIngest(ctx context.Context, runtime *gala.Gala, headers gala.Headers, request IngestRequest) error {
+	if s == nil || s.Ingest == nil {
+		return ErrIngestUnsupported
+	}
+
+	ref := SchemaRef{Schema: s.Snake, Operation: refOpEmit}
+	if len(headers.Metadata) == 0 {
+		metadata, err := json.Marshal(request.OperationContext)
+		if err != nil {
+			return logError(ctx, ref, ErrMarshalFailed, err)
+		}
+
+		headers.Metadata = metadata
+	}
+
+	ctx = gala.WithOperationContext(ctx, request.OperationContext)
+
+	if _, err := runtime.EmitWithHeaders(ctx, s.Ingest.Topic.Name, request, headers); err != nil {
+		return logError(ctx, ref, ErrEmitFailed, err)
+	}
+
+	return nil
+}
+
+// PersistIngest prepares and persists one mapped record synchronously through the schema's bound
+// persistence, sharing the preparation the durable ingest consumer applies
+func (s *Schema) PersistIngest(ctx context.Context, client *generated.Client, integration *generated.Integration, payload json.RawMessage) (string, error) {
+	if s == nil || s.Ingest == nil {
+		return "", ErrIngestUnsupported
+	}
+
+	if s.Ingest.persist == nil {
+		return "", ErrIngestNotBound
+	}
+
+	// the split runs before prepare: prepare round-trips the payload through the typed create
+	// input, which drops through-edge keys the input struct cannot carry
+	payload, throughIDs := splitThroughEdgeIDs(s, payload)
+
+	payload, err := s.Ingest.prepare(ctx, integration, payload)
+	if err != nil {
+		return "", err
+	}
+
+	id, err := s.Ingest.persist(ctx, client, integration, payload)
+	if err != nil {
+		return "", err
+	}
+
+	return id, applyThroughEdgeIDs(ctx, client, s, id, throughIDs)
+}
+
+// handleIngest runs the mandatory consumer-side pipeline for one queued mapped entity.
+func (s *Schema) handleIngest(ctx context.Context, client *generated.Client, resolve IngestIntegrationResolver, request IngestRequest) error {
+	ref := SchemaRef{Schema: s.Snake, Operation: refOpCreate}
+	ctx = gala.WithOperationContext(ctx, request.OperationContext)
+
+	integration, err := resolve(ctx, client, request.OperationContext)
+	if err != nil {
+		return logError(ctx, ref, ErrIngestIntegrationResolveFailed, err)
+	}
+
+	payload, err := applyIngestDefaults(s, request.Input, request.Defaults)
+	if err != nil {
+		return err
+	}
+
+	payload, err = s.Ingest.prepare(ctx, integration, payload)
+	if err != nil {
+		return err
+	}
+
+	ownerID := request.OperationContext.OwnerID
+	if ownerID == "" && integration != nil {
+		ownerID = integration.OwnerID
+	}
+
+	payload, err = InjectCreateLinks(ctx, client, ownerID, s, payload, request.Links)
+	if err != nil {
+		return err
+	}
+
+	payload, throughIDs := splitThroughEdgeIDs(s, payload)
+	if len(request.ThroughEdgeIDs) > 0 && throughIDs == nil {
+		throughIDs = make(map[string][]string, len(request.ThroughEdgeIDs))
+	}
+
+	for edge, ids := range request.ThroughEdgeIDs {
+		throughIDs[edge] = append(throughIDs[edge], ids...)
+	}
+
+	id, err := s.Ingest.persist(ctx, client, integration, payload)
+	if err != nil {
+		return logPersistError(ctx, ref, ErrPersistFailed, err)
+	}
+
+	if err := applyThroughEdgeIDs(ctx, client, s, id, throughIDs); err != nil {
+		return logPersistError(ctx, ref, ErrPersistFailed, err)
+	}
+
+	return nil
+}
+
+// applyIngestDefaults applies caller-supplied defaults through canonical schema field names. An
+// explicit non-zero mapped value wins over a default.
+func applyIngestDefaults(schema *Schema, payload json.RawMessage, defaults map[string]any) (json.RawMessage, error) {
+	if len(defaults) == 0 {
+		return payload, nil
+	}
+
+	var document map[string]json.RawMessage
+	if len(payload) > 0 {
+		if err := json.Unmarshal(payload, &document); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrDecodeFailed, err)
+		}
+	}
+
+	if document == nil {
+		document = make(map[string]json.RawMessage, len(defaults))
+	}
+
+	for name, value := range defaults {
+		field, ok := schema.FieldByName(name)
+		if !ok {
+			return nil, fmt.Errorf("%w: %s.%s", ErrFieldNotFound, schema.Snake, name)
+		}
+
+		key := field.InputKey
+		if key == "" {
+			key = field.Name
+		}
+
+		if existing, ok := document[key]; ok && !isDefaultableJSON(existing) {
+			continue
+		}
+
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s.%s: %w", ErrMarshalFailed, schema.Snake, name, err)
+		}
+
+		document[key] = raw
+	}
+
+	prepared, err := json.Marshal(document)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrMarshalFailed, err)
+	}
+
+	return prepared, nil
+}
+
+// isDefaultableJSON reports whether a mapped JSON value is absent in the semantic sense used by
+// ingest defaults. False and numeric zero remain explicit caller values.
+func isDefaultableJSON(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+
+	return len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || bytes.Equal(trimmed, []byte(`""`))
 }
 
 // applyClears rewrites explicit null values in a snake_case payload to the generated Clear<Field>
@@ -97,6 +371,20 @@ func isJSONNull(raw json.RawMessage) bool {
 	return bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
 }
 
+// softDeleteFieldName is the column the soft-delete mixin adds to participating schemas
+const softDeleteFieldName = "deleted_at"
+
+// SoftDeletes reports whether this schema soft-deletes rows via the deleted_at column
+func (s *Schema) SoftDeletes() bool {
+	for _, f := range s.Fields {
+		if f.Name == softDeleteFieldName {
+			return true
+		}
+	}
+
+	return false
+}
+
 // MatchKeyField reports whether field is a declared match-key column for this schema
 func (s *Schema) MatchKeyField(field string) bool {
 	for _, f := range s.Fields {
@@ -117,17 +405,6 @@ func (s *Schema) EdgeByName(name string) (EdgeDescriptor, bool) {
 	}
 
 	return EdgeDescriptor{}, false
-}
-
-// AllowedKey reports whether key is an integration mapping input key accepted for this schema
-func (s *Schema) AllowedKey(key string) bool {
-	for _, f := range s.Fields {
-		if f.InputKey != "" && f.InputKey == key {
-			return true
-		}
-	}
-
-	return false
 }
 
 // ResolveInputKey resolves a caller-supplied field name to this schema's canonical create-input
@@ -163,8 +440,8 @@ func (s *Schema) ResolveInputKey(name string) (string, bool) {
 	return "", false
 }
 
-// fieldByInputName returns the field descriptor addressed by a caller-supplied name
-func (s *Schema) fieldByInputName(name string) (FieldDescriptor, bool) {
+// FieldByName returns the field descriptor addressed by a caller-supplied field or input name.
+func (s *Schema) FieldByName(name string) (FieldDescriptor, bool) {
 	key, ok := s.ResolveInputKey(name)
 	if !ok {
 		return FieldDescriptor{}, false
@@ -183,7 +460,7 @@ func (s *Schema) fieldByInputName(name string) (FieldDescriptor, bool) {
 // type. Unknown and custom field types pass through unchanged so JSON unmarshalling into the
 // typed create input remains the final arbiter
 func (s *Schema) CoerceValue(name string, value any) (any, error) {
-	field, ok := s.fieldByInputName(name)
+	field, ok := s.FieldByName(name)
 	if !ok {
 		return nil, fmt.Errorf("%w: %s.%s", ErrFieldNotFound, s.Snake, name)
 	}
@@ -197,7 +474,8 @@ func (s *Schema) CoerceValue(name string, value any) (any, error) {
 		return coerceFloat(value)
 	case "[]string":
 		return coerceStringSlice(value), nil
-	case "time.Time":
+	case "time.Time", "models.DateTime":
+		// models.DateTime unmarshals the same RFC3339/date-only layouts coerceTime parses
 		return coerceTime(value)
 	default:
 		return value, nil
@@ -327,6 +605,28 @@ func matchKeyIn(field string, values []string) func(*sql.Selector) {
 	}
 }
 
+// DisplayField returns the schema's display-name field; generation enforces at most one
+func (s *Schema) DisplayField() (FieldDescriptor, bool) {
+	for _, f := range s.Fields {
+		if f.DisplayKey {
+			return f, true
+		}
+	}
+
+	return FieldDescriptor{}, false
+}
+
+// DisplayValue returns the display-name value from a loaded row, or empty when the schema
+// declares no display field or the row lacks a value
+func (s *Schema) DisplayValue(row json.RawMessage) string {
+	field, ok := s.DisplayField()
+	if !ok {
+		return ""
+	}
+
+	return lookupValue(row, field.Name)
+}
+
 // LookupField returns the schema's single ingest upsert lookup field. It returns false when the
 // schema declares no lookup key or more than one, since priority between multiple lookup keys is
 // schema-specific and stays with hand-written persistence
@@ -354,7 +654,7 @@ func (s *Schema) LookupField() (FieldDescriptor, bool) {
 // predicates are not a single org-scoped key column (integration-scoped lookups, multi-key
 // priority) keep hand-written persistence instead
 func (s *Schema) Upsert(ctx context.Context, client *generated.Client, ownerID string, payload json.RawMessage) (string, error) {
-	ref := SchemaRef{Schema: s.Snake, Operation: OpUpsert}
+	ref := SchemaRef{Schema: s.Snake, Operation: refOpUpsert}
 
 	field, ok := s.LookupField()
 	if !ok {
@@ -461,6 +761,10 @@ func entityID(row json.RawMessage) string {
 	return decoded.ID
 }
 
+{{- define "taskRuleLiteral" -}}
+{RuleID: {{ printf "%q" .RuleID }}{{ if .Expression }}, Expression: {{ printf "%q" .Expression }}{{ end }}{{ if .EachElement }}, EachElement: {{ printf "%q" .EachElement }}{{ end }}{{ if .Trigger }}, Trigger: {{ printf "%q" .Trigger }}{{ end }}}
+{{- end }}
+
 // --- Per-schema registrations ---
 
 var (
@@ -470,12 +774,19 @@ var (
 			Name:   "{{ .Name }}",
 			Snake:  "{{ .Snake }}",
 			Camel:  "{{ .Camel }}",
-			Lower:  "{{ .Lower }}",
+			Lower:  "{{ .Lower }}",{{ if .WorkflowEligible }}
+			WorkflowEligible: true,{{ end }}
 		},
 		ProjectionType: reflect.TypeFor[{{ .Name }}Projection](),
+{{- if .ConsoleRoute }}
+		ConsoleRoute: &ConsoleRoute{Base: "{{ .ConsoleRoute.Base }}"{{ if .ConsoleRoute.IDParam }}, IDParam: "{{ .ConsoleRoute.IDParam }}"{{ end }}{{ if .ConsoleRoute.Suffix }}, Suffix: "{{ .ConsoleRoute.Suffix }}"{{ end }}},
+{{- end }}
+{{- if .MentionSpec }}
+		MentionSpec: &MentionSpec{Schema: "{{ .Name }}", NameField: "{{ .MentionSpec.NameField }}", DetailsField: "{{ .MentionSpec.DetailsField }}", DetailsJSONField: "{{ .MentionSpec.DetailsJSONField }}", OwnerField: "{{ .MentionSpec.OwnerField }}"},
+{{- end }}
 {{- if .HasCreate }}
 		Create: func(ctx context.Context, client *generated.Client, input json.RawMessage) (string, error) {
-			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpCreate}
+			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: refOpCreate}
 
 			decoded, err := jsonx.Decode[generated.{{ .CreateInputType }}](input)
 			if err != nil {
@@ -492,7 +803,7 @@ var (
 {{- end }}
 {{- if .HasUpdate }}
 		Update: func(ctx context.Context, client *generated.Client, entityID string, input json.RawMessage) error {
-			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpUpdate, EntityID: entityID}
+			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: refOpUpdate, EntityID: entityID}
 
 			decoded, err := jsonx.Decode[generated.{{ .UpdateInputType }}](applyClears(input))
 			if err != nil {
@@ -508,7 +819,7 @@ var (
 {{- end }}
 {{- if .HasOwnerID }}
 		Query: func(ctx context.Context, client *generated.Client, orgID string) ([]json.RawMessage, error) {
-			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpQuery}
+			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: refOpQuery}
 
 			entities, err := client.{{ .Name }}.Query().
 				Where({{ .PredicatePackage }}.OwnerID(orgID)).
@@ -532,7 +843,7 @@ var (
 		},
 {{- end }}
 		Load: func(ctx context.Context, client *generated.Client, entityID string) (json.RawMessage, error) {
-			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: OpLoad, EntityID: entityID}
+			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: refOpLoad, EntityID: entityID}
 
 			entity, err := client.{{ .Name }}.Get(ctx, entityID)
 			if err != nil {
@@ -546,6 +857,73 @@ var (
 
 			return data, nil
 		},
+		LoadMany: func(ctx context.Context, client *generated.Client, entityIDs []string) (map[string]json.RawMessage, error) {
+			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: refOpLoad}
+			if len(entityIDs) == 0 {
+				return map[string]json.RawMessage{}, nil
+			}
+
+			entities, err := client.{{ .Name }}.Query().Where({{ .PredicatePackage }}.IDIn(entityIDs...)).All(ctx)
+			if err != nil {
+				return nil, logError(ctx, ref, ErrLoadFailed, err)
+			}
+
+			results := make(map[string]json.RawMessage, len(entities))
+			for _, entity := range entities {
+				data, err := json.Marshal(entity)
+				if err != nil {
+					return nil, logError(ctx, ref, ErrMarshalFailed, err)
+				}
+
+				results[entity.ID] = data
+			}
+
+			return results, nil
+		},
+		LoadObject: func(ctx context.Context, client *generated.Client, entityID string) (any, error) {
+			entity, err := client.{{ .Name }}.Get(ctx, entityID)
+			if err != nil {
+				return nil, logError(ctx, SchemaRef{Schema: "{{ .Snake }}", Operation: refOpLoad, EntityID: entityID}, ErrLoadFailed, err)
+			}
+
+			return entity, nil
+		},
+	{{- if and .IntegrationMapped .HasCreate }}
+		Ingest: &IngestCapability{
+			Topic: gala.NamespacedTopic[IngestRequest](IngestTopics, "{{ .Snake }}.ingest.requested"),
+			prepare: func(ctx context.Context, {{ if .RuntimeDefaults }}integration{{ else }}_{{ end }} *generated.Integration, payload json.RawMessage) (json.RawMessage, error) {
+				ref := SchemaRef{Schema: "{{ .Snake }}", Operation: refOpCreate}
+
+				input, err := jsonx.Decode[generated.{{ .CreateInputType }}](payload)
+				if err != nil {
+					return nil, logError(ctx, ref, ErrDecodeFailed, err)
+				}
+{{- if .RuntimeDefaults }}
+
+				if integration != nil {
+{{- range .RuntimeDefaults }}
+{{- if .Required }}
+					if input.{{ .GoField }} == "" {
+						input.{{ .GoField }} = integration.{{ .IntegrationField }}
+					}
+{{- else }}
+					if input.{{ .GoField }} == nil && integration.{{ .IntegrationField }} != "" {
+						input.{{ .GoField }} = &integration.{{ .IntegrationField }}
+					}
+{{- end }}
+{{- end }}
+				}
+{{- end }}
+
+				prepared, err := json.Marshal(input)
+				if err != nil {
+					return nil, logError(ctx, ref, ErrMarshalFailed, err)
+				}
+
+				return prepared, nil
+			},
+		},
+{{- end }}
 	}
 {{- end }}
 )
@@ -556,7 +934,7 @@ func init() {
 {{- if .ObjectFields }}
 	Schema{{ $schema.Name }}.Fields = []FieldDescriptor{
 {{- range .ObjectFields }}
-		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}"{{ end }}{{ if .LookupKey }}, LookupKey: true{{ end }}{{ if .TaskRules }}, TaskRules: []TaskRuleDescriptor{ {{ range .TaskRules }}{RuleID: {{ printf "%q" .RuleID }}{{ if .Expression }}, Expression: {{ printf "%q" .Expression }}{{ end }}{{ if .EachElement }}, EachElement: {{ printf "%q" .EachElement }}{{ end }}{{ if .Trigger }}, Trigger: {{ printf "%q" .Trigger }}{{ end }}}, {{ end }} }{{ end }}},
+		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}"{{ end }}{{ if .UpsertKey }}, UpsertKey: true{{ end }}{{ if .LookupKey }}, LookupKey: true{{ end }}{{ if .DisplayKey }}, DisplayKey: true{{ end }}{{ if .Clearable }}, Clearable: true{{ end }}{{ if .WebhookPayload }}, WebhookPayload: true{{ end }}{{ if .TaskRules }}, TaskRules: []TaskRuleDescriptor{ {{ range .TaskRules }}{{ template "taskRuleLiteral" . }}, {{ end }} }{{ end }}},
 {{- end }}
 	}
 {{- end }}
@@ -565,7 +943,7 @@ func init() {
 {{- if .TaskRules }}
 	Schema{{ $schema.Name }}.TaskRules = []TaskRuleDescriptor{
 {{- range .TaskRules }}
-		{RuleID: {{ printf "%q" .RuleID }}{{ if .Expression }}, Expression: {{ printf "%q" .Expression }}{{ end }}{{ if .EachElement }}, EachElement: {{ printf "%q" .EachElement }}{{ end }}{{ if .Trigger }}, Trigger: {{ printf "%q" .Trigger }}{{ end }}},
+		{{ template "taskRuleLiteral" . }},
 {{- end }}
 	}
 {{- end }}
@@ -577,17 +955,13 @@ func init() {
 		{
 			Name: "{{ .Name }}",
 			Label: "{{ .Name | pascal }}",
+{{- if .TargetInRegistry }}
 			Target: Schema{{ .TargetSchema }},
-			TargetType: "{{ .TargetSchema }}",
-{{- if .Immutable }}
-			Immutable: true,
 {{- end }}
+			TargetType: "{{ .TargetSchema }}",
 {{- if .Unique }}
 			Unique: true,
 			CreateField: "{{ .Name | snake }}_id",
-{{- if and .Optional (not .Immutable) }}
-			ClearField: "clear{{ .Name | pascal }}",
-{{- end }}
 {{- if .Field }}
 			Field: "{{ .Field }}",
 {{- end }}
@@ -595,7 +969,6 @@ func init() {
 			CreateField: "{{ .Name | pascal | singular | snake }}_ids",
 {{- if and (not .Immutable) (not .ThroughType) }}
 			AddField: "add_{{ .Name | pascal | singular | snake }}_ids",
-			RemoveField: "remove_{{ .Name | pascal | singular | snake }}_ids",
 {{- end }}
 {{- end }}
 {{- if .ThroughType }}
@@ -624,7 +997,7 @@ func init() {
 {{- range $schema.ObjectFields }}{{- if .MatchKey }}{{- $hasMatchKey = true }}{{- end }}{{- end }}
 {{- if and $schema.HasOwnerID $hasMatchKey }}
 	Schema{{ $schema.Name }}.QueryByKey = func(ctx context.Context, client *generated.Client, orgID string, field string, values []string) ([]json.RawMessage, error) {
-		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: OpQuery}
+		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpQuery}
 
 		if !Schema{{ $schema.Name }}.MatchKeyField(field) {
 			return nil, logError(ctx, ref, ErrInvalidKeyField, fmt.Errorf("%s is not a match-key field on %s", field, "{{ $schema.Snake }}"))
@@ -754,7 +1127,7 @@ func applyThroughEdgeIDs(ctx context.Context, client *generated.Client, s *Schem
 		}
 
 		if err := edge.LinkThrough(ctx, client, sourceID, targetIDs); err != nil {
-			return logError(ctx, SchemaRef{Schema: s.Snake, Operation: OpLink, EntityID: sourceID, Edge: name}, ErrLinkFailed, err)
+			return logError(ctx, SchemaRef{Schema: s.Snake, Operation: refOpLink, EntityID: sourceID, Edge: name}, ErrLinkFailed, err)
 		}
 	}
 
@@ -796,13 +1169,16 @@ func LookupSchema(name string) (*Schema, bool) {
 		return s, true
 	}
 
-	normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "", " ", "").Replace(name))
-
-	if s, ok := schemaLookupMap[normalized]; ok {
+	if s, ok := schemaLookupMap[normalizeSchemaKey(name)]; ok {
 		return s, true
 	}
 
 	return nil, false
+}
+
+// normalizeSchemaKey lowers a schema name and strips separators for fuzzy catalog lookup.
+func normalizeSchemaKey(name string) string {
+	return strings.ToLower(strings.NewReplacer("_", "", "-", "", " ", "").Replace(name))
 }
 
 // AllSchemas returns a copy of all registered schemas
@@ -820,7 +1196,7 @@ func AllSchemas() []*Schema {
 func SelectTargets(ctx context.Context, client *generated.Client, orgID string, selector TargetSelector) ([]EntityRef, error) {
 	schema, ok := LookupSchema(selector.Schema.Name)
 	if !ok {
-		return nil, logError(ctx, SchemaRef{Schema: selector.Schema.Snake, Operation: OpQuery}, ErrSchemaNotFound, fmt.Errorf("schema %s is not registered", selector.Schema.Name))
+		return nil, logError(ctx, SchemaRef{Schema: selector.Schema.Snake, Operation: refOpQuery}, ErrSchemaNotFound, fmt.Errorf("schema %s is not registered", selector.Schema.Name))
 	}
 
 	entities, err := selectCandidates(ctx, client, schema, orgID, selector)
@@ -848,7 +1224,7 @@ func SelectTargets(ctx context.Context, client *generated.Client, orgID string, 
 
 		eval, err = celx.NewNativeEntityEvaluator(envCfg, celx.FastEvalConfig(), schema.ProjectionType, sourceType)
 		if err != nil {
-			errorEvent(ctx, SchemaRef{Schema: schema.Snake, Operation: OpQuery}, err).Str(FieldExpression, selector.Expression).Msg(ErrEvaluatorBuildFailed.Error())
+			errorEvent(ctx, SchemaRef{Schema: schema.Snake, Operation: refOpQuery}, err).Str(FieldExpression, selector.Expression).Msg(ErrEvaluatorBuildFailed.Error())
 
 			return nil, fmt.Errorf("%w: %w", ErrEvaluatorBuildFailed, err)
 		}
@@ -861,7 +1237,7 @@ func SelectTargets(ctx context.Context, client *generated.Client, orgID string, 
 		excludeSet[id] = struct{}{}
 	}
 
-	ref := SchemaRef{Schema: schema.Snake, Operation: OpQuery}
+	ref := SchemaRef{Schema: schema.Snake, Operation: refOpQuery}
 	var results []EntityRef
 
 	for _, data := range entities {
@@ -891,7 +1267,7 @@ func SelectTargets(ctx context.Context, client *generated.Client, orgID string, 
 			}
 
 			if evalErr != nil {
-				errorEvent(ctx, SchemaRef{Schema: schema.Snake, Operation: OpQuery, EntityID: parsed.ID}, evalErr).Str(FieldExpression, selector.Expression).Msg(ErrEvaluationFailed.Error())
+				errorEvent(ctx, SchemaRef{Schema: schema.Snake, Operation: refOpQuery, EntityID: parsed.ID}, evalErr).Str(FieldExpression, selector.Expression).Msg(ErrEvaluationFailed.Error())
 				continue
 			}
 

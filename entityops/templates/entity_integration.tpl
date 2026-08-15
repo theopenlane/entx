@@ -2,10 +2,10 @@
 
 package {{ .PackageName }}
 
-import (
-	generated "{{ .EntPackage }}"
-	"{{ .GalaPackage }}"
-)
+import "{{ .GalaPackage }}"
+
+// IngestTopics is the namespace for every generated asynchronous schema-ingest topic.
+var IngestTopics = gala.NewTopicNamespace("entityops.", gala.JobKindIntegrationIngest)
 
 {{- range $schema := .Schemas }}
 {{- if $schema.IntegrationMapped }}
@@ -20,51 +20,3 @@ const (
 )
 {{- end }}
 {{- end }}
-
-{{- range $schema := .Schemas }}
-{{- if and $schema.IntegrationMapped $schema.HasCreate }}
-
-// {{ $schema.IngestRequestType }} is the typed ingest event payload for {{ $schema.Name }} records
-type {{ $schema.IngestRequestType }} struct {
-	// OperationContext carries the shared operation provenance for the ingest event
-	OperationContext gala.OperationContext `json:"operationContext"`
-	// Input is the ent create input for the record to persist
-	Input generated.{{ $schema.CreateInputType }} `json:"input"`
-	// ThroughEdgeIDs carries cross-object link target ids per through edge, which have no field
-	// on the create input and are applied as join entity rows after the record persists
-	ThroughEdgeIDs map[string][]string `json:"throughEdgeIds,omitempty"`
-}
-
-// {{ $schema.IngestTopicVar }} is the typed gala topic for {{ $schema.Name }} ingest requests
-var {{ $schema.IngestTopicVar }} = gala.Topic[{{ $schema.IngestRequestType }}]{
-	Name: {{ printf "%q" $schema.IngestTopic }},
-}
-{{- end }}
-{{- end }}
-
-{{- range $schema := .Schemas }}
-{{- if and $schema.IntegrationMapped $schema.HasCreate $schema.RuntimeDefaults }}
-
-// Prepare{{ $schema.Name }}Input stamps integration-scoped values onto a {{ $schema.CreateInputType }} before
-// persistence. Fields are only overwritten when the input value is already zero or nil
-func Prepare{{ $schema.Name }}Input(input generated.{{ $schema.CreateInputType }}, integration *generated.Integration) generated.{{ $schema.CreateInputType }} {
-	if integration == nil {
-		return input
-	}
-{{- range $schema.RuntimeDefaults }}
-{{- if .Required }}
-	if input.{{ .GoField }} == "" {
-		input.{{ .GoField }} = integration.{{ .IntegrationField }}
-	}
-{{- else }}
-	if input.{{ .GoField }} == nil && integration.{{ .IntegrationField }} != "" {
-		input.{{ .GoField }} = &integration.{{ .IntegrationField }}
-	}
-{{- end }}
-{{- end }}
-
-	return input
-}
-{{- end }}
-{{- end }}
-

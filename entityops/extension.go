@@ -22,10 +22,10 @@ type Config struct {
 	JsonxPackage string
 	// LogxPackage is the logx package import path
 	LogxPackage string
-	// ContextxPackage is the contextx package import path for typed context keys
-	ContextxPackage string
 	// CelxPackage is the celx package import path for typed entity expression evaluation
 	CelxPackage string
+	// MapxPackage is the mapx package import path for map clone/merge helpers
+	MapxPackage string
 	// EnumsOutputDir is the directory for the generated WorkflowObjectType enum; empty skips enum generation
 	EnumsOutputDir string
 	// EnumsPackageName is the Go package name for the generated enum file
@@ -95,17 +95,17 @@ func WithLogxPackage(path string) ExtensionOption {
 	}
 }
 
-// WithContextxPackage sets the contextx package import path
-func WithContextxPackage(path string) ExtensionOption {
-	return func(c *Config) {
-		c.ContextxPackage = path
-	}
-}
-
 // WithCelxPackage sets the celx package import path
 func WithCelxPackage(path string) ExtensionOption {
 	return func(c *Config) {
 		c.CelxPackage = path
+	}
+}
+
+// WithMapxPackage sets the mapx package import path
+func WithMapxPackage(path string) ExtensionOption {
+	return func(c *Config) {
+		c.MapxPackage = path
 	}
 }
 
