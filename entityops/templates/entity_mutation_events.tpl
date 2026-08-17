@@ -128,6 +128,18 @@ func (payload MutationPayload) identity() mutationIdentity {
 	}
 }
 
+// PayloadOperation returns the mutation operation for gala listener routing
+func (payload MutationPayload) PayloadOperation() string {
+	return payload.Operation
+}
+
+// WithPayloadOperation returns a copy of the payload with its operation replaced
+func (payload MutationPayload) WithPayloadOperation(operation string) any {
+	payload.Operation = operation
+
+	return payload
+}
+
 // MutationTopic returns the typed mutation topic for a concern + schema type pair
 func MutationTopic(concern MutationConcern, schemaType string) gala.Topic[MutationPayload] {
 	return gala.NamespacedTopic[MutationPayload](concernNamespace(concern), strings.TrimSpace(schemaType))
