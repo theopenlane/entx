@@ -18,8 +18,6 @@ type SchemaDescriptor struct {
 	Name string `json:"-"`
 	// Snake is the snake_case form
 	Snake string `json:"-"`
-	// Camel is the camelCase form
-	Camel string `json:"-"`
 	// Lower is the lowercase no-separator form used for fuzzy lookup
 	Lower string `json:"-"`
 	// WorkflowEligible reports whether this schema participates in workflow operations
@@ -79,8 +77,6 @@ type FieldDescriptor struct {
 	MatchKey bool `json:"matchKey,omitempty"`
 	// InputKey is the integration mapping create-input key (lowerCamel); empty for non-mapped fields
 	InputKey string `json:"inputKey,omitempty"`
-	// UpsertKey reports whether the field belongs to the schema's logical ingest identity
-	UpsertKey bool `json:"upsertKey,omitempty"`
 	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
 	LookupKey bool `json:"lookupKey,omitempty"`
 	// DisplayKey reports whether the field is the schema's display-name source
@@ -159,7 +155,7 @@ type KeyMatch struct {
 type TargetSelector struct {
 	// Schema is the target entity schema
 	Schema SchemaDescriptor `json:"schema"`
-	// SourceSchema is the schema of the source entity in SourceContext; when set, SelectTargets binds
+	// SourceSchema is the schema of the source entity in SourceContext; when set, selectTargets binds
 	// "source" as that schema's native projection type so source-aware expressions resolve typed fields
 	SourceSchema SchemaDescriptor `json:"source_schema,omitempty"`
 	// KeyMatch, when set, resolves candidates with an indexed key query before any Expression filtering
@@ -173,7 +169,7 @@ type TargetSelector struct {
 }
 
 // LinkSpec describes one edge-linking operation: the named edge to link over and a target selector
-// resolving which entities to link. Resolved through SelectTargets and applied by InjectCreateLinks,
+// resolving which entities to link. Resolved through selectTargets and applied by InjectCreateLinks,
 // which sets the edge in the create mutation itself; shared by the integration ingest engine and the
 // workflow CREATE_OBJECT action so both set edges identically at create time
 type LinkSpec struct {

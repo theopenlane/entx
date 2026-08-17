@@ -120,14 +120,9 @@ func (s *Schema) WorkflowOwnerID(ctx context.Context, client *generated.Client, 
 		return "", err
 	}
 
-	row := map[string]json.RawMessage{}
-	if err := json.Unmarshal(raw, &row); err != nil {
-		return "", logError(ctx, SchemaRef{Schema: s.Snake, Operation: refOpLoad, EntityID: objectID}, ErrDecodeFailed, err)
-	}
-
-	ownerID, err := jsonx.Decode[string](row["owner_id"])
-	if err != nil || ownerID == "" {
-		return "", logError(ctx, SchemaRef{Schema: s.Snake, Operation: refOpLoad, EntityID: objectID}, ErrDecodeFailed, err)
+	ownerID, ok := jsonx.DecodeObjectKey[string](raw, "owner_id")
+	if !ok || ownerID == "" {
+		return "", logError(ctx, SchemaRef{Schema: s.Snake, Operation: refOpLoad, EntityID: objectID}, ErrDecodeFailed, fmt.Errorf("owner_id missing from %s row", s.Snake))
 	}
 
 	return ownerID, nil
@@ -177,8 +172,8 @@ func (s *Schema) EnrichWorkflowPayload(ctx context.Context, client *generated.Cl
 		return err
 	}
 
-	row := map[string]json.RawMessage{}
-	if err := json.Unmarshal(raw, &row); err != nil {
+	row, err := jsonx.Decode[map[string]json.RawMessage](raw)
+	if err != nil {
 		return logError(ctx, SchemaRef{Schema: s.Snake, Operation: refOpLoad, EntityID: objectID}, ErrDecodeFailed, err)
 	}
 

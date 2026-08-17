@@ -5,7 +5,7 @@ package {{ .PackageName }}
 import "{{ .GalaPackage }}"
 
 // IngestTopics is the namespace for every generated asynchronous schema-ingest topic.
-var IngestTopics = gala.NewTopicNamespace("entityops.", gala.JobKindIntegrationIngest)
+var IngestTopics = gala.IntegrationIngest.At("entityops")
 
 {{- range $schema := .Schemas }}
 {{- if $schema.IntegrationMapped }}

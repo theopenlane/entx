@@ -3,6 +3,7 @@
 package {{ .PackageName }}
 
 {{ range $schema := .Schemas }}
+{{- if or $schema.IntegrationMapped $schema.WorkflowEligible $schema.LinkTarget }}
 // {{ $schema.Name }}Projection is the flat, CEL- and jsonschema-facing view of a {{ $schema.Name }}: its
 // readable scalar fields (id, columns, foreign-key ids) with snake_case json tags matching the field
 // names used in expressions. It deliberately omits edges so it registers as a CEL native type, unlike
@@ -17,3 +18,4 @@ type {{ $schema.Name }}Projection struct {
 {{- end }}
 }
 {{ end }}
+{{- end }}

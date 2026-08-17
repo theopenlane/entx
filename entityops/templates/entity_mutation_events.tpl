@@ -40,13 +40,6 @@ var RegularMutationOps = []string{OpCreate, OpUpdate, OpUpdateOne, OpDelete, OpD
 // AllMutationOps is every operation including soft deletes
 var AllMutationOps = []string{OpCreate, OpUpdate, OpUpdateOne, OpDelete, OpDeleteOne, OpSoftDelete}
 
-// concern topic namespaces; all mutation concerns dispatch under the mutation job kind
-var (
-	directMutationTopics       = gala.NewTopicNamespace(gala.TopicPrefixMutation, gala.JobKindMutation)
-	workflowMutationTopics     = gala.NewTopicNamespace(gala.TopicPrefixWorkflowMutation, gala.JobKindMutation)
-	notificationMutationTopics = gala.NewTopicNamespace(gala.TopicPrefixNotificationMutation, gala.JobKindMutation)
-)
-
 // MutationConcern identifies the eventing concern namespace for mutation topics
 type MutationConcern string
 
@@ -68,15 +61,16 @@ const (
 	MutationPropertyMutationType = "mutation_type"
 )
 
-// concernNamespace returns the topic namespace for a mutation concern
-func concernNamespace(concern MutationConcern) gala.TopicNamespace {
+// concernNamespace returns the topic namespace for a mutation concern; all concerns
+// dispatch under the mutation job kind
+func concernNamespace(concern MutationConcern) gala.Namespace {
 	switch concern {
 	case MutationConcernWorkflow:
-		return workflowMutationTopics
+		return gala.Mutation.Prefixed("workflow")
 	case MutationConcernNotification:
-		return notificationMutationTopics
+		return gala.Mutation.Prefixed("notification")
 	default:
-		return directMutationTopics
+		return gala.Mutation
 	}
 }
 
@@ -116,17 +110,17 @@ type MutationPayload struct {
 	ChangeSet
 }
 
-// MutationIdentity is the compact mutation identity embedded on listener log contexts
-type MutationIdentity struct {
+// mutationIdentity is the compact mutation identity embedded on listener log contexts
+type mutationIdentity struct {
 	EntityID      string   `json:"entity_id"`
 	MutationType  string   `json:"mutation_type"`
 	Operation     string   `json:"operation"`
 	ChangedFields []string `json:"changed_fields,omitempty"`
 }
 
-// Identity derives the loggable identity for the mutation
-func (payload MutationPayload) Identity() MutationIdentity {
-	return MutationIdentity{
+// identity derives the loggable identity for the mutation
+func (payload MutationPayload) identity() mutationIdentity {
+	return mutationIdentity{
 		EntityID:      payload.EntityID,
 		MutationType:  payload.MutationType,
 		Operation:     payload.Operation,
@@ -161,10 +155,10 @@ func InterestedInMutation(runtimes []*gala.Gala, schemaType, operation string) b
 	return false
 }
 
-// MutationHeaders builds gala headers for a mutation event: entity identity and stringified
+// mutationHeaders builds gala headers for a mutation event: entity identity and stringified
 // proposed values as properties for queue visibility, schema type and operation as tags
-func MutationHeaders(payload MutationPayload) gala.Headers {
-	properties := lo.PickBy(lo.MapEntries(payload.ProposedMap(), func(key string, value any) (string, string) {
+func mutationHeaders(payload MutationPayload) gala.Headers {
+	properties := lo.PickBy(lo.MapEntries(payload.ProposedChanges, func(key string, value any) (string, string) {
 		stringValue, ok := ValueAsString(value)
 		if !ok {
 			return "", ""
@@ -204,7 +198,7 @@ func MutationHeaders(payload MutationPayload) gala.Headers {
 // detaching cancellation for best-effort dispatch; per-topic failures are logged and do not
 // abort the fan-out
 func EmitMutation(ctx context.Context, runtimes []*gala.Gala, payload MutationPayload) {
-	headers := MutationHeaders(payload)
+	headers := mutationHeaders(payload)
 
 	dispatchCtx := context.WithoutCancel(ctx)
 

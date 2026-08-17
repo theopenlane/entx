@@ -71,14 +71,9 @@ var (
 	ErrEvaluatorBuildFailed = errors.New("entityops: evaluator build failed")
 	// ErrIngestUnsupported indicates the schema has no generated ingest capability
 	ErrIngestUnsupported = errors.New("entityops: ingest unsupported")
-	// ErrIngestPersistRequired indicates a nil persistence operation was supplied
-	ErrIngestPersistRequired = errors.New("entityops: ingest persistence required")
-	// ErrIngestResolverRequired indicates the integration resolver was not supplied
-	ErrIngestResolverRequired = errors.New("entityops: ingest integration resolver required")
-	// ErrIngestAlreadyBound indicates a schema ingest capability was bound more than once
-	ErrIngestAlreadyBound = errors.New("entityops: ingest already bound")
-	// ErrIngestNotBound indicates a schema ingest capability has no persistence operation
-	ErrIngestNotBound = errors.New("entityops: ingest not bound")
+	// ErrIngestMisconfigured indicates a schema ingest capability was wired incorrectly at startup:
+	// bound without persistence, bound twice, or registered without its resolver or binding
+	ErrIngestMisconfigured = errors.New("entityops: ingest misconfigured")
 	// ErrIngestIntegrationResolveFailed indicates the durable command's integration could not be resolved
 	ErrIngestIntegrationResolveFailed = errors.New("entityops: ingest integration resolve failed")
 )
@@ -107,25 +102,25 @@ const (
 const (
 	// FieldSchema is the log field key for the schema name
 	FieldSchema = "schema"
-	// FieldOperation is the log field key for the operation being performed
-	FieldOperation = "operation"
-	// FieldEntityID is the log field key for the entity identifier
-	FieldEntityID = "entity_id"
-	// FieldEdge is the log field key for the edge name
-	FieldEdge = "edge"
-	// FieldOrgID is the log field key for the organization identifier
-	FieldOrgID = "org_id"
-	// FieldSourceOperation is the log field key for the originating mutation carried by the durable
+	// fieldOperation is the log field key for the operation being performed
+	fieldOperation = "operation"
+	// fieldEntityID is the log field key for the entity identifier
+	fieldEntityID = "entity_id"
+	// fieldEdge is the log field key for the edge name
+	fieldEdge = "edge"
+	// fieldOrgID is the log field key for the organization identifier
+	fieldOrgID = "org_id"
+	// fieldSourceOperation is the log field key for the originating mutation carried by the durable
 	// operation context (CREATE, UPDATE, DELETE)
-	FieldSourceOperation = "source_operation"
-	// FieldSourceEntityID is the log field key for the originating entity carried by the durable
+	fieldSourceOperation = "source_operation"
+	// fieldSourceEntityID is the log field key for the originating entity carried by the durable
 	// operation context
-	FieldSourceEntityID = "source_entity_id"
-	// FieldSourceEntityType is the log field key for the originating entity type carried by the
+	fieldSourceEntityID = "source_entity_id"
+	// fieldSourceEntityType is the log field key for the originating entity type carried by the
 	// durable operation context
-	FieldSourceEntityType = "source_entity_type"
-	// FieldExpression is the log field key for a CEL filter expression applied to target selection
-	FieldExpression = "expression"
+	fieldSourceEntityType = "source_entity_type"
+	// fieldExpression is the log field key for a CEL filter expression applied to target selection
+	fieldExpression = "expression"
 )
 
 // --- Schema log enrichment ---
@@ -147,15 +142,15 @@ func (r SchemaRef) MarshalZerologObject(e *zerolog.Event) {
 	e.Str(FieldSchema, r.Schema)
 
 	if r.Operation != "" {
-		e.Str(FieldOperation, r.Operation)
+		e.Str(fieldOperation, r.Operation)
 	}
 
 	if r.EntityID != "" {
-		e.Str(FieldEntityID, r.EntityID)
+		e.Str(fieldEntityID, r.EntityID)
 	}
 
 	if r.Edge != "" {
-		e.Str(FieldEdge, r.Edge)
+		e.Str(fieldEdge, r.Edge)
 	}
 }
 
@@ -206,19 +201,19 @@ func errorEvent(ctx context.Context, ref SchemaRef, err error) *zerolog.Event {
 	}
 
 	if oc.OwnerID != "" {
-		event = event.Str(FieldOrgID, oc.OwnerID)
+		event = event.Str(fieldOrgID, oc.OwnerID)
 	}
 
 	if oc.Operation != "" {
-		event = event.Str(FieldSourceOperation, oc.Operation)
+		event = event.Str(fieldSourceOperation, oc.Operation)
 	}
 
 	if oc.EntityID != "" {
-		event = event.Str(FieldSourceEntityID, oc.EntityID)
+		event = event.Str(fieldSourceEntityID, oc.EntityID)
 	}
 
 	if oc.EntityType != "" {
-		event = event.Str(FieldSourceEntityType, oc.EntityType)
+		event = event.Str(fieldSourceEntityType, oc.EntityType)
 	}
 
 	return event

@@ -13,7 +13,7 @@ import (
 	"{{ .JsonxPackage }}"
 )
 
-// InjectCreateLinks resolves each link's target entities via SelectTargets and writes the matched
+// InjectCreateLinks resolves each link's target entities via selectTargets and writes the matched
 // ids into the create-input payload under the edge's create-input key, so the source object is
 // created with its edges already set in the same mutation rather than linked in a post-create step.
 // A unique edge sets the scalar <edge>ID create field; a to-many edge sets the <edge>IDs list. Links
@@ -38,7 +38,7 @@ func InjectCreateLinks(ctx context.Context, client *generated.Client, ownerID st
 		selector.SourceSchema = schema.SchemaDescriptor
 		selector.SourceContext = payload
 
-		refs, err := SelectTargets(ctx, client, ownerID, selector)
+		refs, err := selectTargets(ctx, client, ownerID, selector)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrLinkFailed, err)
 		}
@@ -48,7 +48,7 @@ func InjectCreateLinks(ctx context.Context, client *generated.Client, ownerID st
 		}
 
 		edges[edge.Name] = edge
-		edgeIDs[edge.Name] = append(edgeIDs[edge.Name], lo.Map(refs, func(ref EntityRef, _ int) string {
+		edgeIDs[edge.Name] = append(edgeIDs[edge.Name], lo.Map(refs, func(ref entityRef, _ int) string {
 			return ref.ID
 		})...)
 	}

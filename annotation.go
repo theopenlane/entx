@@ -181,8 +181,6 @@ type CSVReferenceAnnotation struct {
 type IntegrationMappingFieldAnnotation struct {
 	// Key is the mapping output key (GraphQL input field name).
 	Key string
-	// UpsertKey indicates the field participates in the schema's logical ingest identity.
-	UpsertKey bool
 	// LookupKey indicates the field participates in stock ingest lookup matching
 	LookupKey bool
 	// FromIntegration indicates the field value is injected from the integration record at ingest time
@@ -491,13 +489,6 @@ func (b *IntegrationMappingSchemaBuilder) StockPersist() *IntegrationMappingSche
 // Key overrides the mapping output key (GraphQL input field name)
 func (b *IntegrationMappingFieldBuilder) Key(key string) *IntegrationMappingFieldBuilder {
 	b.annotation.Key = key
-
-	return b
-}
-
-// UpsertKey marks the field as part of the schema's logical ingest identity.
-func (b *IntegrationMappingFieldBuilder) UpsertKey() *IntegrationMappingFieldBuilder {
-	b.annotation.UpsertKey = true
 
 	return b
 }

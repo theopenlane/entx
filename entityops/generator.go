@@ -77,8 +77,6 @@ type EntitySchema struct {
 	Name string
 	// Snake is the snake_case form (e.g., "action_plan")
 	Snake string
-	// Camel is the camelCase form (e.g., "actionPlan")
-	Camel string
 	// Lower is the lowercase no-separator form (e.g., "actionplan")
 	Lower string
 	// HasCreate indicates a CreateInput type is generated
@@ -107,6 +105,10 @@ type EntitySchema struct {
 	WorkflowEligible bool
 	// IntegrationMapped indicates the schema participates in integration ingest mapping
 	IntegrationMapped bool
+	// LinkTarget indicates the schema is an edge target of an integration-mapped schema, making it
+	// reachable by ingest link-rule target selection; with IntegrationMapped and WorkflowEligible it
+	// gates emission of the runtime closures and projections only reachable through those capabilities
+	LinkTarget bool
 	// RuntimeDefaults are integration-injected field defaults applied by the schema ingest capability
 	RuntimeDefaults []EntityRuntimeDefault
 	// ConsoleRoute is present only when the schema explicitly declares a console route
@@ -135,8 +137,6 @@ type EntityField struct {
 	InputKey string
 	// InputGoField is the exported Go struct field name for the input key on ent create inputs
 	InputGoField string
-	// UpsertKey reports whether the field belongs to the schema's logical ingest identity
-	UpsertKey bool
 	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
 	LookupKey bool
 	// DisplayKey reports whether the field is the schema's display-name source
@@ -283,23 +283,6 @@ func schemaTaskRules(schema *load.Schema) ([]entx.TaskRuleSpec, error) {
 	return ann.Rules, nil
 }
 
-// hasTaskRuleAnnotation reports whether a schema carries a task rule via a field or the schema itself
-func hasTaskRuleAnnotation(node *gen.Type, schema *load.Schema) bool {
-	for _, field := range node.Fields {
-		if _, ok := field.Annotations[entx.TaskRuleAnnotationName]; ok {
-			return true
-		}
-	}
-
-	if schema == nil {
-		return false
-	}
-
-	_, ok := schema.Annotations[entx.TaskRuleAnnotationName]
-
-	return ok
-}
-
 // buildEntityField constructs one field's catalog entry: capability flags decoded from its
 // workflow/task-rule annotations, folded with its integration mapping metadata if any. marker
 // reports whether this is the WorkflowApprovalMixin carrier field (see fieldWorkflowEligible)
@@ -337,7 +320,6 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 		entityField.IntegrationMapped = true
 		entityField.InputKey = im.InputKey
 		entityField.InputGoField = im.InputGoField
-		entityField.UpsertKey = im.UpsertKey
 		entityField.LookupKey = im.LookupKey
 	}
 
@@ -390,7 +372,6 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		entitySchema := EntitySchema{
 			Name:             node.Name,
 			Snake:            strcase.SnakeCase(node.Name),
-			Camel:            lowerFirst(node.Name),
 			Lower:            strings.ToLower(strings.ReplaceAll(strcase.SnakeCase(node.Name), "_", "")),
 			HasCreate:        hasCreate,
 			HasUpdate:        hasUpdate,
@@ -519,11 +500,35 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		return cmp.Compare(a.Name, b.Name)
 	})
 
+	markLinkTargets(&data)
+
 	if err := collectSchemaMetadata(g, &data); err != nil {
 		return EntityData{}, err
 	}
 
 	return data, nil
+}
+
+// markLinkTargets flags every schema reachable as an edge target of an integration-mapped schema,
+// since ingest link rules may select targets over any edge of a mapped source schema
+func markLinkTargets(data *EntityData) {
+	targets := map[string]struct{}{}
+
+	for _, schema := range data.Schemas {
+		if !schema.IntegrationMapped {
+			continue
+		}
+
+		for _, edge := range schema.Edges {
+			if edge.TargetInRegistry {
+				targets[edge.TargetSchema] = struct{}{}
+			}
+		}
+	}
+
+	for i := range data.Schemas {
+		_, data.Schemas[i].LinkTarget = targets[data.Schemas[i].Name]
+	}
 }
 
 // displayFieldConvention is the ordered field-name chain used to resolve a schema's
@@ -615,72 +620,6 @@ func collectSchemaMetadata(g *gen.Graph, data *EntityData) error {
 func nodeHasField(node *gen.Type, name string) bool {
 	for _, f := range node.Fields {
 		if f.Name == name || f.StorageKey() == name {
-			return true
-		}
-	}
-
-	return false
-}
-
-// schemaSource tracks which annotation(s) caused a schema to be included
-type schemaSource struct {
-	Workflow    bool
-	Integration bool
-	TaskRules   bool
-}
-
-// classifySource determines why a schema should be included
-func classifySource(node *gen.Type, schema *load.Schema) schemaSource {
-	var source schemaSource
-
-	for _, field := range node.Fields {
-		if _, ok := field.Annotations[entx.WorkflowEligibleAnnotationName]; ok {
-			source.Workflow = true
-			break
-		}
-	}
-
-	for _, edge := range node.Edges {
-		if _, ok := edge.Annotations[entx.WorkflowEligibleAnnotationName]; ok {
-			source.Workflow = true
-			break
-		}
-	}
-
-	if hasIntegrationMappingAnnotation(schema) {
-		source.Integration = true
-	}
-
-	if hasTaskRuleAnnotation(node, schema) {
-		source.TaskRules = true
-	}
-
-	return source
-}
-
-// hasIntegrationMappingAnnotation checks if the schema has an OPENLANE_INTEGRATION_MAPPING_SCHEMA annotation
-func hasIntegrationMappingAnnotation(schema *load.Schema) bool {
-	if schema == nil {
-		return false
-	}
-
-	for _, ant := range schema.Annotations {
-		raw, ok := ant.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		if _, found := raw[entx.IntegrationMappingSchemaAnnotationName]; found {
-			return true
-		}
-	}
-
-	for _, field := range schema.Fields {
-		if field.Annotations == nil {
-			continue
-		}
-
-		if _, ok := field.Annotations[entx.IntegrationMappingFieldAnnotationName]; ok {
 			return true
 		}
 	}
@@ -861,13 +800,4 @@ func hasField(schema *load.Schema, name string) bool {
 	}
 
 	return false
-}
-
-// lowerFirst returns the string with its first character lowered
-func lowerFirst(s string) string {
-	if s == "" {
-		return s
-	}
-
-	return strings.ToLower(s[:1]) + s[1:]
 }

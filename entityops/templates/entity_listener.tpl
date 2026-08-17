@@ -38,9 +38,6 @@ type MutationListener struct {
 	Concern MutationConcern
 	// Schema is the canonical entityops schema whose mutations the listener observes
 	Schema *Schema
-	// Label optionally disambiguates multiple listeners on one topic; it suffixes the
-	// composed listener name
-	Label string
 	// Operations optionally scopes listener interest to specific mutation operations;
 	// empty expands to RegularMutationOps, so OpSoftDelete is explicit opt-in
 	Operations []string
@@ -85,12 +82,7 @@ func (listener MutationListener) Name() string {
 		schemaName = listener.Schema.Name
 	}
 
-	name := string(MutationTopicName(listener.concern(), schemaName))
-	if listener.Label != "" {
-		name += "." + listener.Label
-	}
-
-	return name
+	return string(MutationTopicName(listener.concern(), schemaName))
 }
 
 // Attach compiles the listener to its definition and registers it on the runtime
@@ -195,6 +187,28 @@ func LoadEntity[T any](ctx context.Context, entityID string, load func(context.C
 	return entity, true, nil
 }
 
+// RequireDep resolves one listener dependency before invoking handle, gating the event
+// when the dependency is not wired
+func RequireDep[D any](handle func(Invocation, MutationPayload, D) error) func(Invocation, MutationPayload) error {
+	return func(inv Invocation, payload MutationPayload) error {
+		dep, ok := gala.Resolve[D](inv.Context, inv.Injector, string(inv.Envelope.Topic))
+		if !ok {
+			return gala.ErrListenerGated
+		}
+
+		return handle(inv, payload, dep)
+	}
+}
+
+// ForSchemas stamps one listener declaration across schemas
+func ForSchemas(schemas []*Schema, base MutationListener) []gala.Registration {
+	return lo.Map(schemas, func(schema *Schema, _ int) gala.Registration {
+		base.Schema = schema
+
+		return base
+	})
+}
+
 // mutationHandler wraps a mutation listener handler with the standard preamble
 func mutationHandler(listener MutationListener) gala.Handler[MutationPayload] {
 	return func(ctx gala.HandlerContext, payload MutationPayload) error {
@@ -216,7 +230,7 @@ func mutationHandler(listener MutationListener) gala.Handler[MutationPayload] {
 			return nil
 		}
 
-		fields := map[string]any{"mutation": payload.Identity()}
+		fields := map[string]any{"mutation": payload.identity()}
 		// the schema-specific id key keeps log output queryable by domain name
 		fields[listener.Schema.Snake+"_id"] = entityID
 

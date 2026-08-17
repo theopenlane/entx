@@ -43,8 +43,6 @@ type integrationFieldMeta struct {
 	InputKey string
 	// InputGoField is the exported Go struct field name for the input key on ent create inputs
 	InputGoField string
-	// UpsertKey reports whether the field belongs to the schema's logical ingest identity
-	UpsertKey bool
 	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
 	LookupKey bool
 }
@@ -122,7 +120,6 @@ func collectIntegrationMapping(schema *load.Schema) (map[string]integrationField
 		meta[field.Name] = integrationFieldMeta{
 			InputKey:     key,
 			InputGoField: goField,
-			UpsertKey:    ant != nil && ant.UpsertKey,
 			LookupKey:    ant != nil && ant.LookupKey,
 		}
 

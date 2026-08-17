@@ -59,8 +59,8 @@ func (set ChangeSet) Clone() ChangeSet {
 		ChangedFields:   append([]string(nil), set.ChangedFields...),
 		ClearedFields:   append([]string(nil), set.ClearedFields...),
 		ChangedEdges:    append([]string(nil), set.ChangedEdges...),
-		AddedIDs:        cloneStringSliceMap(set.AddedIDs),
-		RemovedIDs:      cloneStringSliceMap(set.RemovedIDs),
+		AddedIDs:        mapx.CloneMapStringSlice(set.AddedIDs),
+		RemovedIDs:      mapx.CloneMapStringSlice(set.RemovedIDs),
 		ProposedChanges: mapx.DeepCloneMapAny(set.ProposedChanges),
 		OldValues:       mapx.DeepCloneMapAny(set.OldValues),
 	}
@@ -69,19 +69,19 @@ func (set ChangeSet) Clone() ChangeSet {
 // Filter returns a capability-specific view without changing the durable ChangeSet shape.
 func (set ChangeSet) Filter(keepField, keepEdge func(string) bool) ChangeSet {
 	selected := ChangeSet{
-		ChangedFields: lo.Filter(normalizeStrings(set.ChangedFields), func(name string, _ int) bool {
+		ChangedFields: lo.Filter(NormalizeStrings(set.ChangedFields), func(name string, _ int) bool {
 			return keepField != nil && keepField(name)
 		}),
-		ClearedFields: lo.Filter(normalizeStrings(set.ClearedFields), func(name string, _ int) bool {
+		ClearedFields: lo.Filter(NormalizeStrings(set.ClearedFields), func(name string, _ int) bool {
 			return keepField != nil && keepField(name)
 		}),
-		ChangedEdges: lo.Filter(normalizeStrings(set.ChangedEdges), func(name string, _ int) bool {
+		ChangedEdges: lo.Filter(NormalizeStrings(set.ChangedEdges), func(name string, _ int) bool {
 			return keepEdge != nil && keepEdge(name)
 		}),
 	}
 
-	selected.AddedIDs = filterMap(cloneStringSliceMap(set.AddedIDs), keepEdge)
-	selected.RemovedIDs = filterMap(cloneStringSliceMap(set.RemovedIDs), keepEdge)
+	selected.AddedIDs = filterMap(mapx.CloneMapStringSlice(set.AddedIDs), keepEdge)
+	selected.RemovedIDs = filterMap(mapx.CloneMapStringSlice(set.RemovedIDs), keepEdge)
 	selected.OldValues = filterMap(mapx.DeepCloneMapAny(set.OldValues), keepField)
 	selected.ProposedChanges = filterMap(mapx.DeepCloneMapAny(set.ProposedChanges), keepField)
 
@@ -95,7 +95,7 @@ func (set ChangeSet) FieldChanged(field string) bool {
 		return false
 	}
 
-	if _, ok := set.ProposedMap()[field]; ok {
+	if _, ok := set.ProposedChanges[field]; ok {
 		return true
 	}
 
@@ -111,7 +111,7 @@ func (set ChangeSet) Value(field string) (any, bool) {
 		return nil, false
 	}
 
-	value, ok := set.ProposedMap()[field]
+	value, ok := set.ProposedChanges[field]
 
 	return value, ok
 }
@@ -135,9 +135,9 @@ func (set ChangeSet) StringSliceValue(field string) []string {
 
 	switch values := raw.(type) {
 	case []string:
-		return normalizeStrings(values)
+		return NormalizeStrings(values)
 	case []any:
-		return normalizeStrings(lo.FilterMap(values, func(value any, _ int) (string, bool) {
+		return NormalizeStrings(lo.FilterMap(values, func(value any, _ int) (string, bool) {
 			return ValueAsString(value)
 		}))
 	default:
@@ -146,7 +146,7 @@ func (set ChangeSet) StringSliceValue(field string) []string {
 			return nil
 		}
 
-		return normalizeStrings([]string{value})
+		return NormalizeStrings([]string{value})
 	}
 }
 
@@ -245,15 +245,10 @@ func nonEmptyString(raw any) (string, bool) {
 	return value, true
 }
 
-// ProposedMap returns the already-decoded proposed changes.
-func (set ChangeSet) ProposedMap() map[string]any {
-	return set.ProposedChanges
-}
-
 // changedAndClearedFields returns normalized changed and cleared field lists from a mutation
 func changedAndClearedFields(mutation ent.Mutation) (changed []string, cleared []string) {
-	cleared = normalizeStrings(mutation.ClearedFields())
-	changed = normalizeStrings(append(append([]string(nil), mutation.Fields()...), cleared...))
+	cleared = NormalizeStrings(mutation.ClearedFields())
+	changed = NormalizeStrings(append(append([]string(nil), mutation.Fields()...), cleared...))
 
 	return changed, cleared
 }
@@ -264,7 +259,7 @@ func buildProposedChanges(mutation ent.Mutation, changedFields []string) map[str
 		return nil
 	}
 
-	clearedSet := mapx.MapSetFromSlice(normalizeStrings(mutation.ClearedFields()))
+	clearedSet := mapx.MapSetFromSlice(NormalizeStrings(mutation.ClearedFields()))
 
 	proposed := make(map[string]any, len(changedFields))
 	for _, field := range changedFields {
@@ -292,7 +287,7 @@ func buildProposedChanges(mutation ent.Mutation, changedFields []string) map[str
 
 // appendMutationEdges captures every changed edge present in the canonical schema catalog.
 func appendMutationEdges(set *ChangeSet, schema *Schema, mutation ent.Mutation) {
-	changed := mapx.MapSetFromSlice(normalizeStrings(append(append(
+	changed := mapx.MapSetFromSlice(NormalizeStrings(append(append(
 		append([]string(nil), mutation.AddedEdges()...),
 		mutation.RemovedEdges()...),
 		mutation.ClearedEdges()...)))
@@ -328,7 +323,7 @@ func appendMutationEdges(set *ChangeSet, schema *Schema, mutation ent.Mutation) 
 }
 
 func stringIDs(values []ent.Value) []string {
-	return normalizeStrings(lo.FilterMap(values, func(value ent.Value, _ int) (string, bool) {
+	return NormalizeStrings(lo.FilterMap(values, func(value ent.Value, _ int) (string, bool) {
 		id, ok := value.(string)
 
 		return id, ok
@@ -340,13 +335,7 @@ func filterMap[V any](values map[string]V, keep func(string) bool) map[string]V 
 		return nil
 	}
 
-	filtered := make(map[string]V, len(values))
-	for key, value := range values {
-		if keep(key) {
-			filtered[key] = value
-		}
-	}
-
+	filtered := lo.PickBy(values, func(key string, _ V) bool { return keep(key) })
 	if len(filtered) == 0 {
 		return nil
 	}
@@ -354,27 +343,8 @@ func filterMap[V any](values map[string]V, keep func(string) bool) map[string]V 
 	return filtered
 }
 
-// cloneStringSliceMap preserves the distinction between an absent edge delta and an explicit clear.
-func cloneStringSliceMap(values map[string][]string) map[string][]string {
-	if values == nil {
-		return nil
-	}
-
-	cloned := make(map[string][]string, len(values))
-	for key, value := range values {
-		if value == nil {
-			cloned[key] = nil
-			continue
-		}
-
-		cloned[key] = append([]string{}, value...)
-	}
-
-	return cloned
-}
-
-// normalizeStrings trims, deduplicates, and drops empty string values
-func normalizeStrings(values []string) []string {
+// NormalizeStrings trims, deduplicates, and drops empty string values
+func NormalizeStrings(values []string) []string {
 	if len(values) == 0 {
 		return nil
 	}
