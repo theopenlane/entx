@@ -41,9 +41,6 @@ var TaskRuleAnnotationName = "OPENLANE_TASK_RULE"
 // WebhookPayloadFieldAnnotationName is the annotation name for fields to include in webhook payloads
 var WebhookPayloadFieldAnnotationName = "OPENLANE_WEBHOOK_PAYLOAD_FIELD"
 
-// WorkflowObjectConfigAnnotationName is the annotation name for workflow object configuration
-var WorkflowObjectConfigAnnotationName = "OPENLANE_WORKFLOW_OBJECT_CONFIG"
-
 // CSVReferenceAnnotationName is the annotation name for CSV reference field mappings
 var CSVReferenceAnnotationName = "OPENLANE_CSV_REFERENCE"
 
@@ -70,6 +67,12 @@ var OrgOwnedSchemaName = "OPENLANE_ORG_OWNED_SCHEMA"
 
 // SystemOwnedSchemaName is the annotation name for org owned schemas
 var SystemOwnedSchemaName = "OPENLANE_SYSTEM_OWNED_SCHEMA"
+
+// ConsoleRouteAnnotationName is the annotation name for console routes on schemas
+var ConsoleRouteAnnotationName = "OPENLANE_CONSOLE_ROUTE"
+
+// MentionableAnnotationName is the annotation name for mention-scannable schemas
+var MentionableAnnotationName = "OPENLANE_MENTIONABLE"
 
 // CascadeAnnotation is an annotation used to indicate that an edge should be cascaded
 type CascadeAnnotation struct {
@@ -159,12 +162,6 @@ type WebhookPayloadFieldAnnotation struct {
 	Include bool
 }
 
-// WorkflowObjectConfigAnnotation is an annotation used to configure workflow object loading behavior
-type WorkflowObjectConfigAnnotation struct {
-	// EagerLoadEdges lists edges that should be eagerly loaded when loading workflow objects
-	EagerLoadEdges []string
-}
-
 // CSVReferenceAnnotation is an annotation used to map CSV columns to ID fields via lookups
 // All lookups are automatically scoped to the organization context from the request.
 type CSVReferenceAnnotation struct {
@@ -184,8 +181,6 @@ type CSVReferenceAnnotation struct {
 type IntegrationMappingFieldAnnotation struct {
 	// Key is the mapping output key (GraphQL input field name).
 	Key string
-	// UpsertKey indicates the field participates in dedupe/upsert matching.
-	UpsertKey bool
 	// LookupKey indicates the field participates in stock ingest lookup matching
 	LookupKey bool
 	// FromIntegration indicates the field value is injected from the integration record at ingest time
@@ -195,17 +190,46 @@ type IntegrationMappingFieldAnnotation struct {
 // IntegrationMappingSchemaAnnotation marks a schema as an integration mapping target.
 // When present, generators should include all eligible fields by default.
 type IntegrationMappingSchemaAnnotation struct {
+	// StockPersist enables the generated stock ingest mapping and preparation semantics.
+	StockPersist bool
 	// Include restricts mapping to a specific set of ent field names (snake_case).
 	Include []string
 	// Exclude removes specific ent field names (snake_case) from mapping.
 	Exclude []string
-	// StockPersist indicates the schema can use the generated stock ingest persistence path
-	StockPersist bool
 }
 
 // FileCategoryAnnotation marks a schema with a default file category for uploads.
 type FileCategoryAnnotation struct {
 	Category string
+}
+
+// ConsoleRouteAnnotation declares how console URLs are built for a schema's objects.
+// Every unset field falls back to convention: Base defaults to the schema's plural table
+// name and object IDs default to a path segment. The annotation's presence also opts a
+// schema into route generation when it is outside the entity-operations registry
+type ConsoleRouteAnnotation struct {
+	// Base is the console landing path for the schema (e.g. "automation/tasks")
+	Base string
+	// IDParam routes object links through a query parameter (base?<IDParam>=<id>) instead
+	// of a path segment
+	IDParam string
+	// Suffix is a path segment appended after the object ID (e.g. "view"); mutually
+	// exclusive with IDParam
+	Suffix string
+}
+
+// MentionableAnnotation marks a schema's rich-text fields for mention scanning. Empty
+// fields default to name, details, details_json, and owner_id; generation fails when a
+// resolved field does not exist on the schema
+type MentionableAnnotation struct {
+	// NameField is the display-name field used in mention notification content
+	NameField string
+	// DetailsField is the plain-text rich-text field scanned for mentions
+	DetailsField string
+	// DetailsJSONField is the JSON rich-text field scanned for mentions
+	DetailsJSONField string
+	// OwnerField is the owning-organization field on the schema
+	OwnerField string
 }
 
 // FGACrudAnnotation marks the crud operations that are allowed for the schema to generate crud tuples
@@ -271,11 +295,6 @@ func (a WebhookPayloadFieldAnnotation) Name() string {
 	return WebhookPayloadFieldAnnotationName
 }
 
-// Name returns the name of the WorkflowObjectConfigAnnotation
-func (a WorkflowObjectConfigAnnotation) Name() string {
-	return WorkflowObjectConfigAnnotationName
-}
-
 // Name returns the name of the CSVReferenceAnnotation
 func (a CSVReferenceAnnotation) Name() string {
 	return CSVReferenceAnnotationName
@@ -294,6 +313,16 @@ func (a IntegrationMappingSchemaAnnotation) Name() string {
 // Name returns the name of the FileCategoryAnnotation
 func (a FileCategoryAnnotation) Name() string {
 	return FileCategoryAnnotationName
+}
+
+// Name returns the name of the ConsoleRouteAnnotation
+func (a ConsoleRouteAnnotation) Name() string {
+	return ConsoleRouteAnnotationName
+}
+
+// Name returns the name of the MentionableAnnotation
+func (a MentionableAnnotation) Name() string {
+	return MentionableAnnotationName
 }
 
 // Name returns the name of the FGACrudAnnotation
@@ -356,6 +385,68 @@ func FileCategory(category string) FileCategoryAnnotation {
 	}
 }
 
+// ConsoleRouteOption configures a ConsoleRouteAnnotation deviation from convention
+type ConsoleRouteOption func(*ConsoleRouteAnnotation)
+
+// WithConsoleBase overrides the console landing path for a schema
+func WithConsoleBase(base string) ConsoleRouteOption {
+	return func(a *ConsoleRouteAnnotation) {
+		a.Base = base
+	}
+}
+
+// WithConsoleIDParam routes object links through a query parameter instead of a path segment
+func WithConsoleIDParam(param string) ConsoleRouteOption {
+	return func(a *ConsoleRouteAnnotation) {
+		a.IDParam = param
+	}
+}
+
+// WithConsoleSuffix appends a path segment after the object ID in object links
+func WithConsoleSuffix(suffix string) ConsoleRouteOption {
+	return func(a *ConsoleRouteAnnotation) {
+		a.Suffix = suffix
+	}
+}
+
+// ConsoleRoute declares a schema's console route; with no options it opts the schema into
+// route generation with full convention defaults
+func ConsoleRoute(opts ...ConsoleRouteOption) ConsoleRouteAnnotation {
+	ann := ConsoleRouteAnnotation{}
+	for _, opt := range opts {
+		opt(&ann)
+	}
+
+	return ann
+}
+
+// MentionableOption configures a MentionableAnnotation deviation from the default field names
+type MentionableOption func(*MentionableAnnotation)
+
+// WithMentionDetailsField overrides the plain-text rich-text field scanned for mentions
+func WithMentionDetailsField(field string) MentionableOption {
+	return func(a *MentionableAnnotation) {
+		a.DetailsField = field
+	}
+}
+
+// WithMentionDetailsJSONField overrides the JSON rich-text field scanned for mentions
+func WithMentionDetailsJSONField(field string) MentionableOption {
+	return func(a *MentionableAnnotation) {
+		a.DetailsJSONField = field
+	}
+}
+
+// Mentionable marks a schema for mention scanning; with no options the default field names apply
+func Mentionable(opts ...MentionableOption) MentionableAnnotation {
+	ann := MentionableAnnotation{}
+	for _, opt := range opts {
+		opt(&ann)
+	}
+
+	return ann
+}
+
 // QueryGenSkip sets whether the query generation should be skipped for this type
 func QueryGenSkip(skip bool) *QueryGenAnnotation {
 	return &QueryGenAnnotation{
@@ -388,16 +479,16 @@ func IntegrationMappingSchema() *IntegrationMappingSchemaBuilder {
 	}
 }
 
-// Key overrides the mapping output key (GraphQL input field name)
-func (b *IntegrationMappingFieldBuilder) Key(key string) *IntegrationMappingFieldBuilder {
-	b.annotation.Key = key
+// StockPersist enables the generated stock ingest mapping and preparation semantics.
+func (b *IntegrationMappingSchemaBuilder) StockPersist() *IntegrationMappingSchemaBuilder {
+	b.annotation.StockPersist = true
 
 	return b
 }
 
-// UpsertKey marks the field as part of the dedupe/upsert key
-func (b *IntegrationMappingFieldBuilder) UpsertKey() *IntegrationMappingFieldBuilder {
-	b.annotation.UpsertKey = true
+// Key overrides the mapping output key (GraphQL input field name)
+func (b *IntegrationMappingFieldBuilder) Key(key string) *IntegrationMappingFieldBuilder {
+	b.annotation.Key = key
 
 	return b
 }
@@ -426,13 +517,6 @@ func (b *IntegrationMappingSchemaBuilder) Include(fields ...string) *Integration
 // Exclude removes specific ent field names (snake_case) from mapping
 func (b *IntegrationMappingSchemaBuilder) Exclude(fields ...string) *IntegrationMappingSchemaBuilder {
 	b.annotation.Exclude = append(b.annotation.Exclude, fields...)
-
-	return b
-}
-
-// StockPersist enables the generated stock ingest persistence path for this schema
-func (b *IntegrationMappingSchemaBuilder) StockPersist() *IntegrationMappingSchemaBuilder {
-	b.annotation.StockPersist = true
 
 	return b
 }
@@ -509,13 +593,6 @@ func SchemaTaskRule(rules ...TaskRuleSpec) *TaskRuleAnnotation {
 func FieldWebhookPayloadField() *WebhookPayloadFieldAnnotation {
 	return &WebhookPayloadFieldAnnotation{
 		Include: true,
-	}
-}
-
-// WorkflowObjectConfig returns a new WorkflowObjectConfigAnnotation with the specified eager load edges
-func WorkflowObjectConfig(eagerLoadEdges []string) *WorkflowObjectConfigAnnotation {
-	return &WorkflowObjectConfigAnnotation{
-		EagerLoadEdges: eagerLoadEdges,
 	}
 }
 
@@ -626,6 +703,16 @@ func (a *FileCategoryAnnotation) Decode(annotation any) error {
 	return DecodeAnnotation(annotation, a)
 }
 
+// Decode unmarshals the ConsoleRouteAnnotation
+func (a *ConsoleRouteAnnotation) Decode(annotation any) error {
+	return DecodeAnnotation(annotation, a)
+}
+
+// Decode unmarshals the MentionableAnnotation
+func (a *MentionableAnnotation) Decode(annotation any) error {
+	return DecodeAnnotation(annotation, a)
+}
+
 // Decode unmarshals the FGACrudAnnotation.
 func (a *FGACrudAnnotation) Decode(annotation any) error {
 	return DecodeAnnotation(annotation, a)
@@ -658,11 +745,6 @@ func (a *TaskRuleAnnotation) Decode(annotation any) error {
 
 // Decode unmarshalls the WebhookPayloadFieldAnnotation
 func (a *WebhookPayloadFieldAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation(annotation, a)
-}
-
-// Decode unmarshalls the WorkflowObjectConfigAnnotation
-func (a *WorkflowObjectConfigAnnotation) Decode(annotation any) error {
 	return DecodeAnnotation(annotation, a)
 }
 

@@ -1,6 +1,8 @@
 package entityops
 
 import (
+	"slices"
+
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/load"
 	"github.com/99designs/gqlgen/codegen/templates"
@@ -41,8 +43,6 @@ type integrationFieldMeta struct {
 	InputKey string
 	// InputGoField is the exported Go struct field name for the input key on ent create inputs
 	InputGoField string
-	// FromIntegration reports whether the field value is injected from the integration record at ingest time
-	FromIntegration bool
 	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
 	LookupKey bool
 }
@@ -51,9 +51,7 @@ type integrationFieldMeta struct {
 type integrationSchemaMeta struct {
 	// Mapped reports whether the schema has at least one integration mapping field
 	Mapped bool
-	// StockPersist reports whether the schema opts into the generated stock ingest persistence path
-	StockPersist bool
-	// RuntimeDefaults are the integration-injected field defaults applied during stock ingest preparation
+	// RuntimeDefaults are integration-injected field defaults applied during ingest preparation
 	RuntimeDefaults []EntityRuntimeDefault
 }
 
@@ -72,7 +70,6 @@ func collectIntegrationMapping(schema *load.Schema) (map[string]integrationField
 
 	schemaAnt := integrationSchemaAnnotation(schema)
 	stockPersist := schemaAnt != nil && schemaAnt.StockPersist
-
 	includeSet := map[string]struct{}{}
 	excludeSet := map[string]struct{}{}
 	hasInclude := false
@@ -121,10 +118,9 @@ func collectIntegrationMapping(schema *load.Schema) (map[string]integrationField
 		fromIntegration := ant != nil && ant.FromIntegration
 
 		meta[field.Name] = integrationFieldMeta{
-			InputKey:        key,
-			InputGoField:    goField,
-			FromIntegration: fromIntegration,
-			LookupKey:       ant != nil && ant.LookupKey,
+			InputKey:     key,
+			InputGoField: goField,
+			LookupKey:    ant != nil && ant.LookupKey,
 		}
 
 		if stockPersist && fromIntegration {
@@ -141,11 +137,39 @@ func collectIntegrationMapping(schema *load.Schema) (map[string]integrationField
 		}
 	}
 
+	if stockPersist && len(meta) > 0 {
+		if ownerDefault, ok := implicitOwnerDefault(schema, runtimeDefaults); ok {
+			runtimeDefaults = append(runtimeDefaults, ownerDefault)
+		}
+	}
+
 	schemaMeta.Mapped = len(meta) > 0
-	schemaMeta.StockPersist = stockPersist
 	schemaMeta.RuntimeDefaults = runtimeDefaults
 
 	return meta, schemaMeta, nil
+}
+
+// implicitOwnerDefault returns an owner_id runtime default for mapped schemas that declare an
+// owner_id field without an explicit FromIntegration annotation, so every generated Prepare
+// function stamps the integration's owning organization uniformly
+func implicitOwnerDefault(schema *load.Schema, runtimeDefaults []EntityRuntimeDefault) (EntityRuntimeDefault, bool) {
+	if slices.ContainsFunc(runtimeDefaults, func(d EntityRuntimeDefault) bool { return d.GoField == "OwnerID" }) {
+		return EntityRuntimeDefault{}, false
+	}
+
+	for _, field := range schema.Fields {
+		if field.Name != "owner_id" {
+			continue
+		}
+
+		return EntityRuntimeDefault{
+			GoField:          "OwnerID",
+			Required:         !field.Optional,
+			IntegrationField: "OwnerID",
+		}, true
+	}
+
+	return EntityRuntimeDefault{}, false
 }
 
 // integrationFieldIncluded reports whether a field should be collected given the schema's

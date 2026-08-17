@@ -39,14 +39,36 @@ type EntityData struct {
 	JsonxPackage string
 	// LogxPackage is the logx package import path
 	LogxPackage string
-	// ContextxPackage is the contextx package import path
-	ContextxPackage string
 	// CelxPackage is the celx package import path for typed entity expression evaluation
 	CelxPackage string
+	// MapxPackage is the mapx package import path for map clone/merge helpers
+	MapxPackage string
 	// EnumsPackageName is the Go package name for the generated WorkflowObjectType enum file
 	EnumsPackageName string
 	// Schemas contains all schemas eligible for entity operations
 	Schemas []EntitySchema
+}
+
+// ConsoleRouteEntry is one schema's annotation-declared console route.
+type ConsoleRouteEntry struct {
+	// Base is the console landing path (e.g. "automation/tasks")
+	Base string
+	// IDParam routes object links through a query parameter instead of a path segment
+	IDParam string
+	// Suffix is a path segment appended after the object ID
+	Suffix string
+}
+
+// MentionSpecEntry is one schema's annotation-declared mention scan configuration.
+type MentionSpecEntry struct {
+	// NameField is the display-name field used in mention notification content
+	NameField string
+	// DetailsField is the plain-text rich-text field scanned for mentions
+	DetailsField string
+	// DetailsJSONField is the JSON rich-text field scanned for mentions
+	DetailsJSONField string
+	// OwnerField is the owning-organization field on the schema
+	OwnerField string
 }
 
 // EntitySchema represents one schema's metadata for entity operations generation
@@ -55,16 +77,8 @@ type EntitySchema struct {
 	Name string
 	// Snake is the snake_case form (e.g., "action_plan")
 	Snake string
-	// Camel is the camelCase form (e.g., "actionPlan")
-	Camel string
 	// Lower is the lowercase no-separator form (e.g., "actionplan")
 	Lower string
-	// Plural is the PascalCase plural form (e.g., "ActionPlans")
-	Plural string
-	// Table is the database table name (e.g., "action_plans")
-	Table string
-	// Label is the human-readable label (e.g., "Action Plan")
-	Label string
 	// HasCreate indicates a CreateInput type is generated
 	HasCreate bool
 	// HasUpdate indicates an UpdateInput type is generated
@@ -91,16 +105,16 @@ type EntitySchema struct {
 	WorkflowEligible bool
 	// IntegrationMapped indicates the schema participates in integration ingest mapping
 	IntegrationMapped bool
-	// StockPersist indicates the schema opts into the generated stock ingest persistence path
-	StockPersist bool
-	// RuntimeDefaults are integration-injected field defaults applied by the generated Prepare function
+	// LinkTarget indicates the schema is an edge target of an integration-mapped schema, making it
+	// reachable by ingest link-rule target selection; with IntegrationMapped and WorkflowEligible it
+	// gates emission of the runtime closures and projections only reachable through those capabilities
+	LinkTarget bool
+	// RuntimeDefaults are integration-injected field defaults applied by the schema ingest capability
 	RuntimeDefaults []EntityRuntimeDefault
-	// IngestTopic is the gala ingest topic name (entityops.{snake}.ingest.requested) for integration schemas
-	IngestTopic string
-	// IngestRequestType is the generated Go type name for this schema's typed ingest event payload
-	IngestRequestType string
-	// IngestTopicVar is the generated Go variable name for this schema's typed ingest topic
-	IngestTopicVar string
+	// ConsoleRoute is present only when the schema explicitly declares a console route
+	ConsoleRoute *ConsoleRouteEntry
+	// MentionSpec is present only when the schema explicitly declares mention scanning
+	MentionSpec *MentionSpecEntry
 	// TaskRules are schema-level (unconditional) suggested-task rules declared via entx.SchemaTaskRule
 	TaskRules []entx.TaskRuleSpec
 }
@@ -123,10 +137,16 @@ type EntityField struct {
 	InputKey string
 	// InputGoField is the exported Go struct field name for the input key on ent create inputs
 	InputGoField string
-	// FromIntegration reports whether the field value is injected from the integration record at ingest time
-	FromIntegration bool
 	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
 	LookupKey bool
+	// DisplayKey reports whether the field is the schema's display-name source
+	DisplayKey bool
+	// Clearable reports whether update inputs support explicitly clearing this field
+	Clearable bool
+	// WebhookPayload reports whether workflow webhook payloads include this field
+	WebhookPayload bool
+	// Projectable reports whether the field may appear in CEL/jsonschema projections
+	Projectable bool
 	// TaskRules are suggested-task rules declared on this field via entx.FieldTaskRule
 	TaskRules []entx.TaskRuleSpec
 }
@@ -137,14 +157,13 @@ type EntityEdge struct {
 	Name string
 	// TargetSchema is the target PascalCase name (e.g., "Control")
 	TargetSchema string
+	// TargetInRegistry reports whether the target schema has its own registry entry; workflow-annotated
+	// edges may target schemas outside the registry, which have no Schema var to reference
+	TargetInRegistry bool
 	// Unique reports whether this side references a single target, so linking sets one id
 	// (Set<Edge>ID) rather than adding many (Add<Edge>IDs)
 	Unique bool
-	// Optional reports whether a unique edge may be cleared; gates ClearField emission since a
-	// required unique edge has no Clear<Edge> on the update input
-	Optional bool
-	// Immutable reports whether the edge is set only at create time; gates the update-input
-	// mutation key emission and the runtime link-existing guard
+	// Immutable reports whether the edge is set only at create time; it gates update-input keys
 	Immutable bool
 	// WorkflowEligible reports whether the edge may drive workflow conditions and triggers
 	WorkflowEligible bool
@@ -183,7 +202,51 @@ func fieldWorkflowEligible(field *gen.Field) (eligible bool, marker bool, err er
 		return false, true, nil
 	}
 
+	if field.Sensitive() || field.Immutable {
+		return false, false, nil
+	}
+
+	if ant, ok := entx.GetAnnotation[*entgql.Annotation](field); ok &&
+		(ant.Skip.Is(entgql.SkipType) || ant.Skip.Is(entgql.SkipMutationUpdateInput)) {
+		return false, false, nil
+	}
+
 	return ann.Eligible, false, nil
+}
+
+// edgeWorkflowEligible decodes the annotation value rather than treating its presence as opt-in.
+func edgeWorkflowEligible(edge *gen.Edge) (bool, error) {
+	raw, ok := edge.Annotations[entx.WorkflowEligibleAnnotationName]
+	if !ok {
+		return false, nil
+	}
+
+	ann := &entx.WorkflowEligibleAnnotation{}
+	if err := ann.Decode(raw); err != nil {
+		return false, err
+	}
+
+	return ann.Eligible, nil
+}
+
+// fieldWebhookPayload reports whether a field is included in workflow webhook enrichment.
+func fieldWebhookPayload(field *gen.Field) bool {
+	ann, ok := entx.GetAnnotation[*entx.WebhookPayloadFieldAnnotation](field)
+
+	return ok && ann.Include && !field.Sensitive()
+}
+
+// fieldProjectable excludes secrets and fields hidden from the GraphQL type surface.
+func fieldProjectable(field *gen.Field) bool {
+	if field.Sensitive() {
+		return false
+	}
+
+	if ant, ok := entx.GetAnnotation[*entgql.Annotation](field); ok && ant.Skip.Is(entgql.SkipType) {
+		return false
+	}
+
+	return true
 }
 
 // fieldTaskRules decodes the OPENLANE_TASK_RULE annotation on a field if it exists
@@ -220,23 +283,6 @@ func schemaTaskRules(schema *load.Schema) ([]entx.TaskRuleSpec, error) {
 	return ann.Rules, nil
 }
 
-// hasTaskRuleAnnotation reports whether a schema carries a task rule via a field or the schema itself
-func hasTaskRuleAnnotation(node *gen.Type, schema *load.Schema) bool {
-	for _, field := range node.Fields {
-		if _, ok := field.Annotations[entx.TaskRuleAnnotationName]; ok {
-			return true
-		}
-	}
-
-	if schema == nil {
-		return false
-	}
-
-	_, ok := schema.Annotations[entx.TaskRuleAnnotationName]
-
-	return ok
-}
-
 // buildEntityField constructs one field's catalog entry: capability flags decoded from its
 // workflow/task-rule annotations, folded with its integration mapping metadata if any. marker
 // reports whether this is the WorkflowApprovalMixin carrier field (see fieldWorkflowEligible)
@@ -263,7 +309,10 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 		Snake:            field.StorageKey(),
 		Type:             fieldType,
 		WorkflowEligible: eligible,
-		MatchKey:         field.Type != nil && field.Type.Type == entfield.TypeString && !field.HasGoType(),
+		MatchKey:         field.Type != nil && field.Type.Type == entfield.TypeString && !field.HasGoType() && !field.Sensitive(),
+		Clearable:        field.Optional || field.Nillable,
+		WebhookPayload:   fieldWebhookPayload(field),
+		Projectable:      fieldProjectable(field),
 		TaskRules:        taskRules,
 	}
 
@@ -271,15 +320,15 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 		entityField.IntegrationMapped = true
 		entityField.InputKey = im.InputKey
 		entityField.InputGoField = im.InputGoField
-		entityField.FromIntegration = im.FromIntegration
 		entityField.LookupKey = im.LookupKey
 	}
 
 	return entityField, marker, nil
 }
 
-// collectEntityData iterates the ent graph and collects schemas annotated with
-// OPENLANE_WORKFLOW_ELIGIBLE fields, OPENLANE_INTEGRATION_MAPPING_SCHEMA, or OPENLANE_TASK_RULE
+// collectEntityData iterates the ent graph and collects every primary schema. Optional
+// workflow, integration, and task-rule annotations add capabilities to the canonical schema;
+// they do not control whether the schema exists in the registry.
 func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 	data := EntityData{
 		PackageName:      c.PackageName,
@@ -287,32 +336,24 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		GalaPackage:      c.GalaPackage,
 		JsonxPackage:     c.JsonxPackage,
 		LogxPackage:      c.LogxPackage,
-		ContextxPackage:  c.ContextxPackage,
 		CelxPackage:      c.CelxPackage,
+		MapxPackage:      c.MapxPackage,
 		EnumsPackageName: c.EnumsPackageName,
 		Schemas:          []EntitySchema{},
 	}
 
-	var eligibleSchemas []string
+	var registeredSchemas []string
 
 	for _, node := range g.Nodes {
 		if skipNode(node) {
 			continue
 		}
 
-		schema := findSchema(g, node.Name)
-		if schema == nil {
-			continue
-		}
-
-		source := classifySource(node, schema)
-		if source.Workflow || source.Integration || source.TaskRules {
-			eligibleSchemas = append(eligibleSchemas, node.Name)
-		}
+		registeredSchemas = append(registeredSchemas, node.Name)
 	}
 
 	for _, node := range g.Nodes {
-		if !slices.Contains(eligibleSchemas, node.Name) {
+		if !slices.Contains(registeredSchemas, node.Name) {
 			continue
 		}
 
@@ -331,11 +372,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		entitySchema := EntitySchema{
 			Name:             node.Name,
 			Snake:            strcase.SnakeCase(node.Name),
-			Camel:            lowerFirst(node.Name),
 			Lower:            strings.ToLower(strings.ReplaceAll(strcase.SnakeCase(node.Name), "_", "")),
-			Plural:           strcase.UpperCamelCase(node.Table()),
-			Table:            node.Table(),
-			Label:            humanize(node.Name),
 			HasCreate:        hasCreate,
 			HasUpdate:        hasUpdate,
 			PredicatePackage: predAlias,
@@ -378,14 +415,27 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 			return cmp.Compare(a.Snake, b.Snake)
 		})
 
+		if displayField := displayFieldName(node); displayField != "" {
+			for i := range entitySchema.ObjectFields {
+				if entitySchema.ObjectFields[i].Snake == displayField {
+					entitySchema.ObjectFields[i].DisplayKey = true
+					break
+				}
+			}
+		}
+
 		for _, edge := range node.Edges {
-			// include every edge to an eligible target schema (cross-object linking, in either
-			// direction and at any cardinality)
-			if !slices.Contains(eligibleSchemas, edge.Type.Name) {
-				continue
+			// Include every edge to a registered target schema. Optional capability flags are
+			// properties of the edge and never determine whether its target has a descriptor.
+			workflowEligible, err := edgeWorkflowEligible(edge)
+			if err != nil {
+				return EntityData{}, fmt.Errorf("decode workflow eligible annotation on %s.%s: %w", node.Name, edge.Name, err)
 			}
 
-			_, workflowEligible := edge.Annotations[entx.WorkflowEligibleAnnotationName]
+			targetInRegistry := slices.Contains(registeredSchemas, edge.Type.Name)
+			if !targetInRegistry && !workflowEligible {
+				continue
+			}
 
 			// immutable edges are included in the catalog (create-time injection can set them), but the
 			// registry emits no Link/Unlink for them since the update builder has no setter; consumers
@@ -398,8 +448,8 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 			entityEdge := EntityEdge{
 				Name:             edge.Name,
 				TargetSchema:     edge.Type.Name,
+				TargetInRegistry: targetInRegistry,
 				Unique:           edge.Unique,
-				Optional:         edge.Optional,
 				Immutable:        edge.Immutable,
 				WorkflowEligible: workflowEligible,
 				Field:            fkColumn,
@@ -441,14 +491,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		}
 
 		entitySchema.IntegrationMapped = integrationMeta.Mapped
-		entitySchema.StockPersist = integrationMeta.StockPersist
 		entitySchema.RuntimeDefaults = integrationMeta.RuntimeDefaults
-
-		if integrationMeta.Mapped && hasCreate {
-			entitySchema.IngestTopic = "entityops." + entitySchema.Snake + ".ingest.requested"
-			entitySchema.IngestRequestType = node.Name + "IngestRequested"
-			entitySchema.IngestTopicVar = "Topic" + node.Name
-		}
 
 		data.Schemas = append(data.Schemas, entitySchema)
 	}
@@ -457,68 +500,126 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		return cmp.Compare(a.Name, b.Name)
 	})
 
+	markLinkTargets(&data)
+
+	if err := collectSchemaMetadata(g, &data); err != nil {
+		return EntityData{}, err
+	}
+
 	return data, nil
 }
 
-// schemaSource tracks which annotation(s) caused a schema to be included
-type schemaSource struct {
-	Workflow    bool
-	Integration bool
-	TaskRules   bool
-}
+// markLinkTargets flags every schema reachable as an edge target of an integration-mapped schema,
+// since ingest link rules may select targets over any edge of a mapped source schema
+func markLinkTargets(data *EntityData) {
+	targets := map[string]struct{}{}
 
-// classifySource determines why a schema should be included
-func classifySource(node *gen.Type, schema *load.Schema) schemaSource {
-	var source schemaSource
-
-	for _, field := range node.Fields {
-		if _, ok := field.Annotations[entx.WorkflowEligibleAnnotationName]; ok {
-			source.Workflow = true
-			break
-		}
-	}
-
-	for _, edge := range node.Edges {
-		if _, ok := edge.Annotations[entx.WorkflowEligibleAnnotationName]; ok {
-			source.Workflow = true
-			break
-		}
-	}
-
-	if hasIntegrationMappingAnnotation(schema) {
-		source.Integration = true
-	}
-
-	if hasTaskRuleAnnotation(node, schema) {
-		source.TaskRules = true
-	}
-
-	return source
-}
-
-// hasIntegrationMappingAnnotation checks if the schema has an OPENLANE_INTEGRATION_MAPPING_SCHEMA annotation
-func hasIntegrationMappingAnnotation(schema *load.Schema) bool {
-	if schema == nil {
-		return false
-	}
-
-	for _, ant := range schema.Annotations {
-		raw, ok := ant.(map[string]any)
-		if !ok {
+	for _, schema := range data.Schemas {
+		if !schema.IntegrationMapped {
 			continue
 		}
 
-		if _, found := raw[entx.IntegrationMappingSchemaAnnotationName]; found {
-			return true
+		for _, edge := range schema.Edges {
+			if edge.TargetInRegistry {
+				targets[edge.TargetSchema] = struct{}{}
+			}
 		}
 	}
 
-	for _, field := range schema.Fields {
-		if field.Annotations == nil {
+	for i := range data.Schemas {
+		_, data.Schemas[i].LinkTarget = targets[data.Schemas[i].Name]
+	}
+}
+
+// displayFieldConvention is the ordered field-name chain used to resolve a schema's
+// display-name field
+var displayFieldConvention = []string{"name", "title", "display_name"}
+
+// displayFieldName resolves a node's display-name field via the name/title/display_name
+// convention chain; empty when no candidate field exists
+func displayFieldName(node *gen.Type) string {
+	for _, candidate := range displayFieldConvention {
+		if nodeHasField(node, candidate) {
+			return candidate
+		}
+	}
+
+	return ""
+}
+
+// collectSchemaMetadata gathers annotation-declared console-route and mention metadata.
+// Catalog membership never implies that an entity is console-routable.
+func collectSchemaMetadata(g *gen.Graph, data *EntityData) error {
+	schemaIndexes := make(map[string]int, len(data.Schemas))
+	for i := range data.Schemas {
+		schemaIndexes[data.Schemas[i].Name] = i
+	}
+
+	for _, node := range g.Nodes {
+		// only history shadows are excluded here: schemas skipped for schema/query generation
+		// (e.g. types used through extended types) still carry console and mention metadata
+		if strings.HasSuffix(node.Name, "History") {
 			continue
 		}
 
-		if _, ok := field.Annotations[entx.IntegrationMappingFieldAnnotationName]; ok {
+		index, cataloged := schemaIndexes[node.Name]
+		if !cataloged {
+			continue
+		}
+
+		routeAnn, hasRouteAnn := (*entx.ConsoleRouteAnnotation)(nil), false
+
+		if raw, ok := node.Annotations[entx.ConsoleRouteAnnotationName]; ok {
+			routeAnn = &entx.ConsoleRouteAnnotation{}
+			if err := routeAnn.Decode(raw); err != nil {
+				return fmt.Errorf("decode console route annotation on %s: %w", node.Name, err)
+			}
+
+			if routeAnn.IDParam != "" && routeAnn.Suffix != "" {
+				return fmt.Errorf("%w: %s", ErrInvalidConsoleRoute, node.Name)
+			}
+
+			hasRouteAnn = true
+		}
+
+		if hasRouteAnn {
+			entry := ConsoleRouteEntry{Base: node.Table()}
+			entry.Base = cmp.Or(routeAnn.Base, entry.Base)
+			entry.IDParam = routeAnn.IDParam
+			entry.Suffix = routeAnn.Suffix
+			data.Schemas[index].ConsoleRoute = &entry
+		}
+
+		if raw, ok := node.Annotations[entx.MentionableAnnotationName]; ok {
+			ann := &entx.MentionableAnnotation{}
+			if err := ann.Decode(raw); err != nil {
+				return fmt.Errorf("decode mentionable annotation on %s: %w", node.Name, err)
+			}
+
+			entry := MentionSpecEntry{
+				NameField:        cmp.Or(ann.NameField, displayFieldName(node)),
+				DetailsField:     cmp.Or(ann.DetailsField, "details"),
+				DetailsJSONField: cmp.Or(ann.DetailsJSONField, "details_json"),
+				OwnerField:       cmp.Or(ann.OwnerField, "owner_id"),
+			}
+
+			for _, fieldName := range []string{entry.NameField, entry.DetailsField, entry.DetailsJSONField, entry.OwnerField} {
+				if fieldName != "" && !nodeHasField(node, fieldName) {
+					return fmt.Errorf("%w: %s.%s", ErrMentionFieldMissing, node.Name, fieldName)
+				}
+			}
+
+			data.Schemas[index].MentionSpec = &entry
+		}
+	}
+
+	return nil
+}
+
+// nodeHasField reports whether the graph node declares a field with the given storage name
+func nodeHasField(node *gen.Type, name string) bool {
+	for _, f := range node.Fields {
+		if f.Name == name || f.StorageKey() == name {
 			return true
 		}
 	}
@@ -542,12 +643,21 @@ func generateEntityFiles(outputDir string, data EntityData) error {
 		{name: "entity_schema", filename: "entity_schema.go", tmplFile: "templates/entity_schema.tpl"},
 		{name: "entity_errors", filename: "entity_errors.go", tmplFile: "templates/entity_errors.tpl"},
 		{name: "entity_registry", filename: "entity_registry.go", tmplFile: "templates/entity_registry.tpl"},
-		{name: "entity_handlers", filename: "entity_handlers.go", tmplFile: "templates/entity_handlers.tpl"},
 		{name: "entity_workflow", filename: "entity_workflow.go", tmplFile: "templates/entity_workflow.tpl"},
 		{name: "entity_tasks", filename: "entity_tasks.go", tmplFile: "templates/entity_tasks.tpl"},
 		{name: "entity_links", filename: "entity_links.go", tmplFile: "templates/entity_links.tpl"},
 		{name: "entity_integration", filename: "entity_integration.go", tmplFile: "templates/entity_integration.tpl"},
 		{name: "entity_projection", filename: "entity_projection.go", tmplFile: "templates/entity_projection.tpl"},
+		{name: "entity_metadata", filename: "entity_metadata.go", tmplFile: "templates/entity_metadata.tpl"},
+		{name: "entity_changeset", filename: "entity_changeset.go", tmplFile: "templates/entity_changeset.tpl"},
+		{name: "entity_mutation_events", filename: "entity_mutation_events.go", tmplFile: "templates/entity_mutation_events.tpl"},
+		{name: "entity_listener", filename: "entity_listener.go", tmplFile: "templates/entity_listener.tpl"},
+	}
+
+	for _, filename := range []string{"entity_handlers.go"} {
+		if err := os.Remove(filepath.Join(outputDir, filename)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove obsolete generated file %s: %w", filename, err)
+		}
 	}
 
 	for _, spec := range specs {
@@ -603,27 +713,11 @@ func writeFile(outputDir, filename string, tmpl *template.Template, data any) er
 	return os.WriteFile(outputPath, formatted, 0o600) //nolint:mnd
 }
 
-// skipNode returns true if the node should be excluded from entity operations generation
+// skipNode returns true if the node should be excluded from the primary entity catalog.
+// GraphQL schema/query generation flags are intentionally irrelevant here: entityops is the
+// runtime catalog for Ent entities, including types exposed only through extended GraphQL APIs.
 func skipNode(node *gen.Type) bool {
-	if strings.HasSuffix(node.Name, "History") {
-		return true
-	}
-
-	schemaGenAnt := &entx.SchemaGenAnnotation{}
-	if ant, ok := node.Annotations[schemaGenAnt.Name()]; ok {
-		if err := schemaGenAnt.Decode(ant); err == nil && schemaGenAnt.Skip {
-			return true
-		}
-	}
-
-	queryGenAnt := &entx.QueryGenAnnotation{}
-	if ant, ok := node.Annotations[queryGenAnt.Name()]; ok {
-		if err := queryGenAnt.Decode(ant); err == nil && queryGenAnt.Skip {
-			return true
-		}
-	}
-
-	return false
+	return strings.HasSuffix(node.Name, "History")
 }
 
 // skipMutationCreateInput returns true if no CreateInput type is generated for this schema
@@ -706,27 +800,4 @@ func hasField(schema *load.Schema, name string) bool {
 	}
 
 	return false
-}
-
-// lowerFirst returns the string with its first character lowered
-func lowerFirst(s string) string {
-	if s == "" {
-		return s
-	}
-
-	return strings.ToLower(s[:1]) + s[1:]
-}
-
-// humanize converts PascalCase to a human-readable label with spaces
-func humanize(s string) string {
-	snake := strcase.SnakeCase(s)
-	parts := strings.Split(snake, "_")
-
-	for i, p := range parts {
-		if i == 0 {
-			parts[i] = strings.ToUpper(p[:1]) + p[1:]
-		}
-	}
-
-	return strings.Join(parts, " ")
 }
