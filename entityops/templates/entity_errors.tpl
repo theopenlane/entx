@@ -55,6 +55,8 @@ var (
 	ErrListenerRegistrationFailed = errors.New("entityops: listener registration failed")
 	// ErrMutationListenerInvalid indicates a listener is missing its schema or handler
 	ErrMutationListenerInvalid = errors.New("entityops: invalid mutation listener")
+	// ErrNotifySpecInvalid indicates a notify spec is missing recipients or content
+	ErrNotifySpecInvalid = errors.New("entityops: notify spec requires recipients, type, topic, and title and body templates")
 	// ErrMutationSchemaMismatch indicates a payload was delivered to a listener for another schema
 	ErrMutationSchemaMismatch = errors.New("entityops: mutation schema mismatch")
 	// ErrClientResolveFailed indicates the ent client could not be resolved from the injector

@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"unicode"
 
 	"github.com/theopenlane/entx"
 
@@ -27,6 +29,29 @@ type SchemaDescriptor struct {
 // String returns the PascalCase canonical name
 func (d SchemaDescriptor) String() string {
 	return d.Name
+}
+
+// Label derives the human-readable schema label from the PascalCase name by inserting
+// spaces at word boundaries, keeping acronym runs intact (TrustCenterNDARequest -> "Trust Center NDA Request")
+func (d SchemaDescriptor) Label() string {
+	runes := []rune(d.Name)
+
+	var b strings.Builder
+
+	for i, r := range runes {
+		if i > 0 && unicode.IsUpper(r) {
+			prevLower := unicode.IsLower(runes[i-1]) || unicode.IsDigit(runes[i-1])
+			nextLower := i+1 < len(runes) && unicode.IsLower(runes[i+1])
+
+			if prevLower || (unicode.IsUpper(runes[i-1]) && nextLower) {
+				b.WriteRune(' ')
+			}
+		}
+
+		b.WriteRune(r)
+	}
+
+	return b.String()
 }
 
 // IsZero reports whether the descriptor is unset

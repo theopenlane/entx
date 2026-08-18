@@ -43,8 +43,12 @@ type EntityData struct {
 	CelxPackage string
 	// MapxPackage is the mapx package import path for map clone/merge helpers
 	MapxPackage string
+	// EnumsPackage is the enums package import path for notification content types
+	EnumsPackage string
 	// EnumsPackageName is the Go package name for the generated WorkflowObjectType enum file
 	EnumsPackageName string
+	// SlateparserPackage is the slateparser package import path for mention scanning
+	SlateparserPackage string
 	// Schemas contains all schemas eligible for entity operations
 	Schemas []EntitySchema
 }
@@ -69,6 +73,14 @@ type MentionSpecEntry struct {
 	DetailsJSONField string
 	// OwnerField is the owning-organization field on the schema
 	OwnerField string
+}
+
+// ApprovalSpecEntry is one schema's annotation-declared approval flow configuration
+type ApprovalSpecEntry struct {
+	// StatusField is the enum field carrying the approval status
+	StatusField string
+	// ApproverField is the group-id field resolving the approvers
+	ApproverField string
 }
 
 // EntitySchema represents one schema's metadata for entity operations generation
@@ -113,8 +125,13 @@ type EntitySchema struct {
 	RuntimeDefaults []EntityRuntimeDefault
 	// ConsoleRoute is present only when the schema explicitly declares a console route
 	ConsoleRoute *ConsoleRouteEntry
+	// OrgOwned indicates the schema carries the org-owned annotation, so owner_id is the owning
+	// organization; it gates mention-source generation and is not emitted into runtime descriptors
+	OrgOwned bool
 	// MentionSpec is present only when the schema explicitly declares mention scanning
 	MentionSpec *MentionSpecEntry
+	// ApprovalSpec is present only when the schema explicitly declares approval fields
+	ApprovalSpec *ApprovalSpecEntry
 	// TaskRules are schema-level (unconditional) suggested-task rules declared via entx.SchemaTaskRule
 	TaskRules []entx.TaskRuleSpec
 }
@@ -331,15 +348,17 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 // they do not control whether the schema exists in the registry.
 func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 	data := EntityData{
-		PackageName:      c.PackageName,
-		EntPackage:       c.EntPackage,
-		GalaPackage:      c.GalaPackage,
-		JsonxPackage:     c.JsonxPackage,
-		LogxPackage:      c.LogxPackage,
-		CelxPackage:      c.CelxPackage,
-		MapxPackage:      c.MapxPackage,
-		EnumsPackageName: c.EnumsPackageName,
-		Schemas:          []EntitySchema{},
+		PackageName:        c.PackageName,
+		EntPackage:         c.EntPackage,
+		GalaPackage:        c.GalaPackage,
+		JsonxPackage:       c.JsonxPackage,
+		LogxPackage:        c.LogxPackage,
+		CelxPackage:        c.CelxPackage,
+		MapxPackage:        c.MapxPackage,
+		EnumsPackage:       c.EnumsPackage,
+		EnumsPackageName:   c.EnumsPackageName,
+		SlateparserPackage: c.SlateparserPackage,
+		Schemas:            []EntitySchema{},
 	}
 
 	var registeredSchemas []string
@@ -369,10 +388,13 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 			predImport = c.EntPackage + "/" + predAlias
 		}
 
+		_, orgOwned := node.Annotations[entx.OrgOwnedSchemaName]
+
 		entitySchema := EntitySchema{
 			Name:             node.Name,
 			Snake:            strcase.SnakeCase(node.Name),
 			Lower:            strings.ToLower(strings.ReplaceAll(strcase.SnakeCase(node.Name), "_", "")),
+			OrgOwned:         orgOwned,
 			HasCreate:        hasCreate,
 			HasUpdate:        hasUpdate,
 			PredicatePackage: predAlias,
@@ -414,15 +436,6 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		slices.SortFunc(entitySchema.ObjectFields, func(a, b EntityField) int {
 			return cmp.Compare(a.Snake, b.Snake)
 		})
-
-		if displayField := displayFieldName(node); displayField != "" {
-			for i := range entitySchema.ObjectFields {
-				if entitySchema.ObjectFields[i].Snake == displayField {
-					entitySchema.ObjectFields[i].DisplayKey = true
-					break
-				}
-			}
-		}
 
 		for _, edge := range node.Edges {
 			// Include every edge to a registered target schema. Optional capability flags are
@@ -531,23 +544,7 @@ func markLinkTargets(data *EntityData) {
 	}
 }
 
-// displayFieldConvention is the ordered field-name chain used to resolve a schema's
-// display-name field
-var displayFieldConvention = []string{"name", "title", "display_name"}
-
-// displayFieldName resolves a node's display-name field via the name/title/display_name
-// convention chain; empty when no candidate field exists
-func displayFieldName(node *gen.Type) string {
-	for _, candidate := range displayFieldConvention {
-		if nodeHasField(node, candidate) {
-			return candidate
-		}
-	}
-
-	return ""
-}
-
-// collectSchemaMetadata gathers annotation-declared console-route and mention metadata.
+// collectSchemaMetadata gathers annotation-declared console-route, display, and mention metadata.
 // Catalog membership never implies that an entity is console-routable.
 func collectSchemaMetadata(g *gen.Graph, data *EntityData) error {
 	schemaIndexes := make(map[string]int, len(data.Schemas))
@@ -590,41 +587,106 @@ func collectSchemaMetadata(g *gen.Graph, data *EntityData) error {
 			data.Schemas[index].ConsoleRoute = &entry
 		}
 
-		if raw, ok := node.Annotations[entx.MentionableAnnotationName]; ok {
-			ann := &entx.MentionableAnnotation{}
-			if err := ann.Decode(raw); err != nil {
-				return fmt.Errorf("decode mentionable annotation on %s: %w", node.Name, err)
+		displayField := ""
+		detailsField := ""
+		detailsJSONField := ""
+		statusField := ""
+		approverField := ""
+
+		for _, f := range node.Fields {
+			storage := f.StorageKey()
+
+			if _, ok := f.Annotations[entx.DisplayNameAnnotationName]; ok {
+				if displayField != "" {
+					return fmt.Errorf("%w: %s.%s and %s.%s", ErrDisplayNameConflict, node.Name, displayField, node.Name, storage)
+				}
+
+				displayField = storage
 			}
 
-			entry := MentionSpecEntry{
-				NameField:        cmp.Or(ann.NameField, displayFieldName(node)),
-				DetailsField:     cmp.Or(ann.DetailsField, "details"),
-				DetailsJSONField: cmp.Or(ann.DetailsJSONField, "details_json"),
-				OwnerField:       cmp.Or(ann.OwnerField, "owner_id"),
-			}
+			if _, ok := f.Annotations[entx.MentionSourceAnnotationName]; ok {
+				switch {
+				case f.Type != nil && f.Type.Type == entfield.TypeJSON:
+					if detailsJSONField != "" {
+						return fmt.Errorf("%w: %s.%s and %s.%s", ErrMentionSourceConflict, node.Name, detailsJSONField, node.Name, storage)
+					}
 
-			for _, fieldName := range []string{entry.NameField, entry.DetailsField, entry.DetailsJSONField, entry.OwnerField} {
-				if fieldName != "" && !nodeHasField(node, fieldName) {
-					return fmt.Errorf("%w: %s.%s", ErrMentionFieldMissing, node.Name, fieldName)
+					detailsJSONField = storage
+				case f.Type != nil && f.Type.Type == entfield.TypeString:
+					if detailsField != "" {
+						return fmt.Errorf("%w: %s.%s and %s.%s", ErrMentionSourceConflict, node.Name, detailsField, node.Name, storage)
+					}
+
+					detailsField = storage
+				default:
+					return fmt.Errorf("%w: %s.%s", ErrMentionSourceType, node.Name, storage)
 				}
 			}
 
-			data.Schemas[index].MentionSpec = &entry
+			if _, ok := f.Annotations[entx.ApprovalStatusAnnotationName]; ok {
+				if statusField != "" {
+					return fmt.Errorf("%w: %s.%s and %s.%s", ErrApprovalFieldConflict, node.Name, statusField, node.Name, storage)
+				}
+
+				if f.Type == nil || f.Type.Type != entfield.TypeEnum {
+					return fmt.Errorf("%w: %s.%s", ErrApprovalFieldType, node.Name, storage)
+				}
+
+				statusField = storage
+			}
+
+			if _, ok := f.Annotations[entx.ApprovalApproverAnnotationName]; ok {
+				if approverField != "" {
+					return fmt.Errorf("%w: %s.%s and %s.%s", ErrApprovalFieldConflict, node.Name, approverField, node.Name, storage)
+				}
+
+				if f.Type == nil || f.Type.Type != entfield.TypeString {
+					return fmt.Errorf("%w: %s.%s", ErrApprovalFieldType, node.Name, storage)
+				}
+
+				approverField = storage
+			}
+		}
+
+		if displayField != "" {
+			for i := range data.Schemas[index].ObjectFields {
+				if data.Schemas[index].ObjectFields[i].Snake == displayField {
+					data.Schemas[index].ObjectFields[i].DisplayKey = true
+					break
+				}
+			}
+		}
+
+		if detailsField != "" || detailsJSONField != "" {
+			if !data.Schemas[index].OrgOwned {
+				return fmt.Errorf("%w: %s", ErrMentionOrgOwnedRequired, node.Name)
+			}
+
+			data.Schemas[index].MentionSpec = &MentionSpecEntry{
+				NameField:        displayField,
+				DetailsField:     detailsField,
+				DetailsJSONField: detailsJSONField,
+				OwnerField:       "owner_id",
+			}
+		}
+
+		if (statusField != "") != (approverField != "") {
+			return fmt.Errorf("%w: %s", ErrApprovalSpecIncomplete, node.Name)
+		}
+
+		if statusField != "" && approverField != "" {
+			if !data.Schemas[index].OrgOwned {
+				return fmt.Errorf("%w: %s", ErrApprovalOrgOwnedRequired, node.Name)
+			}
+
+			data.Schemas[index].ApprovalSpec = &ApprovalSpecEntry{
+				StatusField:   statusField,
+				ApproverField: approverField,
+			}
 		}
 	}
 
 	return nil
-}
-
-// nodeHasField reports whether the graph node declares a field with the given storage name
-func nodeHasField(node *gen.Type, name string) bool {
-	for _, f := range node.Fields {
-		if f.Name == name || f.StorageKey() == name {
-			return true
-		}
-	}
-
-	return false
 }
 
 // generateEntityFiles renders all templates and writes them to the output directory
@@ -652,6 +714,7 @@ func generateEntityFiles(outputDir string, data EntityData) error {
 		{name: "entity_changeset", filename: "entity_changeset.go", tmplFile: "templates/entity_changeset.tpl"},
 		{name: "entity_mutation_events", filename: "entity_mutation_events.go", tmplFile: "templates/entity_mutation_events.tpl"},
 		{name: "entity_listener", filename: "entity_listener.go", tmplFile: "templates/entity_listener.tpl"},
+		{name: "entity_notification", filename: "entity_notification.go", tmplFile: "templates/entity_notification.tpl"},
 	}
 
 	for _, filename := range []string{"entity_handlers.go"} {

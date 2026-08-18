@@ -51,6 +51,9 @@ type MutationListener struct {
 	Caller func(*auth.Caller, MutationPayload) *auth.Caller
 	// ContextKeys are applied to the context in order before the handler runs
 	ContextKeys []func(context.Context) context.Context
+	// Notify declares a declarative notification emitted when the gates pass; exactly one of
+	// Handle and Notify must be set
+	Notify *NotifySpec
 	// Handle is invoked with the standard invocation bundle and the mutation payload
 	Handle func(Invocation, MutationPayload) error
 }
@@ -96,8 +99,19 @@ func (listener MutationListener) Attach(g *gala.Gala) (gala.ListenerID, error) {
 
 // validate resolves every declared field against the listener's canonical schema at startup.
 func (listener MutationListener) validate() error {
-	if listener.Schema == nil || listener.Handle == nil {
+	if listener.Schema == nil {
 		return ErrMutationListenerInvalid
+	}
+
+	if (listener.Handle == nil) == (listener.Notify == nil) {
+		return ErrMutationListenerInvalid
+	}
+
+	if listener.Notify != nil {
+		spec := listener.Notify
+		if spec.Recipients == nil || spec.Content.Type == "" || spec.Content.Topic == "" || spec.Content.TitleTemplate == "" || spec.Content.BodyTemplate == "" {
+			return fmt.Errorf("%w: %s", ErrNotifySpecInvalid, listener.Name())
+		}
 	}
 
 	for _, name := range listener.Fields {
@@ -127,6 +141,10 @@ func (listener MutationListener) concern() MutationConcern {
 // Definition compiles the listener into the standard gala definition, so mutation
 // listeners register through gala.Register like every other listener
 func (listener MutationListener) Definition() gala.Definition[MutationPayload] {
+	if listener.Notify != nil {
+		listener.Handle = notifyHandler(listener)
+	}
+
 	operations := listener.Operations
 	if len(operations) == 0 {
 		operations = RegularMutationOps

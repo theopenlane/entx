@@ -26,10 +26,14 @@ type Config struct {
 	CelxPackage string
 	// MapxPackage is the mapx package import path for map clone/merge helpers
 	MapxPackage string
+	// EnumsPackage is the enums package import path for notification content types
+	EnumsPackage string
 	// EnumsOutputDir is the directory for the generated WorkflowObjectType enum; empty skips enum generation
 	EnumsOutputDir string
 	// EnumsPackageName is the Go package name for the generated enum file
 	EnumsPackageName string
+	// SlateparserPackage is the slateparser package import path for mention scanning
+	SlateparserPackage string
 }
 
 // Extension implements entc.Extension for entity operations generation
@@ -109,6 +113,13 @@ func WithMapxPackage(path string) ExtensionOption {
 	}
 }
 
+// WithEnumsPackage sets the enums package import path for notification content types
+func WithEnumsPackage(path string) ExtensionOption {
+	return func(c *Config) {
+		c.EnumsPackage = path
+	}
+}
+
 // WithEnumsOutputDir sets the directory for the generated WorkflowObjectType enum
 func WithEnumsOutputDir(dir string) ExtensionOption {
 	return func(c *Config) {
@@ -120,6 +131,13 @@ func WithEnumsOutputDir(dir string) ExtensionOption {
 func WithEnumsPackageName(name string) ExtensionOption {
 	return func(c *Config) {
 		c.EnumsPackageName = name
+	}
+}
+
+// WithSlateparserPackage sets the slateparser package import path for mention scanning
+func WithSlateparserPackage(path string) ExtensionOption {
+	return func(c *Config) {
+		c.SlateparserPackage = path
 	}
 }
 

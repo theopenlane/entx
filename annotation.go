@@ -71,8 +71,17 @@ var SystemOwnedSchemaName = "OPENLANE_SYSTEM_OWNED_SCHEMA"
 // ConsoleRouteAnnotationName is the annotation name for console routes on schemas
 var ConsoleRouteAnnotationName = "OPENLANE_CONSOLE_ROUTE"
 
-// MentionableAnnotationName is the annotation name for mention-scannable schemas
-var MentionableAnnotationName = "OPENLANE_MENTIONABLE"
+// DisplayNameAnnotationName is the annotation name for a schema's display-name field
+var DisplayNameAnnotationName = "OPENLANE_DISPLAY_NAME"
+
+// MentionSourceAnnotationName is the annotation name for mention-scanned rich-text fields
+var MentionSourceAnnotationName = "OPENLANE_MENTION_SOURCE"
+
+// ApprovalStatusAnnotationName is the annotation name for a schema's approval-status field
+var ApprovalStatusAnnotationName = "OPENLANE_APPROVAL_STATUS"
+
+// ApprovalApproverAnnotationName is the annotation name for a schema's approval-approver field
+var ApprovalApproverAnnotationName = "OPENLANE_APPROVAL_APPROVER"
 
 // CascadeAnnotation is an annotation used to indicate that an edge should be cascaded
 type CascadeAnnotation struct {
@@ -218,19 +227,20 @@ type ConsoleRouteAnnotation struct {
 	Suffix string
 }
 
-// MentionableAnnotation marks a schema's rich-text fields for mention scanning. Empty
-// fields default to name, details, details_json, and owner_id; generation fails when a
-// resolved field does not exist on the schema
-type MentionableAnnotation struct {
-	// NameField is the display-name field used in mention notification content
-	NameField string
-	// DetailsField is the plain-text rich-text field scanned for mentions
-	DetailsField string
-	// DetailsJSONField is the JSON rich-text field scanned for mentions
-	DetailsJSONField string
-	// OwnerField is the owning-organization field on the schema
-	OwnerField string
-}
+// DisplayNameAnnotation marks the single field carrying a schema's display name; at most
+// one field per schema may carry it
+type DisplayNameAnnotation struct{}
+
+// MentionSourceAnnotation marks a rich-text field scanned for mentions; the generator
+// classifies the field by its ent type: JSON fields carry the slate document and string
+// fields carry the plain-text fallback
+type MentionSourceAnnotation struct{}
+
+// ApprovalStatusAnnotation marks the enum field carrying a schema's approval status
+type ApprovalStatusAnnotation struct{}
+
+// ApprovalApproverAnnotation marks the group-id field resolving a schema's approvers
+type ApprovalApproverAnnotation struct{}
 
 // FGACrudAnnotation marks the crud operations that are allowed for the schema to generate crud tuples
 // If this annotation is not added, it uses the default based on annotations and policies on the schema
@@ -320,9 +330,24 @@ func (a ConsoleRouteAnnotation) Name() string {
 	return ConsoleRouteAnnotationName
 }
 
-// Name returns the name of the MentionableAnnotation
-func (a MentionableAnnotation) Name() string {
-	return MentionableAnnotationName
+// Name returns the name of the DisplayNameAnnotation
+func (a DisplayNameAnnotation) Name() string {
+	return DisplayNameAnnotationName
+}
+
+// Name returns the name of the MentionSourceAnnotation
+func (a MentionSourceAnnotation) Name() string {
+	return MentionSourceAnnotationName
+}
+
+// Name returns the name of the ApprovalStatusAnnotation
+func (a ApprovalStatusAnnotation) Name() string {
+	return ApprovalStatusAnnotationName
+}
+
+// Name returns the name of the ApprovalApproverAnnotation
+func (a ApprovalApproverAnnotation) Name() string {
+	return ApprovalApproverAnnotationName
 }
 
 // Name returns the name of the FGACrudAnnotation
@@ -420,31 +445,24 @@ func ConsoleRoute(opts ...ConsoleRouteOption) ConsoleRouteAnnotation {
 	return ann
 }
 
-// MentionableOption configures a MentionableAnnotation deviation from the default field names
-type MentionableOption func(*MentionableAnnotation)
-
-// WithMentionDetailsField overrides the plain-text rich-text field scanned for mentions
-func WithMentionDetailsField(field string) MentionableOption {
-	return func(a *MentionableAnnotation) {
-		a.DetailsField = field
-	}
+// DisplayName marks a field as the schema's display-name field
+func DisplayName() DisplayNameAnnotation {
+	return DisplayNameAnnotation{}
 }
 
-// WithMentionDetailsJSONField overrides the JSON rich-text field scanned for mentions
-func WithMentionDetailsJSONField(field string) MentionableOption {
-	return func(a *MentionableAnnotation) {
-		a.DetailsJSONField = field
-	}
+// MentionSource marks a rich-text field for mention scanning
+func MentionSource() MentionSourceAnnotation {
+	return MentionSourceAnnotation{}
 }
 
-// Mentionable marks a schema for mention scanning; with no options the default field names apply
-func Mentionable(opts ...MentionableOption) MentionableAnnotation {
-	ann := MentionableAnnotation{}
-	for _, opt := range opts {
-		opt(&ann)
-	}
+// ApprovalStatus marks the enum field carrying a schema's approval status
+func ApprovalStatus() ApprovalStatusAnnotation {
+	return ApprovalStatusAnnotation{}
+}
 
-	return ann
+// ApprovalApprover marks the group-id field resolving a schema's approvers
+func ApprovalApprover() ApprovalApproverAnnotation {
+	return ApprovalApproverAnnotation{}
 }
 
 // QueryGenSkip sets whether the query generation should be skipped for this type
@@ -705,11 +723,6 @@ func (a *FileCategoryAnnotation) Decode(annotation any) error {
 
 // Decode unmarshals the ConsoleRouteAnnotation
 func (a *ConsoleRouteAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation(annotation, a)
-}
-
-// Decode unmarshals the MentionableAnnotation
-func (a *MentionableAnnotation) Decode(annotation any) error {
 	return DecodeAnnotation(annotation, a)
 }
 
