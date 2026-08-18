@@ -544,8 +544,8 @@ func markLinkTargets(data *EntityData) {
 	}
 }
 
-// collectSchemaMetadata gathers annotation-declared console-route, display, and mention metadata.
-// Catalog membership never implies that an entity is console-routable.
+// collectSchemaMetadata gathers annotation-declared console-route, display, mention, and
+// approval metadata. Catalog membership never implies that an entity is console-routable.
 func collectSchemaMetadata(g *gen.Graph, data *EntityData) error {
 	schemaIndexes := make(map[string]int, len(data.Schemas))
 	for i := range data.Schemas {
@@ -564,125 +564,162 @@ func collectSchemaMetadata(g *gen.Graph, data *EntityData) error {
 			continue
 		}
 
-		routeAnn, hasRouteAnn := (*entx.ConsoleRouteAnnotation)(nil), false
-
-		if raw, ok := node.Annotations[entx.ConsoleRouteAnnotationName]; ok {
-			routeAnn = &entx.ConsoleRouteAnnotation{}
-			if err := routeAnn.Decode(raw); err != nil {
-				return fmt.Errorf("decode console route annotation on %s: %w", node.Name, err)
-			}
-
-			if routeAnn.IDParam != "" && routeAnn.Suffix != "" {
-				return fmt.Errorf("%w: %s", ErrInvalidConsoleRoute, node.Name)
-			}
-
-			hasRouteAnn = true
+		if err := collectConsoleRoute(node, &data.Schemas[index]); err != nil {
+			return err
 		}
 
-		if hasRouteAnn {
-			entry := ConsoleRouteEntry{Base: node.Table()}
-			entry.Base = cmp.Or(routeAnn.Base, entry.Base)
-			entry.IDParam = routeAnn.IDParam
-			entry.Suffix = routeAnn.Suffix
-			data.Schemas[index].ConsoleRoute = &entry
+		markers, err := collectFieldMarkers(node)
+		if err != nil {
+			return err
 		}
 
-		displayField := ""
-		detailsField := ""
-		detailsJSONField := ""
-		statusField := ""
-		approverField := ""
+		if err := applyFieldMarkers(&data.Schemas[index], node.Name, markers); err != nil {
+			return err
+		}
+	}
 
-		for _, f := range node.Fields {
-			storage := f.StorageKey()
+	return nil
+}
 
-			if _, ok := f.Annotations[entx.DisplayNameAnnotationName]; ok {
-				if displayField != "" {
-					return fmt.Errorf("%w: %s.%s and %s.%s", ErrDisplayNameConflict, node.Name, displayField, node.Name, storage)
-				}
+// collectConsoleRoute decodes and validates a node's console-route annotation onto its schema
+func collectConsoleRoute(node *gen.Type, schema *EntitySchema) error {
+	raw, ok := node.Annotations[entx.ConsoleRouteAnnotationName]
+	if !ok {
+		return nil
+	}
 
-				displayField = storage
+	routeAnn := &entx.ConsoleRouteAnnotation{}
+	if err := routeAnn.Decode(raw); err != nil {
+		return fmt.Errorf("decode console route annotation on %s: %w", node.Name, err)
+	}
+
+	if routeAnn.IDParam != "" && routeAnn.Suffix != "" {
+		return fmt.Errorf("%w: %s", ErrInvalidConsoleRoute, node.Name)
+	}
+
+	schema.ConsoleRoute = &ConsoleRouteEntry{
+		Base:    cmp.Or(routeAnn.Base, node.Table()),
+		IDParam: routeAnn.IDParam,
+		Suffix:  routeAnn.Suffix,
+	}
+
+	return nil
+}
+
+// schemaFieldMarkers holds the storage names resolved from a node's field-marker annotations
+type schemaFieldMarkers struct {
+	// display is the field carrying the schema's display name
+	display string
+	// details is the plain-text mention source field
+	details string
+	// detailsJSON is the JSON mention source field
+	detailsJSON string
+	// status is the approval status enum field
+	status string
+	// approver is the approval approver group field
+	approver string
+}
+
+// collectFieldMarkers scans a node's fields for display, mention, and approval markers,
+// rejecting duplicate markers and wrongly typed fields
+func collectFieldMarkers(node *gen.Type) (schemaFieldMarkers, error) {
+	markers := schemaFieldMarkers{}
+
+	for _, f := range node.Fields {
+		storage := f.StorageKey()
+
+		if _, ok := f.Annotations[entx.DisplayNameAnnotationName]; ok {
+			if markers.display != "" {
+				return markers, fmt.Errorf("%w: %s.%s and %s.%s", ErrDisplayNameConflict, node.Name, markers.display, node.Name, storage)
 			}
 
-			if _, ok := f.Annotations[entx.MentionSourceAnnotationName]; ok {
-				switch {
-				case f.Type != nil && f.Type.Type == entfield.TypeJSON:
-					if detailsJSONField != "" {
-						return fmt.Errorf("%w: %s.%s and %s.%s", ErrMentionSourceConflict, node.Name, detailsJSONField, node.Name, storage)
-					}
-
-					detailsJSONField = storage
-				case f.Type != nil && f.Type.Type == entfield.TypeString:
-					if detailsField != "" {
-						return fmt.Errorf("%w: %s.%s and %s.%s", ErrMentionSourceConflict, node.Name, detailsField, node.Name, storage)
-					}
-
-					detailsField = storage
-				default:
-					return fmt.Errorf("%w: %s.%s", ErrMentionSourceType, node.Name, storage)
-				}
-			}
-
-			if _, ok := f.Annotations[entx.ApprovalStatusAnnotationName]; ok {
-				if statusField != "" {
-					return fmt.Errorf("%w: %s.%s and %s.%s", ErrApprovalFieldConflict, node.Name, statusField, node.Name, storage)
-				}
-
-				if f.Type == nil || f.Type.Type != entfield.TypeEnum {
-					return fmt.Errorf("%w: %s.%s", ErrApprovalFieldType, node.Name, storage)
-				}
-
-				statusField = storage
-			}
-
-			if _, ok := f.Annotations[entx.ApprovalApproverAnnotationName]; ok {
-				if approverField != "" {
-					return fmt.Errorf("%w: %s.%s and %s.%s", ErrApprovalFieldConflict, node.Name, approverField, node.Name, storage)
-				}
-
-				if f.Type == nil || f.Type.Type != entfield.TypeString {
-					return fmt.Errorf("%w: %s.%s", ErrApprovalFieldType, node.Name, storage)
-				}
-
-				approverField = storage
-			}
+			markers.display = storage
 		}
 
-		if displayField != "" {
-			for i := range data.Schemas[index].ObjectFields {
-				if data.Schemas[index].ObjectFields[i].Snake == displayField {
-					data.Schemas[index].ObjectFields[i].DisplayKey = true
-					break
+		if _, ok := f.Annotations[entx.MentionSourceAnnotationName]; ok {
+			switch {
+			case f.Type != nil && f.Type.Type == entfield.TypeJSON:
+				if markers.detailsJSON != "" {
+					return markers, fmt.Errorf("%w: %s.%s and %s.%s", ErrMentionSourceConflict, node.Name, markers.detailsJSON, node.Name, storage)
 				}
-			}
-		}
 
-		if detailsField != "" || detailsJSONField != "" {
-			if !data.Schemas[index].OrgOwned {
-				return fmt.Errorf("%w: %s", ErrMentionOrgOwnedRequired, node.Name)
-			}
+				markers.detailsJSON = storage
+			case f.Type != nil && f.Type.Type == entfield.TypeString:
+				if markers.details != "" {
+					return markers, fmt.Errorf("%w: %s.%s and %s.%s", ErrMentionSourceConflict, node.Name, markers.details, node.Name, storage)
+				}
 
-			data.Schemas[index].MentionSpec = &MentionSpecEntry{
-				NameField:        displayField,
-				DetailsField:     detailsField,
-				DetailsJSONField: detailsJSONField,
-				OwnerField:       "owner_id",
+				markers.details = storage
+			default:
+				return markers, fmt.Errorf("%w: %s.%s", ErrMentionSourceType, node.Name, storage)
 			}
 		}
 
-		if (statusField != "") != (approverField != "") {
-			return fmt.Errorf("%w: %s", ErrApprovalSpecIncomplete, node.Name)
+		if _, ok := f.Annotations[entx.ApprovalStatusAnnotationName]; ok {
+			if markers.status != "" {
+				return markers, fmt.Errorf("%w: %s.%s and %s.%s", ErrApprovalFieldConflict, node.Name, markers.status, node.Name, storage)
+			}
+
+			if f.Type == nil || f.Type.Type != entfield.TypeEnum {
+				return markers, fmt.Errorf("%w: %s.%s", ErrApprovalFieldType, node.Name, storage)
+			}
+
+			markers.status = storage
 		}
 
-		if statusField != "" && approverField != "" {
-			if !data.Schemas[index].OrgOwned {
-				return fmt.Errorf("%w: %s", ErrApprovalOrgOwnedRequired, node.Name)
+		if _, ok := f.Annotations[entx.ApprovalApproverAnnotationName]; ok {
+			if markers.approver != "" {
+				return markers, fmt.Errorf("%w: %s.%s and %s.%s", ErrApprovalFieldConflict, node.Name, markers.approver, node.Name, storage)
 			}
 
-			data.Schemas[index].ApprovalSpec = &ApprovalSpecEntry{
-				StatusField:   statusField,
-				ApproverField: approverField,
+			if f.Type == nil || f.Type.Type != entfield.TypeString {
+				return markers, fmt.Errorf("%w: %s.%s", ErrApprovalFieldType, node.Name, storage)
 			}
+
+			markers.approver = storage
+		}
+	}
+
+	return markers, nil
+}
+
+// applyFieldMarkers folds resolved field markers onto a schema: the display key flag and the
+// mention and approval specs, both gated on org ownership
+func applyFieldMarkers(schema *EntitySchema, name string, markers schemaFieldMarkers) error {
+	if markers.display != "" {
+		for i := range schema.ObjectFields {
+			if schema.ObjectFields[i].Snake == markers.display {
+				schema.ObjectFields[i].DisplayKey = true
+				break
+			}
+		}
+	}
+
+	if markers.details != "" || markers.detailsJSON != "" {
+		if !schema.OrgOwned {
+			return fmt.Errorf("%w: %s", ErrMentionOrgOwnedRequired, name)
+		}
+
+		schema.MentionSpec = &MentionSpecEntry{
+			NameField:        markers.display,
+			DetailsField:     markers.details,
+			DetailsJSONField: markers.detailsJSON,
+			OwnerField:       "owner_id",
+		}
+	}
+
+	if (markers.status != "") != (markers.approver != "") {
+		return fmt.Errorf("%w: %s", ErrApprovalSpecIncomplete, name)
+	}
+
+	if markers.status != "" && markers.approver != "" {
+		if !schema.OrgOwned {
+			return fmt.Errorf("%w: %s", ErrApprovalOrgOwnedRequired, name)
+		}
+
+		schema.ApprovalSpec = &ApprovalSpecEntry{
+			StatusField:   markers.status,
+			ApproverField: markers.approver,
 		}
 	}
 
