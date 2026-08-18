@@ -13,6 +13,13 @@ type MentionSpec struct {
 	OwnerField      string `json:"ownerField"`
 }
 
+// ApprovalSpec describes the approval-flow fields on a schema.
+type ApprovalSpec struct {
+	Schema        string `json:"schema"`
+	StatusField   string `json:"statusField"`
+	ApproverField string `json:"approverField"`
+}
+
 // ConsoleRoute describes how console URLs are built for a schema's objects.
 type ConsoleRoute struct {
 	Base    string `json:"base"`
@@ -58,4 +65,14 @@ func MentionSpecFor(schemaType string) (MentionSpec, bool) {
 	}
 
 	return *schema.MentionSpec, true
+}
+
+// ApprovalSpecFor returns the annotation-declared approval fields for a schema.
+func ApprovalSpecFor(schemaType string) (ApprovalSpec, bool) {
+	schema, ok := LookupSchema(schemaType)
+	if !ok || schema.ApprovalSpec == nil {
+		return ApprovalSpec{}, false
+	}
+
+	return *schema.ApprovalSpec, true
 }

@@ -107,6 +107,8 @@ type Schema struct {
 	ConsoleRoute *ConsoleRoute
 	// MentionSpec is present only when the schema explicitly declares mention scanning
 	MentionSpec *MentionSpec
+	// ApprovalSpec is present only when the schema explicitly declares approval fields
+	ApprovalSpec *ApprovalSpec
 }
 
 // BindIngest binds typed persistence to a generated schema capability. Topic, registration,
@@ -700,6 +702,11 @@ func (s *Schema) rekeyEdgesForUpdate(payload json.RawMessage) json.RawMessage {
 	})
 }
 
+// FieldValue returns the trimmed string value of one field from a marshaled entity row
+func FieldValue(row json.RawMessage, field string) string {
+	return lookupValue(row, field)
+}
+
 // lookupValue extracts the string value of one create-input key from the payload
 func lookupValue(payload json.RawMessage, key string) string {
 	value, _ := jsonx.DecodeObjectKey[string](payload, key)
@@ -737,6 +744,9 @@ var (
 {{- end }}
 {{- if .MentionSpec }}
 		MentionSpec: &MentionSpec{Schema: "{{ .Name }}", NameField: "{{ .MentionSpec.NameField }}", DetailsField: "{{ .MentionSpec.DetailsField }}", DetailsJSONField: "{{ .MentionSpec.DetailsJSONField }}", OwnerField: "{{ .MentionSpec.OwnerField }}"},
+{{- end }}
+{{- if .ApprovalSpec }}
+		ApprovalSpec: &ApprovalSpec{Schema: "{{ .Name }}", StatusField: "{{ .ApprovalSpec.StatusField }}", ApproverField: "{{ .ApprovalSpec.ApproverField }}"},
 {{- end }}
 {{- if and .HasCreate .IntegrationMapped }}
 		Create: func(ctx context.Context, client *generated.Client, input json.RawMessage) (string, error) {
