@@ -85,51 +85,6 @@ func TestExtractUpdatedByValueType(t *testing.T) {
 	}
 }
 
-func TestFieldPropertiesNillable(t *testing.T) {
-	tests := []struct {
-		name   string
-		config Config
-		want   bool
-	}{
-		{
-			name: "nillable true",
-			config: Config{
-				FieldProperties: &FieldProperties{
-					Nillable: true,
-				},
-			},
-			want: true,
-		},
-		{
-			name: "nillable false",
-			config: Config{
-				FieldProperties: &FieldProperties{
-					Nillable: false,
-				},
-			},
-			want: false,
-		},
-		{
-			name: "not set",
-			config: Config{
-				FieldProperties: &FieldProperties{},
-			},
-			want: false,
-		},
-		{
-			name:   "nil config",
-			config: Config{},
-			want:   false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := fieldPropertiesNillable(tt.config)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 func TestIsSlice(t *testing.T) {
 	tests := []struct {
 		name       string

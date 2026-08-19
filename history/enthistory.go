@@ -20,14 +20,6 @@ type UpdatedBy struct {
 	Nillable bool
 }
 
-// FieldProperties is a struct that holds the properties for the fields in the history schema
-type FieldProperties struct {
-	// Nillable indicates if the fields should be nillable
-	Nillable bool
-	// Immutable indicates if the fields should be immutable (not allowed to be updated)
-	Immutable bool
-}
-
 // Config is the configuration for the history extension
 type Config struct {
 	// IncludeUpdatedBy optionally adds an updated_by field to the history schema
@@ -50,8 +42,6 @@ type Config struct {
 	Query bool
 	// Skipper is an optional function name to use as a skipper for history tracking
 	Skipper string
-	// FieldProperties holds the properties for the fields in the history schema
-	FieldProperties *FieldProperties
 	// HistoryTimeIndex tells the extension to add an index to the history_time field
 	HistoryTimeIndex bool
 	// Auth includes the authz policy settings
@@ -90,7 +80,6 @@ func New(opts ...ExtensionOption) *Extension {
 			OutputSchemaPath: defaultSchemaPath,
 			Auditing:         false,
 			PackageName:      defaultPackageName,
-			FieldProperties:  &FieldProperties{},
 		},
 	}
 
@@ -166,25 +155,10 @@ func WithHistoryTimeIndex() ExtensionOption {
 	}
 }
 
-// WithImmutableFields allows you to set all tracked fields in history to Immutable
-func WithImmutableFields() ExtensionOption {
-	return func(h *Extension) {
-		h.config.FieldProperties.Immutable = true
-	}
-}
-
 // WithPackageName allows you to set an alternative package name for the history schema
 func WithPackageName(packageName string) ExtensionOption {
 	return func(h *Extension) {
 		h.config.PackageName = packageName
-	}
-}
-
-// WithNillableFields allows you to set all tracked fields in history to Nillable
-// except enthistory managed fields (history_time, ref, operation, updated_by, & deleted_by)
-func WithNillableFields() ExtensionOption {
-	return func(h *Extension) {
-		h.config.FieldProperties.Nillable = true
 	}
 }
 
