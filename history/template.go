@@ -44,11 +44,6 @@ func extractUpdatedByValueType(val any) string {
 	}
 }
 
-// fieldPropertiesNillable checks the config properties for the Nillable setting
-func fieldPropertiesNillable(config Config) bool {
-	return config.FieldProperties != nil && config.FieldProperties.Nillable
-}
-
 // isSlice checks if the string value of the type is prefixed with []
 func isSlice(typeString string) bool {
 	return strings.HasPrefix(typeString, "[]")
@@ -71,7 +66,6 @@ func parseTemplate(name, path string) *gen.Template {
 	t.Funcs(template.FuncMap{
 		"extractUpdatedByKey":       extractUpdatedByKey,
 		"extractUpdatedByValueType": extractUpdatedByValueType,
-		"fieldPropertiesNillable":   fieldPropertiesNillable,
 		"isSlice":                   isSlice,
 		"in":                        in,
 	})

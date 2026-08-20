@@ -187,18 +187,12 @@ the older history, the newer history, and the changes to fields when comparing t
 
 history provides several configuration options to customize its behavior.
 
-### Setting All Tracked Fields as Nillable and/or Immutable
+### Immutable Tracked Fields
 
-By default, history does not modify the columns in the history tables that are being tracked from your original
-tables; it simply copies their state from ent when loading them.
-
-However, you may want to set all tracked fields in the history tables as either `Nillable` or `Immutable` for various
-reasons. You can use the `history.WithNillableFields()` option to set them all as `Nillable`,
-or `history.WithImmutableFields()` to set them all as `Immutable`.
-
-**Note:** Setting `history.WithNillableFields()` will remove the ability to call the `Restore()` function on a
-history object. Setting all fields to `Nillable` causes the history tables to diverge from the original tables, and the
-unpredictability of that means the `Restore()` function cannot be generated.
+History rows are insert only: they are written once by the mutation hook and never updated. Every
+tracked field copied from your original table is therefore generated as `Immutable`, and any
+`UpdateDefault` on a copied field is cleared so a snapshot column keeps the value it was written
+with. This removes the update builders for the history types entirely.
 
 ### History Time Indexing
 
