@@ -11,7 +11,7 @@ require (
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/rs/zerolog v1.35.1
 	github.com/stoewer/go-strcase v1.3.1
-	github.com/stretchr/testify v1.12.0
+	github.com/stretchr/testify v1.12.1
 	github.com/theopenlane/iam v0.37.0
 	github.com/theopenlane/oscalot v0.1.0
 	github.com/theopenlane/utils v0.7.1
@@ -25,6 +25,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/labstack/echo/v5 v5.3.1 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 )
 
 require (
