@@ -1,5 +1,5 @@
 // Package jsonx is a minimal JSON helper package standing in for the equivalent
-// core-more package (github.com/theopenlane/core/pkg/jsonx), providing just the surface
+// core-more package (github.com/theopenlane/core/v2/pkg/jsonx), providing just the surface
 // entityops-generated code calls
 package jsonx
 

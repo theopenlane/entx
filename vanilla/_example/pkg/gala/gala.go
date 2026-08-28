@@ -1,5 +1,5 @@
 // Package gala is a minimal in-memory pub/sub helper standing in for the equivalent core-more
-// package (github.com/theopenlane/core/pkg/gala), providing just the surface entityops-generated
+// package (github.com/theopenlane/core/v2/pkg/gala), providing just the surface entityops-generated
 // code calls: typed topics, listener registration, and synchronous emit dispatch
 package gala
 
