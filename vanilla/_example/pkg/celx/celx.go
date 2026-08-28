@@ -1,5 +1,5 @@
 // Package celx is a minimal CEL evaluation helper standing in for the equivalent core-more
-// package (github.com/theopenlane/core/pkg/celx), providing just the surface entityops-generated
+// package (github.com/theopenlane/core/v2/pkg/celx), providing just the surface entityops-generated
 // code calls: a boolean CEL evaluator bound to a native Go struct type via json tags
 package celx
 

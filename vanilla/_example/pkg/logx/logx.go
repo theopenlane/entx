@@ -1,5 +1,5 @@
 // Package logx is a minimal logging helper package standing in for the equivalent
-// core-more package (github.com/theopenlane/core/pkg/logx), providing just the surface
+// core-more package (github.com/theopenlane/core/v2/pkg/logx), providing just the surface
 // entityops-generated code calls
 package logx
 
