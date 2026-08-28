@@ -2,25 +2,6 @@
 
 package entityops
 
-import "time"
-
-// OrganizationProjection is the flat, CEL- and jsonschema-facing view of a Organization: its
-// readable scalar fields (id, columns, foreign-key ids) with snake_case json tags matching the field
-// names used in expressions. It deliberately omits edges so it registers as a CEL native type, unlike
-// the full generated.Organization whose edge graph cannot be reflected
-type OrganizationProjection struct {
-	// ID is the entity identifier, exposed to expressions as "id"
-	ID          string                 `json:"id,omitempty"`
-	CreatedAt   time.Time              `json:"created_at,omitempty"`
-	CreatedBy   string                 `json:"created_by,omitempty"`
-	Description string                 `json:"description,omitempty"`
-	DisplayID   string                 `json:"display_id,omitempty"`
-	Name        string                 `json:"name,omitempty"`
-	Preferences map[string]interface{} `json:"preferences,omitempty"`
-	UpdatedAt   time.Time              `json:"updated_at,omitempty"`
-	UpdatedBy   string                 `json:"updated_by,omitempty"`
-}
-
 // WorkflowInstanceProjection is the flat, CEL- and jsonschema-facing view of a WorkflowInstance: its
 // readable scalar fields (id, columns, foreign-key ids) with snake_case json tags matching the field
 // names used in expressions. It deliberately omits edges so it registers as a CEL native type, unlike
