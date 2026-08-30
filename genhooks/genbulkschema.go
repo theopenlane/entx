@@ -271,6 +271,14 @@ type {{ .Name }}BulkUpdatePayload {
     IDs of the updated {{ .Name | ToLowerCamel }}s
     """
     updatedIDs: [ID!]
+    """
+    IDs that were not updated
+    """
+    notUpdatedIDs: [ID!]!
+    """
+    Error message when the bulk update did not apply to every requested ID
+    """
+    error: String
 }
 `
 
