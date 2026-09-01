@@ -9,6 +9,8 @@ import (
 
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 	"entgo.io/ent/schema/mixin"
@@ -35,6 +37,8 @@ type IDMixin struct {
 	OverrideDisplayID string
 	// DisplayIDLength is the length of the display ID without the prefix, defaults to 6
 	DisplayIDLength int
+	// DisplayIDIndexWhere, when set, makes the default display ID unique index partial with the given predicate
+	DisplayIDIndexWhere string
 }
 
 const humanIDFieldName = "display_id"
@@ -103,8 +107,14 @@ func (i IDMixin) Indexes() []ent.Index {
 			idxField = i.OverrideDefaultIndex
 		}
 
-		idx = append(idx, index.Fields(humanIDFieldName, idxField).
-			Unique())
+		displayIdx := index.Fields(humanIDFieldName, idxField).
+			Unique()
+
+		if i.DisplayIDIndexWhere != "" {
+			displayIdx = displayIdx.Annotations(entsql.IndexWhere(i.DisplayIDIndexWhere))
+		}
+
+		idx = append(idx, displayIdx)
 	}
 
 	return idx
@@ -122,32 +132,71 @@ func (i IDMixin) Hooks() []ent.Hook {
 
 type HookFunc func(i IDMixin) ent.Hook
 
+const (
+	// defaultDisplayIDLength is the display ID length used when the mixin does not set one
+	defaultDisplayIDLength = 6
+	// maxDisplayIDAttempts bounds display ID regeneration retries on unique-constraint collisions
+	maxDisplayIDAttempts = 3
+)
+
 var setIdentifierHook HookFunc = func(i IDMixin) ent.Hook {
 	return func(next ent.Mutator) ent.Mutator {
 		return ent.MutateFunc(func(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+			if !m.Op().Is(ent.OpCreate) {
+				return next.Mutate(ctx, m)
+			}
+
 			mut, ok := m.(mutationWithDisplayID)
-			if ok {
-				if id, exists := mut.ID(); exists {
-					// default the length to 6 if not set
-					length := 6
-					if i.DisplayIDLength > 0 {
-						length = i.DisplayIDLength
-					}
+			if !ok {
+				return next.Mutate(ctx, m)
+			}
 
-					out := generateShortCharID(id, length)
+			id, exists := mut.ID()
+			if !exists {
+				return next.Mutate(ctx, m)
+			}
 
-					mut.SetDisplayID(fmt.Sprintf("%s-%s", i.HumanIdentifierPrefix, out))
+			length := defaultDisplayIDLength
+			if i.DisplayIDLength > 0 {
+				length = i.DisplayIDLength
+			}
+
+			var (
+				v   ent.Value
+				err error
+			)
+
+			for attempt := range maxDisplayIDAttempts {
+				mut.SetDisplayID(fmt.Sprintf("%s-%s", i.HumanIdentifierPrefix, generateShortCharID(saltForAttempt(id, attempt), length)))
+
+				v, err = next.Mutate(ctx, m)
+				if err == nil || !isDisplayIDConflict(err) {
+					return v, err
 				}
 			}
 
-			return next.Mutate(ctx, m)
+			return v, err
 		})
 	}
 }
 
+// saltForAttempt returns the hash input for a display ID generation attempt
+func saltForAttempt(id string, attempt int) string {
+	if attempt == 0 {
+		return id
+	}
+
+	return fmt.Sprintf("%s#%d", id, attempt)
+}
+
+// isDisplayIDConflict reports whether err is a unique-constraint violation on the display ID column
+func isDisplayIDConflict(err error) bool {
+	return sqlgraph.IsUniqueConstraintError(err) && strings.Contains(err.Error(), humanIDFieldName)
+}
+
 // generateShortCharID generates a set-length alphanumeric string based on a ULID.
-// Length 6: For up to 10,000 IDs, the collision probability is very low (~0.005%)
-// Length 6: For up to 100,000 IDs, the collision probability is low (~0.5%)
+// Length 6: For up to 10,000 IDs, the collision probability is ~4.6%, reaching ~50% near 40,000 IDs
+// Length 8: For up to 100,000 IDs, the collision probability is ~0.5%
 func generateShortCharID(ulid string, length int) string {
 	// Hash the ULID using SHA256
 	hash := sha256.Sum256([]byte(ulid))
