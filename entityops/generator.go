@@ -156,6 +156,10 @@ type EntityField struct {
 	InputGoField string
 	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
 	LookupKey bool
+	// Sanitizable reports whether ingest preparation pre-validates this mapped field and drops invalid values
+	Sanitizable bool
+	// SliceInput reports whether the field's create-input carrier is a slice rather than a pointer scalar
+	SliceInput bool
 	// DisplayKey reports whether the field is the schema's display-name source
 	DisplayKey bool
 	// Clearable reports whether update inputs support explicitly clearing this field
@@ -338,9 +342,25 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 		entityField.InputKey = im.InputKey
 		entityField.InputGoField = im.InputGoField
 		entityField.LookupKey = im.LookupKey
+		entityField.Sanitizable = ingestSanitizable(field, im)
+		entityField.SliceInput = strings.HasPrefix(fieldType, "[]")
 	}
 
 	return entityField, marker, nil
+}
+
+// ingestSanitizable reports whether ingest preparation pre-validates an optional non-lookup mapped
+// field whose generated validator signature matches a plain string or string-slice carrier
+func ingestSanitizable(field *gen.Field, im integrationFieldMeta) bool {
+	if !field.Optional || field.Validators == 0 || im.LookupKey {
+		return false
+	}
+
+	if field.Type == nil || field.HasGoType() {
+		return false
+	}
+
+	return field.Type.Type == entfield.TypeString || field.Type.String() == "[]string"
 }
 
 // collectEntityData iterates the ent graph and collects every primary schema. Optional
