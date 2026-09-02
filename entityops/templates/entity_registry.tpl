@@ -239,6 +239,12 @@ func (s *Schema) PersistIngest(ctx context.Context, client *generated.Client, in
 	return id, applyThroughEdgeIDs(ctx, client, s, id, throughIDs)
 }
 
+// logSanitizedIngestField records one optional mapped field dropped by ingest preparation because
+// its value failed the schema's field validation
+func logSanitizedIngestField(ctx context.Context, schema, field string, err error) {
+	logx.FromContext(ctx).Warn().Err(err).Str(FieldSchema, schema).Str("field", field).Msg("entityops: dropped invalid optional ingest field")
+}
+
 // handleIngest runs the mandatory consumer-side pipeline for one queued mapped entity.
 func (s *Schema) handleIngest(ctx context.Context, client *generated.Client, resolve IngestIntegrationResolver, request IngestRequest) error {
 	ref := SchemaRef{Schema: s.Snake, Operation: refOpCreate}
@@ -841,6 +847,17 @@ var (
 				if err != nil {
 					return nil, logError(ctx, ref, ErrDecodeFailed, err)
 				}
+{{- range $schema.ObjectFields }}
+{{- if .Sanitizable }}
+
+				if input.{{ .Name }} != nil {
+					if err := {{ $schema.PredicatePackage }}.{{ .Name }}Validator({{ if not .SliceInput }}*{{ end }}input.{{ .Name }}); err != nil {
+						logSanitizedIngestField(ctx, "{{ $schema.Snake }}", "{{ .Snake }}", err)
+						input.{{ .Name }} = nil
+					}
+				}
+{{- end }}
+{{- end }}
 {{- if .RuntimeDefaults }}
 
 				if integration != nil {
