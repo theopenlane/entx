@@ -356,11 +356,15 @@ func ingestSanitizable(field *gen.Field, im integrationFieldMeta) bool {
 		return false
 	}
 
-	if field.Type == nil || field.HasGoType() {
+	if field.Type == nil {
 		return false
 	}
 
-	return field.Type.Type == entfield.TypeString || field.Type.String() == "[]string"
+	if field.Type.String() == "[]string" {
+		return true
+	}
+
+	return field.Type.Type == entfield.TypeString && !field.HasGoType()
 }
 
 // collectEntityData iterates the ent graph and collects every primary schema. Optional
