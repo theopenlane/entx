@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/entc/load"
 	"entgo.io/ent/schema"
+	"github.com/samber/lo"
 )
 
 // DecodableAnnotation is an annotation that can decode itself from a raw value
@@ -40,6 +41,9 @@ var TaskRuleAnnotationName = "OPENLANE_TASK_RULE"
 
 // WebhookPayloadFieldAnnotationName is the annotation name for fields to include in webhook payloads
 var WebhookPayloadFieldAnnotationName = "OPENLANE_WEBHOOK_PAYLOAD_FIELD"
+
+// CaseInsensitiveFieldAnnotationName is the annotation name for case-insensitive ingest change detection
+var CaseInsensitiveFieldAnnotationName = "OPENLANE_CASE_INSENSITIVE_FIELD"
 
 // CSVReferenceAnnotationName is the annotation name for CSV reference field mappings
 var CSVReferenceAnnotationName = "OPENLANE_CSV_REFERENCE"
@@ -171,6 +175,12 @@ type WebhookPayloadFieldAnnotation struct {
 	Include bool
 }
 
+// CaseInsensitiveFieldAnnotation marks a field compared case-insensitively in ingest change detection
+type CaseInsensitiveFieldAnnotation struct {
+	// CaseInsensitive compares the field case-insensitively in ingest change detection
+	CaseInsensitive bool
+}
+
 // CSVReferenceAnnotation is an annotation used to map CSV columns to ID fields via lookups
 // All lookups are automatically scoped to the organization context from the request.
 type CSVReferenceAnnotation struct {
@@ -192,8 +202,10 @@ type IntegrationMappingFieldAnnotation struct {
 	Key string
 	// LookupKey indicates the field participates in stock ingest lookup matching
 	LookupKey bool
-	// FromIntegration indicates the field value is injected from the integration record at ingest time
-	FromIntegration bool
+	// SystemControlled excludes the field from provider mappings
+	SystemControlled bool
+	// Volatile excludes the field from triggering an ingest change
+	Volatile bool
 }
 
 // IntegrationMappingSchemaAnnotation marks a schema as an integration mapping target.
@@ -205,6 +217,10 @@ type IntegrationMappingSchemaAnnotation struct {
 	Include []string
 	// Exclude removes specific ent field names (snake_case) from mapping.
 	Exclude []string
+	// LookupAlternatives declares the ordered composite ingest lookup keys as snake_case field name sets
+	LookupAlternatives [][]string
+	// InstanceScoped treats same-key records from different source instances as distinct rows
+	InstanceScoped bool
 }
 
 // FileCategoryAnnotation marks a schema with a default file category for uploads.
@@ -227,9 +243,18 @@ type ConsoleRouteAnnotation struct {
 	Suffix string
 }
 
+// SnapshotRemovalAnnotationName is the annotation name for a schema's removed_at-style field
+var SnapshotRemovalAnnotationName = "OPENLANE_SNAPSHOT_REMOVAL"
+
 // DisplayNameAnnotation marks the single field carrying a schema's display name; at most
 // one field per schema may carry it
 type DisplayNameAnnotation struct{}
+
+// SnapshotRemovalAnnotation marks the field recording when a record was removed from its source
+type SnapshotRemovalAnnotation struct {
+	// Episodic treats removal as a recurring observation rather than a permanent tombstone
+	Episodic bool
+}
 
 // MentionSourceAnnotation marks a rich-text field scanned for mentions; the generator
 // classifies the field by its ent type: JSON fields carry the slate document and string
@@ -305,6 +330,11 @@ func (a WebhookPayloadFieldAnnotation) Name() string {
 	return WebhookPayloadFieldAnnotationName
 }
 
+// Name returns the name of the CaseInsensitiveFieldAnnotation
+func (a CaseInsensitiveFieldAnnotation) Name() string {
+	return CaseInsensitiveFieldAnnotationName
+}
+
 // Name returns the name of the CSVReferenceAnnotation
 func (a CSVReferenceAnnotation) Name() string {
 	return CSVReferenceAnnotationName
@@ -338,6 +368,11 @@ func (a DisplayNameAnnotation) Name() string {
 // Name returns the name of the MentionSourceAnnotation
 func (a MentionSourceAnnotation) Name() string {
 	return MentionSourceAnnotationName
+}
+
+// Name returns the name of the SnapshotRemovalAnnotation
+func (a SnapshotRemovalAnnotation) Name() string {
+	return SnapshotRemovalAnnotationName
 }
 
 // Name returns the name of the ApprovalStatusAnnotation
@@ -455,6 +490,38 @@ func MentionSource() MentionSourceAnnotation {
 	return MentionSourceAnnotation{}
 }
 
+// SnapshotRemovalBuilder provides a fluent interface for SnapshotRemovalAnnotation
+type SnapshotRemovalBuilder struct {
+	annotation SnapshotRemovalAnnotation
+}
+
+// SnapshotRemoval marks the field recording when a record was removed from its source
+func SnapshotRemoval() *SnapshotRemovalBuilder {
+	return &SnapshotRemovalBuilder{}
+}
+
+// Episodic marks removal as a recurring observation rather than a permanent tombstone
+func (b *SnapshotRemovalBuilder) Episodic() *SnapshotRemovalBuilder {
+	b.annotation.Episodic = true
+
+	return b
+}
+
+// Name returns the annotation name, implementing the ent Annotation interface
+func (b *SnapshotRemovalBuilder) Name() string {
+	return b.annotation.Name()
+}
+
+// MarshalJSON serializes the builder as the underlying SnapshotRemovalAnnotation
+func (b *SnapshotRemovalBuilder) MarshalJSON() ([]byte, error) {
+	return json.Marshal(b.annotation)
+}
+
+// Decode unmarshalls the SnapshotRemovalAnnotation
+func (a *SnapshotRemovalAnnotation) Decode(annotation any) error {
+	return DecodeAnnotation(annotation, a)
+}
+
 // ApprovalStatus marks the enum field carrying a schema's approval status
 func ApprovalStatus() ApprovalStatusAnnotation {
 	return ApprovalStatusAnnotation{}
@@ -518,9 +585,16 @@ func (b *IntegrationMappingFieldBuilder) LookupKey() *IntegrationMappingFieldBui
 	return b
 }
 
-// FromIntegration marks the field as integration-injected during stock ingest preparation
-func (b *IntegrationMappingFieldBuilder) FromIntegration() *IntegrationMappingFieldBuilder {
-	b.annotation.FromIntegration = true
+// SystemControlled excludes the field from provider mappings
+func (b *IntegrationMappingFieldBuilder) SystemControlled() *IntegrationMappingFieldBuilder {
+	b.annotation.SystemControlled = true
+
+	return b
+}
+
+// Volatile excludes the field from triggering an ingest change
+func (b *IntegrationMappingFieldBuilder) Volatile() *IntegrationMappingFieldBuilder {
+	b.annotation.Volatile = true
 
 	return b
 }
@@ -539,6 +613,20 @@ func (b *IntegrationMappingSchemaBuilder) Exclude(fields ...string) *Integration
 	return b
 }
 
+// LookupAlternative appends one ordered composite ingest lookup key of snake_case field names
+func (b *IntegrationMappingSchemaBuilder) LookupAlternative(fields ...string) *IntegrationMappingSchemaBuilder {
+	b.annotation.LookupAlternatives = append(b.annotation.LookupAlternatives, fields)
+
+	return b
+}
+
+// InstanceScoped marks records with the same natural key but a different source instance as distinct rows
+func (b *IntegrationMappingSchemaBuilder) InstanceScoped() *IntegrationMappingSchemaBuilder {
+	b.annotation.InstanceScoped = true
+
+	return b
+}
+
 // Name returns the annotation name, implementing the ent Annotation interface
 func (b *IntegrationMappingFieldBuilder) Name() string {
 	return b.annotation.Name()
@@ -547,6 +635,27 @@ func (b *IntegrationMappingFieldBuilder) Name() string {
 // Name returns the annotation name, implementing the ent Annotation interface
 func (b *IntegrationMappingSchemaBuilder) Name() string {
 	return b.annotation.Name()
+}
+
+// Merge combines a schema-level mapping annotation with the mixed-in one
+func (b *IntegrationMappingSchemaBuilder) Merge(other schema.Annotation) schema.Annotation {
+	override, ok := other.(*IntegrationMappingSchemaBuilder)
+	if !ok {
+		return b
+	}
+
+	merged := IntegrationMappingSchema()
+	merged.annotation.StockPersist = b.annotation.StockPersist || override.annotation.StockPersist
+	merged.annotation.InstanceScoped = b.annotation.InstanceScoped || override.annotation.InstanceScoped
+	merged.annotation.Include = lo.Union(b.annotation.Include, override.annotation.Include)
+	merged.annotation.Exclude = lo.Union(b.annotation.Exclude, override.annotation.Exclude)
+	merged.annotation.LookupAlternatives = b.annotation.LookupAlternatives
+
+	if len(override.annotation.LookupAlternatives) > 0 {
+		merged.annotation.LookupAlternatives = override.annotation.LookupAlternatives
+	}
+
+	return merged
 }
 
 // MarshalJSON serializes the builder as the underlying IntegrationMappingFieldAnnotation
@@ -611,6 +720,13 @@ func SchemaTaskRule(rules ...TaskRuleSpec) *TaskRuleAnnotation {
 func FieldWebhookPayloadField() *WebhookPayloadFieldAnnotation {
 	return &WebhookPayloadFieldAnnotation{
 		Include: true,
+	}
+}
+
+// FieldCaseInsensitive returns a new CaseInsensitiveFieldAnnotation with the flag set
+func FieldCaseInsensitive() *CaseInsensitiveFieldAnnotation {
+	return &CaseInsensitiveFieldAnnotation{
+		CaseInsensitive: true,
 	}
 }
 
@@ -758,6 +874,11 @@ func (a *TaskRuleAnnotation) Decode(annotation any) error {
 
 // Decode unmarshalls the WebhookPayloadFieldAnnotation
 func (a *WebhookPayloadFieldAnnotation) Decode(annotation any) error {
+	return DecodeAnnotation(annotation, a)
+}
+
+// Decode unmarshalls the CaseInsensitiveFieldAnnotation
+func (a *CaseInsensitiveFieldAnnotation) Decode(annotation any) error {
 	return DecodeAnnotation(annotation, a)
 }
 

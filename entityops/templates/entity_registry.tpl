@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -13,9 +14,11 @@ import (
 	"sync"
 	"time"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/samber/lo"
 	"github.com/stoewer/go-strcase"
+	"github.com/theopenlane/utils/contextx"
 
 	"{{ .CelxPackage }}"
 	generated "{{ .EntPackage }}"
@@ -47,6 +50,8 @@ type IngestRequest struct {
 	ThroughEdgeIDs   map[string][]string    `json:"throughEdgeIds,omitempty"`
 	Defaults         map[string]any         `json:"defaults,omitempty"`
 	Links            []LinkSpec             `json:"links,omitempty"`
+	// RunID is the integration run the record belongs to
+	RunID string `json:"runId,omitempty"`
 }
 
 // IngestIntegrationResolver loads the integration referenced by the durable operation context.
@@ -54,16 +59,15 @@ type IngestRequest struct {
 type IngestIntegrationResolver func(context.Context, *generated.Client, gala.OperationContext) (*generated.Integration, error)
 
 // IngestPersist is the type-erased persistence operation bound to a schema at startup.
-type IngestPersist func(context.Context, *generated.Client, *generated.Integration, json.RawMessage) (string, error)
-
-// TypedIngestPersist is the typed persistence operation adapted by BindIngest.
-type TypedIngestPersist[T any] func(context.Context, *generated.Client, *generated.Integration, T) (string, error)
+type IngestPersist func(context.Context, *generated.Client, *generated.Integration, json.RawMessage) (id string, changed bool, managed bool, err error)
 
 // IngestCapability is the schema's single asynchronous ingest control surface.
 type IngestCapability struct {
 	Topic   gala.Topic[IngestRequest]
 	prepare func(context.Context, *generated.Integration, json.RawMessage) (json.RawMessage, error)
 	persist IngestPersist
+	// buildUpdate binds the ingest payload as an update mutation and returns it with its save closure
+	buildUpdate func(context.Context, *generated.Client, json.RawMessage, json.RawMessage) (ent.Mutation, func(context.Context) error, error)
 }
 
 // Schema is the runtime representation of a registered entity schema. It carries the schema
@@ -84,6 +88,28 @@ type Schema struct {
 	// field matches any of the provided values, pushing the predicate into the database; emitted
 	// only for integration-mapped schemas and link-rule targets with match-key columns
 	QueryByKey func(ctx context.Context, client *generated.Client, orgID string, field string, values []string) ([]json.RawMessage, error)
+	// IntegrationFKField is the schema's mutable FK column to Integration, if any
+	IntegrationFKField string
+	// IntegrationM2MEdge is the name of the schema's to-many edge to Integration, if any
+	IntegrationM2MEdge string
+	// IntegrationRunM2MEdge is the name of the schema's to-many edge to IntegrationRun, if any
+	IntegrationRunM2MEdge string
+	// RemovedAtField is the snake_case name of the schema's SnapshotRemoval-annotated field, if any
+	RemovedAtField string
+	// RemovedAtEpisodic reports whether removal is a recurring observation rather than a permanent tombstone
+	RemovedAtEpisodic bool
+	// Lookup lists the schema's composite ingest lookup alternatives in order
+	Lookup []LookupAlternative
+	// InstanceScoped reports whether same-key records from different source instances are distinct rows
+	InstanceScoped bool
+	// QueryByLookup returns rows matching one of the given key tuples for a declared lookup alternative
+	QueryByLookup func(ctx context.Context, client *generated.Client, ownerID string, alternative int, keys []LookupValues) ([]json.RawMessage, error)
+	// SnapshotScope returns the non-removed rows one installation manages for a definition and instance
+	SnapshotScope func(ctx context.Context, client *generated.Client, ownerID, definitionID, instanceID, managedBy string) ([]json.RawMessage, error)
+	// MarkRemoved bulk-marks the given ids removed at the given time under the given integration run
+	MarkRemoved func(ctx context.Context, client *generated.Client, ids []string, at time.Time, runID string) error
+	// FillProvenance fills missing provenance on rows linked to the installation and reports rows written
+	FillProvenance func(ctx context.Context, client *generated.Client, installation *generated.Integration) (int, error)
 	// Load loads a single entity by ID and returns its JSON representation
 	Load func(ctx context.Context, client *generated.Client, entityID string) (json.RawMessage, error)
 	// LoadObject loads the native generated Ent object for consumers that require its interfaces;
@@ -111,31 +137,16 @@ type Schema struct {
 	ApprovalSpec *ApprovalSpec
 }
 
-// BindIngest binds typed persistence to a generated schema capability. Topic, registration,
-// emission, preparation, and delivery remain schema-owned.
-func BindIngest[T any](schema *Schema, persist TypedIngestPersist[T]) error {
-	if schema == nil || schema.Ingest == nil {
-		return ErrIngestUnsupported
-	}
-
-	if persist == nil {
-		return fmt.Errorf("%w: %s bound without a persistence operation", ErrIngestMisconfigured, schema.Name)
-	}
-
-	if schema.Ingest.persist != nil {
-		return fmt.Errorf("%w: %s persistence already bound", ErrIngestMisconfigured, schema.Name)
-	}
-
-	schema.Ingest.persist = func(ctx context.Context, client *generated.Client, integration *generated.Integration, payload json.RawMessage) (string, error) {
-		decoded, err := jsonx.Decode[T](payload)
-		if err != nil {
-			return "", logError(ctx, SchemaRef{Schema: schema.Snake, Operation: refOpCreate}, ErrDecodeFailed, err)
+// defaultIngestPersist returns the stock upsert-backed persistence for an ingest schema
+func defaultIngestPersist(s *Schema) IngestPersist {
+	return func(ctx context.Context, client *generated.Client, integration *generated.Integration, payload json.RawMessage) (string, bool, bool, error) {
+		owner := lookupValue(payload, FieldOwnerID)
+		if owner == "" && integration != nil {
+			owner = integration.OwnerID
 		}
 
-		return persist(ctx, client, integration, decoded)
+		return s.Upsert(ctx, client, owner, payload)
 	}
-
-	return nil
 }
 
 // registerIngest attaches the schema's durable ingest consumer.
@@ -213,30 +224,34 @@ func (s *Schema) EmitIngest(ctx context.Context, runtime *gala.Gala, headers gal
 
 // PersistIngest prepares and persists one mapped record synchronously through the schema's bound
 // persistence, sharing the preparation the durable ingest consumer applies
-func (s *Schema) PersistIngest(ctx context.Context, client *generated.Client, integration *generated.Integration, payload json.RawMessage) (string, error) {
+func (s *Schema) PersistIngest(ctx context.Context, client *generated.Client, integration *generated.Integration, payload json.RawMessage) (id string, changed bool, managed bool, err error) {
 	if s == nil || s.Ingest == nil {
-		return "", ErrIngestUnsupported
+		return "", false, false, ErrIngestUnsupported
 	}
 
 	if s.Ingest.persist == nil {
-		return "", fmt.Errorf("%w: %s persistence not bound", ErrIngestMisconfigured, s.Name)
+		return "", false, false, fmt.Errorf("%w: %s persistence not bound", ErrIngestMisconfigured, s.Name)
 	}
 
 	// the split runs before prepare: prepare round-trips the payload through the typed create
 	// input, which drops through-edge keys the input struct cannot carry
 	payload, throughIDs := splitThroughEdgeIDs(s, payload)
 
-	payload, err := s.Ingest.prepare(ctx, integration, payload)
+	payload, err = s.Ingest.prepare(ctx, integration, payload)
 	if err != nil {
-		return "", err
+		return "", false, false, err
 	}
 
-	id, err := s.Ingest.persist(ctx, client, integration, payload)
+	id, changed, managed, err = s.Ingest.persist(ctx, client, integration, payload)
 	if err != nil {
-		return "", err
+		return id, changed, managed, err
 	}
 
-	return id, applyThroughEdgeIDs(ctx, client, s, id, throughIDs)
+	if !managed {
+		return id, false, false, nil
+	}
+
+	return id, changed, managed, applyThroughEdgeIDs(ctx, client, s, id, throughIDs)
 }
 
 // logSanitizedIngestField records one optional mapped field dropped by ingest preparation because
@@ -259,6 +274,8 @@ func (s *Schema) handleIngest(ctx context.Context, client *generated.Client, res
 	if err != nil {
 		return err
 	}
+
+	payload = StampProvenance(payload, s, integration, request.RunID)
 
 	payload, err = s.Ingest.prepare(ctx, integration, payload)
 	if err != nil {
@@ -284,9 +301,17 @@ func (s *Schema) handleIngest(ctx context.Context, client *generated.Client, res
 		throughIDs[edge] = append(throughIDs[edge], ids...)
 	}
 
-	id, err := s.Ingest.persist(ctx, client, integration, payload)
+	id, _, managed, err := s.Ingest.persist(ctx, client, integration, payload)
+	if errors.Is(err, ErrUpsertStaleRun) {
+		return nil
+	}
+
 	if err != nil {
 		return logPersistError(ctx, ref, ErrPersistFailed, err)
+	}
+
+	if !managed {
+		return nil
 	}
 
 	if err := applyThroughEdgeIDs(ctx, client, s, id, throughIDs); err != nil {
@@ -382,6 +407,9 @@ func (s *Schema) SoftDeletes() bool {
 
 // MatchKeyField reports whether field is a declared match-key column for this schema
 func (s *Schema) MatchKeyField(field string) bool {
+	if field == "id" {
+		return true
+	}
 	for _, f := range s.Fields {
 		if f.MatchKey && f.Name == field {
 			return true
@@ -595,6 +623,284 @@ func matchKeyIn(field string, values []string) func(*sql.Selector) {
 	}
 }
 
+// ingestQueryChunkSize bounds the number of values pushed into a single IN predicate
+const ingestQueryChunkSize = 500
+
+const (
+	// FieldOwnerID is the provenance column recording the owning organization
+	FieldOwnerID = "owner_id"
+	// FieldIntegrationID is the provenance column recording the writing installation's FK
+	FieldIntegrationID = "integration_id"
+	// FieldManagedBy is the provenance column recording which installation owns a record
+	FieldManagedBy = "managed_by"
+	// FieldPlatformID is the provenance column recording the platform of the writing installation
+	FieldPlatformID = "platform_id"
+	// FieldSourceDefinitionID is the provenance column recording the source definition id
+	FieldSourceDefinitionID = "source_definition_id"
+	// FieldSourceDefinitionVersion is the provenance column recording the source definition version
+	FieldSourceDefinitionVersion = "source_definition_version"
+	// FieldSourceInstanceID is the provenance column recording the external tenant or instance
+	FieldSourceInstanceID = "source_instance_id"
+	// FieldIntegrationRunID is the provenance column recording the integration run that last wrote a record
+	FieldIntegrationRunID = "integration_run_id"
+)
+
+// StampProvenance writes the schema's trusted integration-derived provenance columns and ownership
+// edges onto an ingest payload from the writing installation, overriding anything the mapping
+// emitted for them; it is the sole writer of provenance columns for both the synchronous and the
+// durable ingest paths, so a queued record persists with the same provenance a batched one does
+func StampProvenance(payload json.RawMessage, schema *Schema, integration *generated.Integration, runID string) json.RawMessage {
+	values := []struct {
+		field string
+		value string
+	}{
+		{FieldOwnerID, integration.OwnerID},
+		{FieldIntegrationID, integration.ID},
+		{FieldManagedBy, integration.ID},
+		{FieldPlatformID, integration.PlatformID},
+		{FieldSourceDefinitionID, integration.DefinitionID},
+		{FieldSourceDefinitionVersion, integration.DefinitionVersion},
+		{FieldSourceInstanceID, integration.InstallationMetadata.Display.ExternalID},
+		{FieldIntegrationRunID, runID},
+	}
+
+	return jsonx.EditObject(payload, func(doc map[string]json.RawMessage) bool {
+		changed := false
+
+		for _, v := range values {
+			if v.value == "" {
+				continue
+			}
+
+			field, ok := schema.FieldByName(v.field)
+			if !ok {
+				continue
+			}
+
+			if stampProvenanceKey(doc, field.Name, v.value) {
+				changed = true
+			}
+		}
+
+		if schema.IntegrationM2MEdge != "" {
+			if edge, ok := schema.EdgeByName(schema.IntegrationM2MEdge); ok && stampProvenanceKey(doc, edge.CreateField, []string{integration.ID}) {
+				changed = true
+			}
+		}
+
+		if runID != "" && schema.IntegrationRunM2MEdge != "" {
+			if edge, ok := schema.EdgeByName(schema.IntegrationRunM2MEdge); ok && stampProvenanceKey(doc, edge.CreateField, []string{runID}) {
+				changed = true
+			}
+		}
+
+		return changed
+	})
+}
+
+// stampProvenanceKey writes value to key unconditionally, reporting whether the stored bytes changed
+func stampProvenanceKey(doc map[string]json.RawMessage, key string, value any) bool {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return false
+	}
+
+	if raw, ok := doc[key]; ok && bytes.Equal(raw, encoded) {
+		return false
+	}
+
+	doc[key] = encoded
+
+	return true
+}
+
+// activeIntegrationsKey carries the ctx-scoped set of integration active answers
+var activeIntegrationsKey = contextx.NewKey[map[string]bool]()
+
+// WithActiveIntegrations installs a ctx-carried set of integration ids known to be active
+func WithActiveIntegrations(ctx context.Context, ids []string) context.Context {
+	set := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		set[id] = true
+	}
+
+	return activeIntegrationsKey.Set(ctx, set)
+}
+
+// integrationActive reports whether the given integration is active
+func integrationActive(ctx context.Context, client *generated.Client, integrationID string) (bool, error) {
+	if set, ok := activeIntegrationsKey.Get(ctx); ok {
+		return set[integrationID], nil
+	}
+
+	return client.Integration.Query().Where(integration.ID(integrationID)).Exist(ctx)
+}
+
+// filterByAlternativeFields keeps rows whose lookup alternative field values match one of the key tuples
+func filterByAlternativeFields(rows []json.RawMessage, fields []string, keys []LookupValues) []json.RawMessage {
+	kept := make([]json.RawMessage, 0, len(rows))
+
+	for _, row := range rows {
+		rowValues := make(LookupValues, len(fields))
+		for _, field := range fields {
+			rowValues[field] = lookupValue(row, field)
+		}
+
+		if lo.SomeBy(keys, func(key LookupValues) bool {
+			return lo.EveryBy(fields, func(field string) bool { return rowValues[field] == key[field] })
+		}) {
+			kept = append(kept, row)
+		}
+	}
+
+	return kept
+}
+
+// lookupKeyFor resolves the first lookup alternative fully present in the payload
+func lookupKeyFor(s *Schema, payload json.RawMessage) (alternative int, values LookupValues, ok bool) {
+	for i, alt := range s.Lookup {
+		candidate := make(LookupValues, len(alt.Fields))
+
+		complete := true
+
+		for _, name := range alt.Fields {
+			field, found := s.FieldByName(name)
+			if !found {
+				complete = false
+				break
+			}
+
+			value := lookupValue(payload, field.InputKey)
+			if value == "" {
+				complete = false
+				break
+			}
+
+			candidate[name] = value
+		}
+
+		if complete {
+			return i, candidate, true
+		}
+	}
+
+	return 0, nil, false
+}
+
+// EncodeLookupKey renders a lookup alternative's key values into the lookup cache key
+func EncodeLookupKey(alternative LookupAlternative, keys LookupValues) string {
+	parts := make([]string, len(alternative.Fields))
+	for i, field := range alternative.Fields {
+		parts[i] = keys[field]
+	}
+
+	return strings.Join(parts, "\x1f")
+}
+
+// lookupMatchKey identifies one cached ingest lookup match by schema, alternative index, and key tuple
+type lookupMatchKey struct {
+	schema      string
+	alternative int
+	keys        string
+}
+
+// lookupMatchEntry is one cached ingest lookup match of prefetched rows and same-run created ids
+type lookupMatchEntry struct {
+	rows       []json.RawMessage
+	createdIDs []string
+}
+
+// lookupMatchCache is the ctx-carried prefetch cache for ingest lookup matches
+type lookupMatchCache map[lookupMatchKey]lookupMatchEntry
+
+// lookupMatchCacheContextKey carries the prefetch cache installed by WithLookupMatches
+var lookupMatchCacheContextKey = contextx.NewKey[lookupMatchCache]()
+
+// WithLookupMatches installs a ctx-carried cache of one schema's ingest lookup matches by alternative and key
+func WithLookupMatches(ctx context.Context, schema *Schema, matches map[int]map[string][]json.RawMessage) context.Context {
+	cache, ok := lookupMatchCacheContextKey.Get(ctx)
+	if !ok {
+		cache = lookupMatchCache{}
+	}
+
+	for alternative, byKey := range matches {
+		for keys, rows := range byKey {
+			cache[lookupMatchKey{schema: schema.Snake, alternative: alternative, keys: keys}] = lookupMatchEntry{rows: rows}
+		}
+	}
+
+	return lookupMatchCacheContextKey.Set(ctx, cache)
+}
+
+// selectIngestCandidate selects the single row an ingest write applies to from the lookup matches
+func selectIngestCandidate(s *Schema, rows []json.RawMessage, payload json.RawMessage) (row json.RawMessage, claimable bool, foreign bool, err error) {
+	me := lookupValue(payload, FieldManagedBy)
+
+	managedByMe := lo.Filter(rows, func(candidate json.RawMessage, _ int) bool {
+		return lookupValue(candidate, FieldManagedBy) == me
+	})
+
+	switch len(managedByMe) {
+	case 0:
+	case 1:
+		return managedByMe[0], false, false, nil
+	default:
+		return nil, false, false, ErrUpsertConflict
+	}
+
+	pd := lookupValue(payload, FieldSourceDefinitionID)
+	pi := lookupValue(payload, FieldSourceInstanceID)
+
+	var ownedPartial, unclaimed, foreignRows []json.RawMessage
+
+	for _, candidate := range rows {
+		rd := lookupValue(candidate, FieldSourceDefinitionID)
+		ri := lookupValue(candidate, FieldSourceInstanceID)
+
+		switch {
+		case pd == "":
+			ownedPartial = append(ownedPartial, candidate)
+		case rd == pd && ri == pi:
+			ownedPartial = append(ownedPartial, candidate)
+		case rd == "":
+			unclaimed = append(unclaimed, candidate)
+		default:
+			foreignRows = append(foreignRows, candidate)
+		}
+	}
+
+	switch len(ownedPartial) {
+	case 0:
+	case 1:
+		return ownedPartial[0], false, false, nil
+	default:
+		return nil, false, false, ErrUpsertConflict
+	}
+
+	switch len(unclaimed) {
+	case 0:
+	case 1:
+		return unclaimed[0], true, false, nil
+	default:
+		return nil, false, false, ErrUpsertConflict
+	}
+
+	if s.InstanceScoped {
+		foreignRows = lo.Filter(foreignRows, func(candidate json.RawMessage, _ int) bool {
+			return lookupValue(candidate, FieldSourceInstanceID) == pi
+		})
+	}
+
+	switch len(foreignRows) {
+	case 0:
+		return nil, false, false, nil
+	case 1:
+		return foreignRows[0], false, true, nil
+	default:
+		return nil, false, false, ErrUpsertConflict
+	}
+}
+
 // DisplayField returns the schema's display-name field; generation enforces at most one
 func (s *Schema) DisplayField() (FieldDescriptor, bool) {
 	for _, f := range s.Fields {
@@ -617,67 +923,286 @@ func (s *Schema) DisplayValue(row json.RawMessage) string {
 	return lookupValue(row, field.Name)
 }
 
-// LookupField returns the schema's single ingest upsert lookup field. It returns false when the
-// schema declares no lookup key or more than one, since priority between multiple lookup keys is
-// schema-specific and stays with hand-written persistence
-func (s *Schema) LookupField() (FieldDescriptor, bool) {
-	var (
-		found FieldDescriptor
-		count int
-	)
-
-	for _, f := range s.Fields {
-		if f.LookupKey {
-			found = f
-			count++
-		}
-	}
-
-	return found, count == 1
-}
-
-// Upsert persists one create-input payload by the schema's lookup key: the payload's lookup value
-// is matched against existing org-scoped records via the indexed key query, updating the single
-// match or creating the record when none exists, and returns the entity id. Matching more than one
-// record fails with ErrUpsertConflict rather than guessing. It composes the schema's catalog
-// closures, so unlike Create/Update/QueryByKey it needs no per-schema wiring. Schemas whose lookup
-// predicates are not a single org-scoped key column (integration-scoped lookups, multi-key
-// priority) keep hand-written persistence instead
-func (s *Schema) Upsert(ctx context.Context, client *generated.Client, ownerID string, payload json.RawMessage) (string, error) {
+// Upsert creates or updates the row matching the payload's lookup key through the ingest capability
+func (s *Schema) Upsert(ctx context.Context, client *generated.Client, ownerID string, payload json.RawMessage) (id string, changed bool, managed bool, err error) {
 	ref := SchemaRef{Schema: s.Snake, Operation: refOpUpsert}
 
-	field, ok := s.LookupField()
-	if !ok {
-		return "", logError(ctx, ref, ErrUpsertUnsupported, fmt.Errorf("%s does not define exactly one lookup key", s.Name))
+	if s.Create == nil || s.Ingest == nil || s.Ingest.buildUpdate == nil {
+		return "", false, false, logError(ctx, ref, ErrUpsertUnsupported, nil)
 	}
 
-	if s.Create == nil || s.Update == nil || s.QueryByKey == nil {
-		return "", logError(ctx, ref, ErrUpsertUnsupported, fmt.Errorf("%s does not support catalog create, update, and key queries", s.Name))
-	}
+	alternative, keys, hasKey := lookupKeyFor(s, payload)
 
-	value := lookupValue(payload, field.InputKey)
-	if value == "" {
-		return "", ErrUpsertKeyMissing
-	}
+	var (
+		rows      []json.RawMessage
+		cacheKey  lookupMatchKey
+		cacheable bool
+	)
 
-	rows, err := s.QueryByKey(ctx, client, ownerID, field.Name, []string{value})
-	if err != nil {
-		return "", err
-	}
+	switch {
+	case !hasKey:
+		return "", false, false, ErrUpsertKeyMissing
+	default:
+		cacheKey = lookupMatchKey{schema: s.Snake, alternative: alternative, keys: EncodeLookupKey(s.Lookup[alternative], keys)}
 
-	switch len(rows) {
-	case 0:
-		return s.Create(ctx, client, payload)
-	case 1:
-		id := entityID(rows[0])
-		if id == "" {
-			return "", logError(ctx, ref, ErrDecodeFailed, fmt.Errorf("%s row matching %s=%s has no id", s.Name, field.Name, value))
+		cache, ok := lookupMatchCacheContextKey.Get(ctx)
+		if !ok {
+			rows, err = s.QueryByLookup(ctx, client, ownerID, alternative, []LookupValues{keys})
+			if err != nil {
+				return "", false, false, err
+			}
+
+			break
 		}
 
-		return id, s.Update(ctx, client, id, s.rekeyEdgesForUpdate(payload))
-	default:
-		return "", logError(ctx, ref, ErrUpsertConflict, fmt.Errorf("%s lookup %s=%s matched %d records", s.Name, field.Name, value, len(rows)))
+		cacheable = true
+
+		entry, present := cache[cacheKey]
+		if !present {
+			rows, err = s.QueryByLookup(ctx, client, ownerID, alternative, []LookupValues{keys})
+			if err != nil {
+				return "", false, false, err
+			}
+
+			break
+		}
+
+		for _, createdID := range entry.createdIDs {
+			row, lerr := s.Load(ctx, client, createdID)
+			if lerr != nil {
+				return "", false, false, lerr
+			}
+
+			entry.rows = append(entry.rows, row)
+		}
+
+		if len(entry.createdIDs) > 0 {
+			entry.createdIDs = nil
+			cache[cacheKey] = entry
+		}
+
+		rows = entry.rows
 	}
+
+	candidate, _, foreign, err := selectIngestCandidate(s, rows, payload)
+	if err != nil {
+		return "", false, false, logError(ctx, ref, err, fmt.Errorf("%s lookup matched conflicting records", s.Name))
+	}
+
+	if foreign {
+		logx.FromContext(ctx).Debug().Str(FieldSchema, s.Snake).Str(fieldEntityID, entityID(candidate)).Msg("ingest skipped record managed by another definition")
+
+		return entityID(candidate), false, false, nil
+	}
+
+	if candidate == nil {
+		id, err = s.Create(ctx, client, payload)
+		if err != nil {
+			return "", false, false, err
+		}
+
+		if cacheable {
+			if cache, ok := lookupMatchCacheContextKey.Get(ctx); ok {
+				entry := cache[cacheKey]
+				entry.createdIDs = append(entry.createdIDs, id)
+				cache[cacheKey] = entry
+			}
+		}
+
+		return id, true, true, nil
+	}
+
+	id = entityID(candidate)
+
+	_, hasOwner := s.FieldByName(FieldOwnerID)
+	if id == "" || (hasOwner && lookupValue(candidate, FieldOwnerID) != ownerID) {
+		return "", false, false, logError(ctx, ref, ErrUpsertConflict, fmt.Errorf("invalid or cross-organization match for %s", s.Name))
+	}
+
+	changed, managed, err = s.applyIngestUpdate(ctx, client, candidate, payload)
+
+	return id, changed, managed, err
+}
+
+// pruneIngestFields drops unchanged and volatile-only assignments from the mutation
+func (s *Schema) pruneIngestFields(ctx context.Context, mutation ent.Mutation) (ChangeSet, error) {
+	var volatile []string
+
+	material := false
+
+	for _, name := range NormalizeStrings(append(mutation.Fields(), mutation.ClearedFields()...)) {
+		field, ok := s.FieldByName(name)
+		if !ok {
+			return ChangeSet{}, fmt.Errorf("%w: %s.%s", ErrFieldNotFound, s.Name, name)
+		}
+
+		old, err := mutation.OldField(ctx, name)
+		if err != nil {
+			return ChangeSet{}, err
+		}
+
+		proposed, _ := mutation.Field(name)
+		if field.Equal(old, proposed) {
+			if err := mutation.ResetField(name); err != nil {
+				return ChangeSet{}, err
+			}
+
+			continue
+		}
+
+		if field.Volatile {
+			volatile = append(volatile, name)
+
+			continue
+		}
+
+		material = true
+	}
+
+	set := ChangeSetFromMutation(mutation)
+
+	edgeChanged := lo.SomeBy(set.ChangedEdges, func(name string) bool {
+		if name == s.IntegrationM2MEdge || name == s.IntegrationRunM2MEdge {
+			return false
+		}
+
+		edge, ok := s.EdgeByName(name)
+
+		return !ok || edge.Field == "" || !lo.Contains(volatile, edge.Field)
+	})
+
+	if material || edgeChanged {
+		return set, nil
+	}
+
+	for _, name := range volatile {
+		if err := mutation.ResetField(name); err != nil {
+			return ChangeSet{}, err
+		}
+	}
+
+	for _, name := range []string{s.IntegrationM2MEdge, s.IntegrationRunM2MEdge} {
+		if name == "" || !lo.Contains(set.ChangedEdges, name) {
+			continue
+		}
+
+		if err := mutation.ResetEdge(name); err != nil {
+			return ChangeSet{}, err
+		}
+	}
+
+	return ChangeSetFromMutation(mutation), nil
+}
+
+// SystemControlledOnly reports whether the change set touches only system-controlled columns and edges
+func (s *Schema) SystemControlledOnly(set ChangeSet) bool {
+	if len(set.ChangedFields) == 0 && len(set.ChangedEdges) == 0 {
+		return false
+	}
+
+	bookkeepingEdges := lo.EveryBy(set.ChangedEdges, func(name string) bool {
+		if name == s.IntegrationM2MEdge || name == s.IntegrationRunM2MEdge {
+			return true
+		}
+
+		edge, ok := s.EdgeByName(name)
+
+		return ok && s.IntegrationFKField != "" && edge.Field == s.IntegrationFKField
+	})
+
+	if !bookkeepingEdges {
+		return false
+	}
+
+	return lo.EveryBy(set.ChangedFields, func(name string) bool {
+		field, ok := s.FieldByName(name)
+
+		return ok && field.SystemControlled
+	})
+}
+
+// applyIngestClaim reports whether the writing installation may own the resolved row
+func (s *Schema) applyIngestClaim(ctx context.Context, client *generated.Client, row json.RawMessage, payload json.RawMessage) (bool, error) {
+	manager := lookupValue(row, FieldManagedBy)
+	me := lookupValue(payload, FieldManagedBy)
+
+	if manager == "" || manager == me {
+		return true, nil
+	}
+
+	active, err := integrationActive(ctx, client, manager)
+	if err != nil {
+		return false, err
+	}
+
+	return !active, nil
+}
+
+// applyIngestResurrect clears a non-episodic removal field in the payload when the resolved row carries one
+func (s *Schema) applyIngestResurrect(row json.RawMessage, payload json.RawMessage) json.RawMessage {
+	if s.RemovedAtField == "" || s.RemovedAtEpisodic {
+		return payload
+	}
+
+	if lookupValue(row, s.RemovedAtField) == "" {
+		return payload
+	}
+
+	field, _ := s.FieldByName(s.RemovedAtField)
+
+	edited, _, err := jsonx.SetObjectKey(payload, field.InputKey, nil)
+	if err != nil {
+		return payload
+	}
+
+	return edited
+}
+
+// applyIngestUpdate applies the shared ingest write decision to one resolved row
+func (s *Schema) applyIngestUpdate(ctx context.Context, client *generated.Client, row json.RawMessage, payload json.RawMessage) (changed bool, managed bool, err error) {
+	owned, err := s.applyIngestClaim(ctx, client, row, payload)
+	if err != nil {
+		return false, true, err
+	}
+
+	if !owned {
+		return false, false, nil
+	}
+
+	payload = s.applyIngestResurrect(row, payload)
+
+	rekeyed, throughIDs := splitThroughEdgeIDs(s, s.rekeyEdgesForUpdate(payload))
+
+	mutation, save, err := s.Ingest.buildUpdate(ctx, client, row, rekeyed)
+	if err != nil {
+		return false, true, err
+	}
+
+	changes, err := s.pruneIngestFields(ctx, mutation)
+	if err != nil {
+		return false, true, err
+	}
+
+	bookkeeping := s.SystemControlledOnly(changes)
+
+	if !changes.Empty() {
+		saveCtx := ctx
+		if bookkeeping {
+			saveCtx = WithEmissionVetoed(ctx)
+		}
+
+		if err := save(saveCtx); err != nil {
+			return false, true, err
+		}
+	}
+
+	if len(throughIDs) > 0 {
+		if err := applyThroughEdgeIDs(ctx, client, s, entityID(row), throughIDs); err != nil {
+			return false, true, err
+		}
+	}
+
+	return (!changes.Empty() && !bookkeeping) || len(throughIDs) > 0, true, nil
 }
 
 // rekeyEdgesForUpdate renames to-many edge keys in a create-input payload to their update-input add
@@ -753,6 +1278,31 @@ var (
 {{- end }}
 {{- if .ApprovalSpec }}
 		ApprovalSpec: &ApprovalSpec{Schema: "{{ .Name }}", StatusField: "{{ .ApprovalSpec.StatusField }}", ApproverField: "{{ .ApprovalSpec.ApproverField }}"},
+{{- end }}
+{{- if .IntegrationFKField }}
+		IntegrationFKField: "{{ .IntegrationFKField }}",
+{{- end }}
+{{- if .IntegrationM2MEdge }}
+		IntegrationM2MEdge: "{{ .IntegrationM2MEdge }}",
+{{- end }}
+{{- if .IntegrationRunM2MEdge }}
+		IntegrationRunM2MEdge: "{{ .IntegrationRunM2MEdge }}",
+{{- end }}
+{{- if .RemovedAtField }}
+		RemovedAtField: "{{ .RemovedAtField }}",
+{{- if .RemovedAtEpisodic }}
+		RemovedAtEpisodic: true,
+{{- end }}
+{{- end }}
+{{- if and .IntegrationMapped .HasCreate .LookupAlternatives }}
+		Lookup: []LookupAlternative{
+{{- range .LookupAlternatives }}
+			{Fields: []string{ {{- range $i, $f := . }}{{ if $i }}, {{ end }}"{{ $f }}"{{ end }} }},
+{{- end }}
+		},
+{{- end }}
+{{- if and .IntegrationMapped .HasCreate .InstanceScoped }}
+		InstanceScoped: true,
 {{- end }}
 {{- if and .HasCreate .IntegrationMapped }}
 		Create: func(ctx context.Context, client *generated.Client, input json.RawMessage) (string, error) {
@@ -840,48 +1390,6 @@ var (
 	{{- if and .IntegrationMapped .HasCreate }}
 		Ingest: &IngestCapability{
 			Topic: gala.NamespacedTopic[IngestRequest](IngestTopics, "{{ .Snake }}.ingest.requested"),
-			prepare: func(ctx context.Context, {{ if .RuntimeDefaults }}integration{{ else }}_{{ end }} *generated.Integration, payload json.RawMessage) (json.RawMessage, error) {
-				ref := SchemaRef{Schema: "{{ .Snake }}", Operation: refOpCreate}
-
-				input, err := jsonx.Decode[generated.{{ .CreateInputType }}](payload)
-				if err != nil {
-					return nil, logError(ctx, ref, ErrDecodeFailed, err)
-				}
-{{- range $schema.ObjectFields }}
-{{- if .Sanitizable }}
-
-				if input.{{ .Name }} != nil {
-					if err := {{ $schema.PredicatePackage }}.{{ .Name }}Validator({{ if not .SliceInput }}*{{ end }}input.{{ .Name }}); err != nil {
-						logSanitizedIngestField(ctx, "{{ $schema.Snake }}", "{{ .Snake }}", err)
-						input.{{ .Name }} = nil
-					}
-				}
-{{- end }}
-{{- end }}
-{{- if .RuntimeDefaults }}
-
-				if integration != nil {
-{{- range .RuntimeDefaults }}
-{{- if .Required }}
-					if input.{{ .GoField }} == "" {
-						input.{{ .GoField }} = integration.{{ .IntegrationField }}
-					}
-{{- else }}
-					if input.{{ .GoField }} == nil && integration.{{ .IntegrationField }} != "" {
-						input.{{ .GoField }} = &integration.{{ .IntegrationField }}
-					}
-{{- end }}
-{{- end }}
-				}
-{{- end }}
-
-				prepared, err := json.Marshal(input)
-				if err != nil {
-					return nil, logError(ctx, ref, ErrMarshalFailed, err)
-				}
-
-				return prepared, nil
-			},
 		},
 {{- end }}
 	}
@@ -894,7 +1402,7 @@ func init() {
 {{- if .ObjectFields }}
 	Schema{{ $schema.Name }}.Fields = []FieldDescriptor{
 {{- range .ObjectFields }}
-		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if .IntegrationMapped }}, InputKey: "{{ .InputKey }}"{{ end }}{{ if .LookupKey }}, LookupKey: true{{ end }}{{ if .DisplayKey }}, DisplayKey: true{{ end }}{{ if .Clearable }}, Clearable: true{{ end }}{{ if .WebhookPayload }}, WebhookPayload: true{{ end }}{{ if .TaskRules }}, TaskRules: []TaskRuleDescriptor{ {{ range .TaskRules }}{{ template "taskRuleLiteral" . }}, {{ end }} }{{ end }}},
+		{Name: "{{ .Snake }}", Label: "{{ .Name }}", Type: "{{ .Type }}"{{ if .WorkflowEligible }}, WorkflowEligible: true{{ end }}{{ if .MatchKey }}, MatchKey: true{{ end }}{{ if and .IntegrationMapped (not .SystemControlled) }}, InputKey: "{{ .InputKey }}"{{ end }}{{ if .LookupKey }}, LookupKey: true{{ end }}{{ if .DisplayKey }}, DisplayKey: true{{ end }}{{ if .Clearable }}, Clearable: true{{ end }}{{ if .WebhookPayload }}, WebhookPayload: true{{ end }}{{ if .SystemControlled }}, SystemControlled: true{{ end }}{{ if .Volatile }}, Volatile: true{{ end }}{{ if .CaseInsensitive }}, CaseInsensitive: true{{ end }}{{ if .TaskRules }}, TaskRules: []TaskRuleDescriptor{ {{ range .TaskRules }}{{ template "taskRuleLiteral" . }}, {{ end }} }{{ end }}},
 {{- end }}
 	}
 {{- end }}
@@ -934,9 +1442,24 @@ func init() {
 {{- if .ThroughType }}
 			Through: true,
 			LinkThrough: func(ctx context.Context, client *generated.Client, sourceID string, targetIDs []string) error {
+				existing, err := client.{{ .ThroughType }}.Query().
+					Where({{ .ThroughType | lower }}.{{ .ThroughSourceField }}(sourceID), {{ .ThroughType | lower }}.{{ .ThroughTargetField }}In(targetIDs...)).
+					All(ctx)
+				if err != nil {
+					return err
+				}
+
+				linked := make(map[string]struct{}, len(existing))
+				for _, row := range existing {
+					linked[row.{{ .ThroughTargetField }}] = struct{}{}
+				}
+
 				for _, targetID := range targetIDs {
-					err := client.{{ .ThroughType }}.Create().{{ .ThroughSourceSetter }}(sourceID).{{ .ThroughTargetSetter }}(targetID).Exec(ctx)
-					if err != nil && !generated.IsConstraintError(err) {
+					if _, ok := linked[targetID]; ok {
+						continue
+					}
+
+					if err := client.{{ .ThroughType }}.Create().{{ .ThroughSourceSetter }}(sourceID).{{ .ThroughTargetSetter }}(targetID).Exec(ctx); err != nil && !generated.IsConstraintError(err) {
 						return err
 					}
 				}
@@ -984,6 +1507,246 @@ func init() {
 
 		return results, nil
 	}
+{{- end }}
+{{- end }}
+{{- range $schema := .Schemas }}
+{{- if and $schema.IntegrationMapped $schema.HasCreate }}
+	Schema{{ $schema.Name }}.Ingest.prepare = func(ctx context.Context, integration *generated.Integration, payload json.RawMessage) (json.RawMessage, error) {
+		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpCreate}
+
+		input, err := jsonx.Decode[generated.{{ $schema.CreateInputType }}](payload)
+		if err != nil {
+			return nil, logError(ctx, ref, ErrDecodeFailed, err)
+		}
+{{- range $schema.ObjectFields }}
+{{- if .Sanitizable }}
+
+		if input.{{ .Name }} != nil {
+			if err := {{ $schema.PredicatePackage }}.{{ .Name }}Validator({{ if not .SliceInput }}*{{ end }}input.{{ .Name }}); err != nil {
+				logSanitizedIngestField(ctx, "{{ $schema.Snake }}", "{{ .Snake }}", err)
+				input.{{ .Name }} = nil
+			}
+		}
+{{- end }}
+{{- end }}
+		prepared, err := json.Marshal(input)
+		if err != nil {
+			return nil, logError(ctx, ref, ErrMarshalFailed, err)
+		}
+
+		return prepared, nil
+	}
+{{- end }}
+{{- end }}
+{{- range $schema := .Schemas }}
+{{- if and $schema.IntegrationMapped $schema.HasCreate $schema.HasUpdate }}
+	Schema{{ $schema.Name }}.Ingest.buildUpdate = func(ctx context.Context, client *generated.Client, row json.RawMessage, payload json.RawMessage) (ent.Mutation, func(context.Context) error, error) {
+		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpUpdate}
+
+		existing, err := jsonx.Decode[generated.{{ $schema.Name }}](row)
+		if err != nil {
+			return nil, nil, logError(ctx, ref, ErrDecodeFailed, err)
+		}
+
+		input, err := jsonx.Decode[generated.{{ $schema.UpdateInputType }}](applyClears(payload))
+		if err != nil {
+			return nil, nil, logError(ctx, ref, ErrDecodeFailed, err)
+		}
+
+		update := client.{{ $schema.Name }}.UpdateOne(&existing).SetInput(input)
+
+		guarded := false
+{{- if $schema.HasIntegrationRunID }}
+
+		if runID := lookupValue(payload, FieldIntegrationRunID); runID != "" {
+			update = update.Where({{ $schema.PredicatePackage }}.Or({{ $schema.PredicatePackage }}.IntegrationRunIDIsNil(), {{ $schema.PredicatePackage }}.IntegrationRunIDLT(runID)))
+			guarded = true
+		}
+{{- end }}
+
+		return update.Mutation(), func(ctx context.Context) error {
+			if err := update.Exec(ctx); err != nil {
+				if guarded && generated.IsNotFound(err) {
+					return ErrUpsertStaleRun
+				}
+
+				return logPersistError(ctx, ref, ErrUpdateFailed, err)
+			}
+
+			return nil
+		}, nil
+	}
+{{- end }}
+{{- end }}
+{{- range $schema := .Schemas }}
+{{- if and $schema.IntegrationMapped $schema.HasCreate $schema.LookupAlternatives }}
+	Schema{{ $schema.Name }}.QueryByLookup = func(ctx context.Context, client *generated.Client, ownerID string, alternative int, keys []LookupValues) ([]json.RawMessage, error) {
+		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpQuery}
+
+		if alternative < 0 || alternative >= len(Schema{{ $schema.Name }}.Lookup) {
+			return nil, logError(ctx, ref, ErrLookupAlternativeInvalid, fmt.Errorf("alternative %d out of range for %s", alternative, "{{ $schema.Snake }}"))
+		}
+
+		fields := Schema{{ $schema.Name }}.Lookup[alternative].Fields
+		primary := fields[0]
+
+		primaryValues := lo.Uniq(lo.FilterMap(keys, func(k LookupValues, _ int) (string, bool) {
+			v, ok := k[primary]
+			return v, ok && v != ""
+		}))
+
+		if len(primaryValues) == 0 {
+			return nil, nil
+		}
+
+		var results []json.RawMessage
+
+		for _, chunk := range lo.Chunk(primaryValues, ingestQueryChunkSize) {
+			query := client.{{ $schema.Name }}.Query()
+{{- if $schema.HasOwnerID }}
+			query = query.Where({{ $schema.PredicatePackage }}.OwnerID(ownerID))
+{{- end }}
+			query = query.Where(predicate.{{ $schema.Name }}(matchKeyIn(primary, chunk)))
+{{- if $schema.RemovedAtEpisodic }}
+			query = query.Where({{ $schema.PredicatePackage }}.{{ $schema.RemovedAtField | pascal }}IsNil())
+{{- end }}
+
+			entities, err := query.All(ctx)
+			if err != nil {
+				return nil, logError(ctx, ref, ErrQueryFailed, err)
+			}
+
+			for _, e := range entities {
+				data, err := json.Marshal(e)
+				if err != nil {
+					logError(ctx, ref, ErrMarshalFailed, err)
+					continue
+				}
+
+				results = append(results, data)
+			}
+		}
+
+		return filterByAlternativeFields(results, fields, keys), nil
+	}
+{{- end }}
+{{- end }}
+{{- range $schema := .Schemas }}
+{{- if and $schema.IntegrationMapped $schema.HasCreate $schema.RemovedAtField }}
+	Schema{{ $schema.Name }}.SnapshotScope = func(ctx context.Context, client *generated.Client, ownerID, definitionID, instanceID, managedBy string) ([]json.RawMessage, error) {
+		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpQuery}
+
+		entities, err := client.{{ $schema.Name }}.Query().
+			Where(
+{{- if $schema.HasOwnerID }}
+				{{ $schema.PredicatePackage }}.OwnerID(ownerID),
+{{- end }}
+				{{ $schema.PredicatePackage }}.SourceDefinitionID(definitionID),
+				{{ $schema.PredicatePackage }}.SourceInstanceID(instanceID),
+				{{ $schema.PredicatePackage }}.ManagedBy(managedBy),
+				{{ $schema.PredicatePackage }}.{{ $schema.RemovedAtField | pascal }}IsNil(),
+			).
+			All(ctx)
+		if err != nil {
+			return nil, logError(ctx, ref, ErrQueryFailed, err)
+		}
+
+		results := make([]json.RawMessage, 0, len(entities))
+		for _, e := range entities {
+			data, err := json.Marshal(e)
+			if err != nil {
+				logError(ctx, ref, ErrMarshalFailed, err)
+				continue
+			}
+
+			results = append(results, data)
+		}
+
+		return results, nil
+	}
+{{- end }}
+{{- end }}
+{{- range $schema := .Schemas }}
+{{- if and $schema.IntegrationMapped $schema.HasCreate $schema.RemovedAtField }}
+	Schema{{ $schema.Name }}.MarkRemoved = func(ctx context.Context, client *generated.Client, ids []string, at time.Time, runID string) error {
+		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpUpdate}
+
+		for _, chunk := range lo.Chunk(ids, ingestQueryChunkSize) {
+			update := client.{{ $schema.Name }}.Update().
+				Where({{ $schema.PredicatePackage }}.IDIn(chunk...)).
+				Set{{ $schema.RemovedAtField | pascal }}(at)
+{{- if or $schema.HasIntegrationRunID $schema.IntegrationRunM2MEdge }}
+
+			if runID != "" {
+{{- if $schema.HasIntegrationRunID }}
+				update = update.SetIntegrationRunID(runID)
+{{- end }}
+{{- if $schema.IntegrationRunM2MEdge }}
+				update = update.Add{{ $schema.IntegrationRunM2MEdge | pascal | singular }}IDs(runID)
+{{- end }}
+			}
+{{- end }}
+
+			if err := update.Exec(ctx); err != nil {
+				return logPersistError(ctx, ref, ErrUpdateFailed, err)
+			}
+		}
+
+		return nil
+	}
+{{- end }}
+{{- end }}
+{{- range $schema := .Schemas }}
+{{- if and $schema.IntegrationMapped $schema.HasCreate (or $schema.HasIntegrationID $schema.IntegrationM2MEdge) }}
+	Schema{{ $schema.Name }}.FillProvenance = func(ctx context.Context, client *generated.Client, installation *generated.Integration) (int, error) {
+		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpUpdate}
+		instanceID := installation.InstallationMetadata.Display.ExternalID
+
+		predicates := []predicate.{{ $schema.Name }}{
+			{{ $schema.PredicatePackage }}.And(
+{{- if $schema.HasIntegrationID }}
+				{{ $schema.PredicatePackage }}.IntegrationID(installation.ID),
+{{- else }}
+				{{ $schema.PredicatePackage }}.Has{{ $schema.IntegrationM2MEdge | pascal }}With(integration.ID(installation.ID)),
+				{{ $schema.PredicatePackage }}.Not({{ $schema.PredicatePackage }}.Has{{ $schema.IntegrationM2MEdge | pascal }}With(integration.IDNEQ(installation.ID))),
+{{- end }}
+				{{ $schema.PredicatePackage }}.Or({{ $schema.PredicatePackage }}.SourceDefinitionIDIsNil(), {{ $schema.PredicatePackage }}.SourceDefinitionID(""), {{ $schema.PredicatePackage }}.SourceInstanceIDIsNil(), {{ $schema.PredicatePackage }}.SourceInstanceID("")),
+				{{ $schema.PredicatePackage }}.Or({{ $schema.PredicatePackage }}.ManagedByIsNil(), {{ $schema.PredicatePackage }}.ManagedBy(""), {{ $schema.PredicatePackage }}.ManagedBy(installation.ID)),
+			),
+		}
+
+		if instanceID != "" {
+			predicates = append(predicates, {{ $schema.PredicatePackage }}.And(
+				{{ $schema.PredicatePackage }}.ManagedBy(installation.ID),
+				{{ $schema.PredicatePackage }}.Or({{ $schema.PredicatePackage }}.SourceInstanceIDIsNil(), {{ $schema.PredicatePackage }}.SourceInstanceIDNEQ(instanceID)),
+			))
+		}
+
+		update := client.{{ $schema.Name }}.Update().
+			Where({{ $schema.PredicatePackage }}.Or(predicates...)).
+			SetSourceDefinitionID(installation.DefinitionID).
+			SetManagedBy(installation.ID)
+
+		if installation.DefinitionVersion != "" {
+			update = update.SetSourceDefinitionVersion(installation.DefinitionVersion)
+		}
+
+		if instanceID != "" {
+			update = update.SetSourceInstanceID(instanceID)
+		}
+
+		affected, err := update.Save(ctx)
+		if err != nil {
+			return 0, logPersistError(ctx, ref, ErrUpdateFailed, err)
+		}
+
+		return affected, nil
+	}
+{{- end }}
+{{- end }}
+{{- range $schema := .Schemas }}
+{{- if and $schema.IntegrationMapped $schema.HasCreate }}
+	Schema{{ $schema.Name }}.Ingest.persist = defaultIngestPersist(Schema{{ $schema.Name }})
 {{- end }}
 {{- end }}
 
@@ -1157,6 +1920,14 @@ func selectTargets(ctx context.Context, client *generated.Client, orgID string, 
 		return nil, err
 	}
 
+	if selector.Unique && schema.InstanceScoped {
+		pi := lookupValue(selector.SourceContext, FieldSourceInstanceID)
+
+		entities = lo.Filter(entities, func(row json.RawMessage, _ int) bool {
+			return lookupValue(row, FieldSourceInstanceID) == pi
+		})
+	}
+
 	var (
 		eval      *celx.NativeEntityEvaluator
 		useSource bool
@@ -1231,9 +2002,7 @@ func selectTargets(ctx context.Context, client *generated.Client, orgID string, 
 	return results, nil
 }
 
-// selectCandidates resolves the candidate entity set for a target selector. When the selector
-// carries a KeyMatch it issues an indexed query that pushes the key predicate into the database;
-// otherwise it loads all org-scoped entities for row-by-row expression evaluation
+// selectCandidates resolves the candidate entity set for a target selector
 func selectCandidates(ctx context.Context, client *generated.Client, schema *Schema, orgID string, selector TargetSelector) ([]json.RawMessage, error) {
 	if selector.KeyMatch != nil {
 		if schema.QueryByKey == nil {
@@ -1245,6 +2014,10 @@ func selectCandidates(ctx context.Context, client *generated.Client, schema *Sch
 			return nil, nil
 		}
 
+		if cache, ok := linkTargetCacheContextKey.Get(ctx); ok {
+			return lookupLinkTargetCache(cache, schema.Snake, selector.KeyMatch.TargetField, values), nil
+		}
+
 		return schema.QueryByKey(ctx, client, orgID, selector.KeyMatch.TargetField, values)
 	}
 
@@ -1253,6 +2026,40 @@ func selectCandidates(ctx context.Context, client *generated.Client, schema *Sch
 	}
 
 	return schema.Query(ctx, client, orgID)
+}
+
+// linkTargetCacheKey identifies one cached target lookup by target schema, field, and value
+type linkTargetCacheKey struct {
+	schema string
+	field  string
+	value  string
+}
+
+// linkTargetCache is the ctx-carried prefetch cache for link target rows
+type linkTargetCache map[linkTargetCacheKey][]json.RawMessage
+
+// linkTargetCacheContextKey carries the prefetch cache installed by PrefetchLinkTargets
+var linkTargetCacheContextKey = contextx.NewKey[linkTargetCache]()
+
+// lookupLinkTargetCache collects the cached rows for every value, deduplicated by entity id
+func lookupLinkTargetCache(cache linkTargetCache, schemaSnake, field string, values []string) []json.RawMessage {
+	seen := map[string]struct{}{}
+
+	var rows []json.RawMessage
+
+	for _, value := range values {
+		for _, row := range cache[linkTargetCacheKey{schema: schemaSnake, field: field, value: value}] {
+			id := entityID(row)
+			if _, ok := seen[id]; ok {
+				continue
+			}
+
+			seen[id] = struct{}{}
+			rows = append(rows, row)
+		}
+	}
+
+	return rows
 }
 
 // collectKeyValues extracts the deduplicated, non-empty source-side key values for a KeyMatch

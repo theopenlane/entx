@@ -2,8 +2,8 @@ package entityops
 
 import "errors"
 
-// ErrNoIntegrationFieldMapping indicates a FromIntegration field has no mapping to a *generated.Integration Go field
-var ErrNoIntegrationFieldMapping = errors.New("entityops: no integration field mapping for ent field")
+// ErrProvenanceFieldsMissing indicates an ingest-capable schema lacks the provenance mixin fields
+var ErrProvenanceFieldsMissing = errors.New("entityops: ingest-capable schema is missing the provenance fields; add ProvenanceMixin to the schema mixin list")
 
 // ErrInvalidConsoleRoute indicates a console route declares both a query id parameter and a path suffix
 var ErrInvalidConsoleRoute = errors.New("entityops: console route id parameter and suffix are mutually exclusive")
@@ -31,3 +31,12 @@ var ErrApprovalFieldType = errors.New("entityops: approval status must be an enu
 
 // ErrApprovalOrgOwnedRequired indicates approval fields are declared on a schema that is not org owned
 var ErrApprovalOrgOwnedRequired = errors.New("entityops: approval flow requires an org-owned schema")
+
+// ErrLookupAlternativeFieldUnknown indicates a lookup alternative references an unknown or unmapped field
+var ErrLookupAlternativeFieldUnknown = errors.New("entityops: lookup alternative references an unknown or unmapped field")
+
+// ErrLookupAlternativeWithoutMapping indicates lookup alternatives declared on an unmapped schema
+var ErrLookupAlternativeWithoutMapping = errors.New("entityops: lookup alternative declared on a schema without integration mapping")
+
+// ErrSnapshotRemovalConflict indicates a schema marks more than one snapshot-removal field
+var ErrSnapshotRemovalConflict = errors.New("entityops: schema declares multiple snapshot removal fields")
