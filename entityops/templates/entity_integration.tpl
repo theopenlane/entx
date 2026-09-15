@@ -10,13 +10,20 @@ var IngestTopics = gala.IntegrationIngest.At("entityops")
 {{- range $schema := .Schemas }}
 {{- if $schema.IntegrationMapped }}
 
-// Integration mapping input keys for {{ $schema.Name }}
-const (
+// {{ $schema.Name }}Fields indexes the provider-mappable fields of {{ $schema.Name }}
+var {{ $schema.Name }}Fields = struct {
 {{- range $schema.ObjectFields }}
-{{- if .IntegrationMapped }}
-	InputKey{{ $schema.Name }}{{ .InputGoField }} = {{ printf "%q" .InputKey }}
+{{- if and .IntegrationMapped (not .SystemControlled) }}
+	// {{ .Name }} is the {{ .Snake }} field
+	{{ .Name }} FieldDescriptor
 {{- end }}
 {{- end }}
-)
+}{
+{{- range $schema.ObjectFields }}
+{{- if and .IntegrationMapped (not .SystemControlled) }}
+	{{ .Name }}: FieldDescriptor{Name: "{{ .Snake }}", InputKey: "{{ .InputKey }}"},
+{{- end }}
+{{- end }}
+}
 {{- end }}
 {{- end }}

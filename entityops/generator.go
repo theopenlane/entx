@@ -16,6 +16,7 @@ import (
 	"entgo.io/ent/entc/load"
 	entfield "entgo.io/ent/schema/field"
 	"github.com/99designs/gqlgen/codegen/templates"
+	"github.com/samber/lo"
 	"github.com/stoewer/go-strcase"
 	"golang.org/x/tools/imports"
 
@@ -121,8 +122,6 @@ type EntitySchema struct {
 	// reachable by ingest link-rule target selection; with IntegrationMapped and WorkflowEligible it
 	// gates emission of the runtime closures and projections only reachable through those capabilities
 	LinkTarget bool
-	// RuntimeDefaults are integration-injected field defaults applied by the schema ingest capability
-	RuntimeDefaults []EntityRuntimeDefault
 	// ConsoleRoute is present only when the schema explicitly declares a console route
 	ConsoleRoute *ConsoleRouteEntry
 	// OrgOwned indicates the schema carries the org-owned annotation, so owner_id is the owning
@@ -134,6 +133,24 @@ type EntitySchema struct {
 	ApprovalSpec *ApprovalSpecEntry
 	// TaskRules are schema-level (unconditional) suggested-task rules declared via entx.SchemaTaskRule
 	TaskRules []entx.TaskRuleSpec
+	// IntegrationFKField is the FK column of the schema's mutable unique edge to Integration, if any
+	IntegrationFKField string
+	// IntegrationM2MEdge is the name of the schema's to-many mutable edge to Integration, if any
+	IntegrationM2MEdge string
+	// HasIntegrationID reports whether the schema carries an integration_id column
+	HasIntegrationID bool
+	// HasIntegrationRunID reports whether the schema carries an integration_run_id field
+	HasIntegrationRunID bool
+	// IntegrationRunM2MEdge is the name of the schema's to-many mutable edge to IntegrationRun, if any
+	IntegrationRunM2MEdge string
+	// LookupAlternatives are the schema's ordered composite ingest lookup keys as snake_case field name sets
+	LookupAlternatives [][]string
+	// InstanceScoped reports whether same-key records from different source instances are distinct rows
+	InstanceScoped bool
+	// RemovedAtField is the snake_case name of the schema's SnapshotRemoval-annotated field, if any
+	RemovedAtField string
+	// RemovedAtEpisodic reports whether removal is a recurring observation rather than a permanent tombstone
+	RemovedAtEpisodic bool
 }
 
 // EntityField represents a field with its name variations and capability flags
@@ -170,6 +187,12 @@ type EntityField struct {
 	Projectable bool
 	// TaskRules are suggested-task rules declared on this field via entx.FieldTaskRule
 	TaskRules []entx.TaskRuleSpec
+	// SystemControlled excludes the field from provider mappings
+	SystemControlled bool
+	// Volatile excludes the field from triggering an ingest change
+	Volatile bool
+	// CaseInsensitive compares the field case-insensitively in ingest change detection
+	CaseInsensitive bool
 }
 
 // EntityEdge represents one linkable edge on a schema, in either direction
@@ -199,11 +222,46 @@ type EntityEdge struct {
 	ThroughSourceSetter string
 	// ThroughTargetSetter is the join create-builder setter binding the target's id (e.g. "SetControlID")
 	ThroughTargetSetter string
+	// ThroughSourceField is the join entity's field holding this schema's id
+	ThroughSourceField string
+	// ThroughTargetField is the join entity's field holding the target's id
+	ThroughTargetField string
 }
 
 // workflowEligibleMarkerField is the name of the WorkflowApprovalMixin carrier field that flags a
 // schema as workflow-eligible without being a real workflow-triggerable field
 const workflowEligibleMarkerField = "workflow_eligible_marker"
+
+// integrationTargetSchema is the PascalCase name of the Integration schema
+const integrationTargetSchema = "Integration"
+
+// integrationRunTargetSchema is the PascalCase name of the IntegrationRun schema
+const integrationRunTargetSchema = "IntegrationRun"
+
+// integrationIDFieldName is the provenance column recording the writing installation's id
+const integrationIDFieldName = "integration_id"
+
+// integrationRunIDFieldName is the provenance column recording the integration run that last wrote a record
+const integrationRunIDFieldName = "integration_run_id"
+
+// detectIntegrationEdges records the schema's mutable FK and to-many edges to Integration and IntegrationRun
+func detectIntegrationEdges(schema *EntitySchema) {
+	for _, edge := range schema.Edges {
+		switch edge.TargetSchema {
+		case integrationTargetSchema:
+			switch {
+			case edge.Unique && edge.Field != "" && !edge.Immutable:
+				schema.IntegrationFKField = edge.Field
+			case !edge.Unique && !edge.Immutable && edge.ThroughType == "":
+				schema.IntegrationM2MEdge = edge.Name
+			}
+		case integrationRunTargetSchema:
+			if !edge.Unique && !edge.Immutable && edge.ThroughType == "" {
+				schema.IntegrationRunM2MEdge = edge.Name
+			}
+		}
+	}
+}
 
 // fieldWorkflowEligible reports whether a field carries a non-marker workflow-eligible annotation.
 // marker is true when the field is the WorkflowApprovalMixin carrier field, which flags the schema
@@ -250,11 +308,71 @@ func edgeWorkflowEligible(edge *gen.Edge) (bool, error) {
 	return ann.Eligible, nil
 }
 
+// provenanceFieldNames are the record provenance columns every ingest-capable schema must carry
+var provenanceFieldNames = []string{"source_definition_id", "source_definition_version", "source_instance_id", "managed_by"}
+
+// validateProvenanceFields fails generation when an ingest-capable schema lacks the provenance fields
+func validateProvenanceFields(schema EntitySchema) error {
+	if !schema.IntegrationMapped || !schema.HasCreate {
+		return nil
+	}
+
+	for _, name := range provenanceFieldNames {
+		if !slices.ContainsFunc(schema.ObjectFields, func(f EntityField) bool { return f.Snake == name }) {
+			return fmt.Errorf("%w: %s lacks %s", ErrProvenanceFieldsMissing, schema.Name, name)
+		}
+	}
+
+	return nil
+}
+
+// synthesizeLookupAlternatives returns the declared alternatives or one synthesized from the LookupKey fields
+func synthesizeLookupAlternatives(declared [][]string, lookupOrder []string) [][]string {
+	if len(declared) > 0 {
+		return declared
+	}
+
+	if len(lookupOrder) == 0 {
+		return nil
+	}
+
+	return [][]string{lookupOrder}
+}
+
+// validateLookupAlternatives fails generation when a lookup alternative names an unknown or unmapped field
+func validateLookupAlternatives(schema EntitySchema) error {
+	if len(schema.LookupAlternatives) == 0 {
+		return nil
+	}
+
+	if !schema.IntegrationMapped {
+		return fmt.Errorf("%w: %s", ErrLookupAlternativeWithoutMapping, schema.Name)
+	}
+
+	for _, alternative := range schema.LookupAlternatives {
+		for _, name := range alternative {
+			field, ok := lo.Find(schema.ObjectFields, func(f EntityField) bool { return f.Snake == name })
+			if !ok || !field.IntegrationMapped {
+				return fmt.Errorf("%w: %s.%s", ErrLookupAlternativeFieldUnknown, schema.Name, name)
+			}
+		}
+	}
+
+	return nil
+}
+
 // fieldWebhookPayload reports whether a field is included in workflow webhook enrichment.
 func fieldWebhookPayload(field *gen.Field) bool {
 	ann, ok := entx.GetAnnotation[*entx.WebhookPayloadFieldAnnotation](field)
 
 	return ok && ann.Include && !field.Sensitive()
+}
+
+// fieldCaseInsensitive reports whether ingest change detection compares the field case-insensitively
+func fieldCaseInsensitive(field *gen.Field) bool {
+	ann, ok := entx.GetAnnotation[*entx.CaseInsensitiveFieldAnnotation](field)
+
+	return ok && ann.CaseInsensitive
 }
 
 // fieldProjectable excludes secrets and fields hidden from the GraphQL type surface.
@@ -325,6 +443,11 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 
 	// MatchKey: plain-string indexed columns (e.g. external_id, ref_code) usable as cross-link
 	// match keys; custom Go types and enums are excluded because their In predicates reject plain strings
+	systemControlled := isIntegrationSystemField(field.StorageKey())
+	if ant, ok := entx.GetAnnotation[*entx.IntegrationMappingFieldAnnotation](field); ok {
+		systemControlled = systemControlled || ant.SystemControlled
+	}
+
 	entityField = EntityField{
 		Name:             field.StructField(),
 		Snake:            field.StorageKey(),
@@ -335,6 +458,8 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 		WebhookPayload:   fieldWebhookPayload(field),
 		Projectable:      fieldProjectable(field),
 		TaskRules:        taskRules,
+		SystemControlled: systemControlled,
+		CaseInsensitive:  fieldCaseInsensitive(field),
 	}
 
 	if im, ok := integrationFields[field.Name]; ok {
@@ -342,6 +467,8 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 		entityField.InputKey = im.InputKey
 		entityField.InputGoField = im.InputGoField
 		entityField.LookupKey = im.LookupKey
+		entityField.SystemControlled = im.SystemControlled
+		entityField.Volatile = im.Volatile
 		entityField.Sanitizable = ingestSanitizable(field, im)
 		entityField.SliceInput = strings.HasPrefix(fieldType, "[]")
 	}
@@ -415,15 +542,17 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		_, orgOwned := node.Annotations[entx.OrgOwnedSchemaName]
 
 		entitySchema := EntitySchema{
-			Name:             node.Name,
-			Snake:            strcase.SnakeCase(node.Name),
-			Lower:            strings.ToLower(strings.ReplaceAll(strcase.SnakeCase(node.Name), "_", "")),
-			OrgOwned:         orgOwned,
-			HasCreate:        hasCreate,
-			HasUpdate:        hasUpdate,
-			PredicatePackage: predAlias,
-			PredicateImport:  predImport,
-			HasOwnerID:       hasField(schema, "owner_id"),
+			Name:                node.Name,
+			Snake:               strcase.SnakeCase(node.Name),
+			Lower:               strings.ToLower(strings.ReplaceAll(strcase.SnakeCase(node.Name), "_", "")),
+			OrgOwned:            orgOwned,
+			HasCreate:           hasCreate,
+			HasUpdate:           hasUpdate,
+			PredicatePackage:    predAlias,
+			PredicateImport:     predImport,
+			HasOwnerID:          hasField(schema, "owner_id"),
+			HasIntegrationID:    hasField(schema, integrationIDFieldName),
+			HasIntegrationRunID: hasField(schema, integrationRunIDFieldName),
 		}
 
 		schemaRules, err := schemaTaskRules(schema)
@@ -435,7 +564,10 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 
 		// ObjectFields is the unified field catalog: every field with its type and capability flags,
 		// consumed by both the workflow builder and the integration cross-link config
-		var workflowMarker bool
+		var (
+			workflowMarker bool
+			lookupOrder    []string
+		)
 
 		// integrationFields carries the per-field integration mapping metadata (keyed by ent field
 		// name) and integrationMeta the schema-level mapping metadata, folded onto the unified catalog
@@ -452,6 +584,10 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 
 			if marker {
 				workflowMarker = true
+			}
+
+			if entityField.LookupKey {
+				lookupOrder = append(lookupOrder, entityField.Snake)
 			}
 
 			entitySchema.ObjectFields = append(entitySchema.ObjectFields, entityField)
@@ -504,6 +640,8 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 				entityEdge.ThroughType = edge.Through.Name
 				entityEdge.ThroughSourceSetter = "Set" + templates.ToGo(sourceColumn)
 				entityEdge.ThroughTargetSetter = "Set" + templates.ToGo(targetColumn)
+				entityEdge.ThroughSourceField = templates.ToGo(sourceColumn)
+				entityEdge.ThroughTargetField = templates.ToGo(targetColumn)
 			}
 
 			entitySchema.Edges = append(entitySchema.Edges, entityEdge)
@@ -512,6 +650,8 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		slices.SortFunc(entitySchema.Edges, func(a, b EntityEdge) int {
 			return cmp.Compare(a.Name, b.Name)
 		})
+
+		detectIntegrationEdges(&entitySchema)
 
 		// workflow eligibility is derived from the unified catalog: any workflow-eligible field or
 		// edge, or the schema-level marker
@@ -528,7 +668,16 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		}
 
 		entitySchema.IntegrationMapped = integrationMeta.Mapped
-		entitySchema.RuntimeDefaults = integrationMeta.RuntimeDefaults
+		entitySchema.InstanceScoped = integrationMeta.InstanceScoped
+		entitySchema.LookupAlternatives = synthesizeLookupAlternatives(integrationMeta.LookupAlternatives, lookupOrder)
+
+		if err := validateLookupAlternatives(entitySchema); err != nil {
+			return EntityData{}, err
+		}
+
+		if err := validateProvenanceFields(entitySchema); err != nil {
+			return EntityData{}, err
+		}
 
 		data.Schemas = append(data.Schemas, entitySchema)
 	}
@@ -642,6 +791,10 @@ type schemaFieldMarkers struct {
 	status string
 	// approver is the approval approver group field
 	approver string
+	// removedAt is the snapshot-removal field
+	removedAt string
+	// removedAtEpisodic reports whether removal is a recurring observation rather than a permanent tombstone
+	removedAtEpisodic bool
 }
 
 // collectFieldMarkers scans a node's fields for display, mention, and approval markers,
@@ -702,6 +855,20 @@ func collectFieldMarkers(node *gen.Type) (schemaFieldMarkers, error) {
 
 			markers.approver = storage
 		}
+
+		if raw, ok := f.Annotations[entx.SnapshotRemovalAnnotationName]; ok {
+			if markers.removedAt != "" {
+				return markers, fmt.Errorf("%w: %s.%s and %s.%s", ErrSnapshotRemovalConflict, node.Name, markers.removedAt, node.Name, storage)
+			}
+
+			ann := &entx.SnapshotRemovalAnnotation{}
+			if err := ann.Decode(raw); err != nil {
+				return markers, fmt.Errorf("decode snapshot removal annotation on %s.%s: %w", node.Name, storage, err)
+			}
+
+			markers.removedAt = storage
+			markers.removedAtEpisodic = ann.Episodic
+		}
 	}
 
 	return markers, nil
@@ -745,6 +912,11 @@ func applyFieldMarkers(schema *EntitySchema, name string, markers schemaFieldMar
 			StatusField:   markers.status,
 			ApproverField: markers.approver,
 		}
+	}
+
+	if markers.removedAt != "" {
+		schema.RemovedAtField = markers.removedAt
+		schema.RemovedAtEpisodic = markers.removedAtEpisodic
 	}
 
 	return nil

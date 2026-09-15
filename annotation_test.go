@@ -160,6 +160,51 @@ func TestCSVRefBuilderMarshalJSON(t *testing.T) {
 	assert.True(t, decoded.CreateIfMissing)
 }
 
+func TestIntegrationMappingSchemaLookupAlternativeAndInstanceScoped(t *testing.T) {
+	b := IntegrationMappingSchema().
+		LookupAlternative("external_id").
+		LookupAlternative("email", "tenant_id").
+		InstanceScoped()
+
+	assert.Equal(t, IntegrationMappingSchemaAnnotationName, b.Name())
+	assert.Equal(t, [][]string{{"external_id"}, {"email", "tenant_id"}}, b.annotation.LookupAlternatives)
+	assert.True(t, b.annotation.InstanceScoped)
+
+	raw, err := b.MarshalJSON()
+	require.NoError(t, err)
+
+	decoded := &IntegrationMappingSchemaAnnotation{}
+	require.NoError(t, json.Unmarshal(raw, decoded))
+	assert.Equal(t, [][]string{{"external_id"}, {"email", "tenant_id"}}, decoded.LookupAlternatives)
+	assert.True(t, decoded.InstanceScoped)
+}
+
+func TestIntegrationMappingSchemaMerge(t *testing.T) {
+	base := IntegrationMappingSchema().StockPersist()
+	override := IntegrationMappingSchema().Exclude("stakeholder_id").LookupAlternative("email").InstanceScoped()
+
+	merged, ok := base.Merge(override).(*IntegrationMappingSchemaBuilder)
+	require.True(t, ok)
+	assert.True(t, merged.annotation.StockPersist)
+	assert.True(t, merged.annotation.InstanceScoped)
+	assert.Equal(t, []string{"stakeholder_id"}, merged.annotation.Exclude)
+	assert.Equal(t, [][]string{{"email"}}, merged.annotation.LookupAlternatives)
+}
+
+func TestSnapshotRemovalAnnotation(t *testing.T) {
+	b := SnapshotRemoval().Episodic()
+
+	assert.Equal(t, SnapshotRemovalAnnotationName, b.Name())
+	assert.True(t, b.annotation.Episodic)
+
+	raw, err := b.MarshalJSON()
+	require.NoError(t, err)
+
+	decoded := &SnapshotRemovalAnnotation{}
+	require.NoError(t, decoded.Decode(json.RawMessage(raw)))
+	assert.True(t, decoded.Episodic)
+}
+
 func TestCSVReferenceAnnotationDecode(t *testing.T) {
 	decoded := &CSVReferenceAnnotation{}
 	err := decoded.Decode(map[string]any{

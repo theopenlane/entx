@@ -1,8 +1,6 @@
 package entityops
 
 import (
-	"slices"
-
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/load"
 	"github.com/99designs/gqlgen/codegen/templates"
@@ -10,8 +8,7 @@ import (
 	"github.com/theopenlane/entx"
 )
 
-// integrationSystemFieldNames is the set of system-managed field names excluded from integration
-// mapping unless they carry an explicit IntegrationMappingFieldAnnotation
+// integrationSystemFieldNames is the set of system-managed field names excluded from provider mapping
 var integrationSystemFieldNames = map[string]struct{}{
 	"id":                        {},
 	"owner_id":                  {},
@@ -21,20 +18,10 @@ var integrationSystemFieldNames = map[string]struct{}{
 	"updated_at":                {},
 	"created_by":                {},
 	"updated_by":                {},
+	"updated_by_impersonator":   {},
 	"deleted_at":                {},
 	"deleted_by":                {},
 	workflowEligibleMarkerField: {},
-}
-
-// EntityRuntimeDefault represents one integration-injected field used by stock ingest preparation
-type EntityRuntimeDefault struct {
-	// GoField is the Go struct field name on the ent create input that receives the injected value
-	GoField string
-	// Required reports whether the field is non-pointer on the input type, which determines whether
-	// the zero value or nil is checked before injection
-	Required bool
-	// IntegrationField is the Go struct field name on *generated.Integration that sources the value
-	IntegrationField string
 }
 
 // integrationFieldMeta carries the per-field integration mapping metadata folded onto EntityField
@@ -45,14 +32,20 @@ type integrationFieldMeta struct {
 	InputGoField string
 	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
 	LookupKey bool
+	// SystemControlled excludes the field from provider mappings
+	SystemControlled bool
+	// Volatile excludes the field from triggering an ingest change
+	Volatile bool
 }
 
 // integrationSchemaMeta carries the schema-level integration mapping metadata folded onto EntitySchema
 type integrationSchemaMeta struct {
 	// Mapped reports whether the schema has at least one integration mapping field
 	Mapped bool
-	// RuntimeDefaults are integration-injected field defaults applied during ingest preparation
-	RuntimeDefaults []EntityRuntimeDefault
+	// LookupAlternatives are the schema's annotation-declared composite ingest lookup keys, if any
+	LookupAlternatives [][]string
+	// InstanceScoped reports whether same-key records from different source instances are distinct rows
+	InstanceScoped bool
 }
 
 // collectIntegrationMapping returns the per-field integration mapping metadata (keyed by ent field
@@ -84,9 +77,10 @@ func collectIntegrationMapping(schema *load.Schema) (map[string]integrationField
 		for _, name := range schemaAnt.Exclude {
 			excludeSet[name] = struct{}{}
 		}
-	}
 
-	var runtimeDefaults []EntityRuntimeDefault
+		schemaMeta.LookupAlternatives = schemaAnt.LookupAlternatives
+		schemaMeta.InstanceScoped = schemaAnt.InstanceScoped
+	}
 
 	for _, field := range schema.Fields {
 		if !integrationFieldEligible(field) {
@@ -115,61 +109,24 @@ func collectIntegrationMapping(schema *load.Schema) (map[string]integrationField
 		}
 
 		goField := templates.ToGo(key)
-		fromIntegration := ant != nil && ant.FromIntegration
 
 		meta[field.Name] = integrationFieldMeta{
-			InputKey:     key,
-			InputGoField: goField,
-			LookupKey:    ant != nil && ant.LookupKey,
-		}
-
-		if stockPersist && fromIntegration {
-			instField, err := integrationFieldForEntField(field.Name)
-			if err != nil {
-				return nil, schemaMeta, err
-			}
-
-			runtimeDefaults = append(runtimeDefaults, EntityRuntimeDefault{
-				GoField:          goField,
-				Required:         !field.Optional,
-				IntegrationField: instField,
-			})
+			InputKey:         key,
+			InputGoField:     goField,
+			LookupKey:        ant != nil && ant.LookupKey,
+			SystemControlled: isIntegrationSystemField(field.Name) || (ant != nil && ant.SystemControlled),
+			Volatile:         ant != nil && ant.Volatile,
 		}
 	}
 
-	if stockPersist && len(meta) > 0 {
-		if ownerDefault, ok := implicitOwnerDefault(schema, runtimeDefaults); ok {
-			runtimeDefaults = append(runtimeDefaults, ownerDefault)
+	for _, field := range meta {
+		if !field.SystemControlled {
+			schemaMeta.Mapped = true
+			break
 		}
 	}
-
-	schemaMeta.Mapped = len(meta) > 0
-	schemaMeta.RuntimeDefaults = runtimeDefaults
 
 	return meta, schemaMeta, nil
-}
-
-// implicitOwnerDefault returns an owner_id runtime default for mapped schemas that declare an
-// owner_id field without an explicit FromIntegration annotation, so every generated Prepare
-// function stamps the integration's owning organization uniformly
-func implicitOwnerDefault(schema *load.Schema, runtimeDefaults []EntityRuntimeDefault) (EntityRuntimeDefault, bool) {
-	if slices.ContainsFunc(runtimeDefaults, func(d EntityRuntimeDefault) bool { return d.GoField == "OwnerID" }) {
-		return EntityRuntimeDefault{}, false
-	}
-
-	for _, field := range schema.Fields {
-		if field.Name != "owner_id" {
-			continue
-		}
-
-		return EntityRuntimeDefault{
-			GoField:          "OwnerID",
-			Required:         !field.Optional,
-			IntegrationField: "OwnerID",
-		}, true
-	}
-
-	return EntityRuntimeDefault{}, false
 }
 
 // integrationFieldIncluded reports whether a field should be collected given the schema's
@@ -243,18 +200,4 @@ func isIntegrationSystemField(name string) bool {
 	_, ok := integrationSystemFieldNames[name]
 
 	return ok
-}
-
-// integrationFieldForEntField maps an ent field name to the Go field name on *generated.Integration
-func integrationFieldForEntField(entField string) (string, error) {
-	switch entField {
-	case "integration_id":
-		return "ID", nil
-	case "owner_id":
-		return "OwnerID", nil
-	case "platform_id":
-		return "PlatformID", nil
-	default:
-		return "", ErrNoIntegrationFieldMapping
-	}
 }
