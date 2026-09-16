@@ -34,8 +34,6 @@ type integrationFieldMeta struct {
 	LookupKey bool
 	// SystemControlled excludes the field from provider mappings
 	SystemControlled bool
-	// Volatile excludes the field from triggering an ingest change
-	Volatile bool
 }
 
 // integrationSchemaMeta carries the schema-level integration mapping metadata folded onto EntitySchema
@@ -115,7 +113,6 @@ func collectIntegrationMapping(schema *load.Schema) (map[string]integrationField
 			InputGoField:     goField,
 			LookupKey:        ant != nil && ant.LookupKey,
 			SystemControlled: isIntegrationSystemField(field.Name) || (ant != nil && ant.SystemControlled),
-			Volatile:         ant != nil && ant.Volatile,
 		}
 	}
 
