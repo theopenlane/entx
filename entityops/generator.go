@@ -444,8 +444,10 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 	// MatchKey: plain-string indexed columns (e.g. external_id, ref_code) usable as cross-link
 	// match keys; custom Go types and enums are excluded because their In predicates reject plain strings
 	systemControlled := isIntegrationSystemField(field.StorageKey())
+	volatile := false
 	if ant, ok := entx.GetAnnotation[*entx.IntegrationMappingFieldAnnotation](field); ok {
 		systemControlled = systemControlled || ant.SystemControlled
+		volatile = ant.Volatile
 	}
 
 	entityField = EntityField{
@@ -459,6 +461,7 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 		Projectable:      fieldProjectable(field),
 		TaskRules:        taskRules,
 		SystemControlled: systemControlled,
+		Volatile:         volatile,
 		CaseInsensitive:  fieldCaseInsensitive(field),
 	}
 
@@ -468,7 +471,6 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 		entityField.InputGoField = im.InputGoField
 		entityField.LookupKey = im.LookupKey
 		entityField.SystemControlled = im.SystemControlled
-		entityField.Volatile = im.Volatile
 		entityField.Sanitizable = ingestSanitizable(field, im)
 		entityField.SliceInput = strings.HasPrefix(fieldType, "[]")
 	}
