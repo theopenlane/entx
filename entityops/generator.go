@@ -111,6 +111,10 @@ type EntitySchema struct {
 	// field list: update-input re-keying, key-match columns, link source context, and workflow-eligible
 	// fields are all derived from it by filtering on the per-field flags
 	ObjectFields []EntityField
+	// StampedCreateFields are the Go names of stamped fields the GraphQL create input does not carry
+	StampedCreateFields []string
+	// StampedUpdateFields are the Go names of stamped fields the GraphQL update input does not carry
+	StampedUpdateFields []string
 	// Edges contains every edge to an entityops schema (any cardinality/direction, mutable or immutable)
 	// plus workflow group-permission edges; the single edge list for linking, workflow, and runtime ops
 	Edges []EntityEdge
@@ -191,6 +195,12 @@ type EntityField struct {
 	SystemControlled bool
 	// Volatile excludes the field from triggering an ingest change
 	Volatile bool
+	// Stamped reports the field is system-controlled by annotation and written by StampProvenance
+	Stamped bool
+	// CreateInputSkipped reports the field is absent from the GraphQL create input
+	CreateInputSkipped bool
+	// UpdateInputSkipped reports the field is absent from the GraphQL update input
+	UpdateInputSkipped bool
 	// CaseInsensitive compares the field case-insensitively in ingest change detection
 	CaseInsensitive bool
 }
@@ -444,25 +454,35 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 	// MatchKey: plain-string indexed columns (e.g. external_id, ref_code) usable as cross-link
 	// match keys; custom Go types and enums are excluded because their In predicates reject plain strings
 	systemControlled := isIntegrationSystemField(field.StorageKey())
-	volatile := false
+	volatile, stamped := false, false
 	if ant, ok := entx.GetAnnotation[*entx.IntegrationMappingFieldAnnotation](field); ok {
 		systemControlled = systemControlled || ant.SystemControlled
 		volatile = ant.Volatile
+		stamped = ant.SystemControlled
+	}
+
+	createInputSkipped, updateInputSkipped := false, false
+	if gqlAnt, ok := entx.GetAnnotation[*entgql.Annotation](field); ok {
+		createInputSkipped = gqlAnt.Skip.Is(entgql.SkipMutationCreateInput)
+		updateInputSkipped = gqlAnt.Skip.Is(entgql.SkipMutationUpdateInput)
 	}
 
 	entityField = EntityField{
-		Name:             field.StructField(),
-		Snake:            field.StorageKey(),
-		Type:             fieldType,
-		WorkflowEligible: eligible,
-		MatchKey:         field.Type != nil && field.Type.Type == entfield.TypeString && !field.HasGoType() && !field.Sensitive(),
-		Clearable:        field.Optional || field.Nillable,
-		WebhookPayload:   fieldWebhookPayload(field),
-		Projectable:      fieldProjectable(field),
-		TaskRules:        taskRules,
-		SystemControlled: systemControlled,
-		Volatile:         volatile,
-		CaseInsensitive:  fieldCaseInsensitive(field),
+		Name:               field.StructField(),
+		Snake:              field.StorageKey(),
+		Type:               fieldType,
+		WorkflowEligible:   eligible,
+		MatchKey:           field.Type != nil && field.Type.Type == entfield.TypeString && !field.HasGoType() && !field.Sensitive(),
+		Clearable:          field.Optional || field.Nillable,
+		WebhookPayload:     fieldWebhookPayload(field),
+		Projectable:        fieldProjectable(field),
+		TaskRules:          taskRules,
+		SystemControlled:   systemControlled,
+		Volatile:           volatile,
+		Stamped:            stamped,
+		CreateInputSkipped: createInputSkipped,
+		UpdateInputSkipped: updateInputSkipped,
+		CaseInsensitive:    fieldCaseInsensitive(field),
 	}
 
 	if im, ok := integrationFields[field.Name]; ok {
@@ -598,6 +618,20 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
 		slices.SortFunc(entitySchema.ObjectFields, func(a, b EntityField) int {
 			return cmp.Compare(a.Snake, b.Snake)
 		})
+
+		for _, field := range entitySchema.ObjectFields {
+			if !field.Stamped {
+				continue
+			}
+
+			if field.CreateInputSkipped {
+				entitySchema.StampedCreateFields = append(entitySchema.StampedCreateFields, field.Name)
+			}
+
+			if field.UpdateInputSkipped {
+				entitySchema.StampedUpdateFields = append(entitySchema.StampedUpdateFields, field.Name)
+			}
+		}
 
 		for _, edge := range node.Edges {
 			// Include every edge to a registered target schema. Optional capability flags are

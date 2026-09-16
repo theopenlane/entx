@@ -714,6 +714,42 @@ func stampProvenanceKey(doc map[string]json.RawMessage, key string, value any) b
 	return true
 }
 
+// applyStampedFields sets the stamped provenance keys carried by payload on the mutation by name, for
+// fields the schema's GraphQL input type does not carry
+func applyStampedFields(mutation ent.Mutation, payload json.RawMessage, fields ...string) error {
+	for _, field := range fields {
+		v := lookupValue(payload, field)
+		if v == "" {
+			continue
+		}
+
+		if err := mutation.SetField(field, v); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// carryStampedKeys copies the stamped provenance keys carried by payload onto prepared, which was
+// re-encoded through the GraphQL create input type and so no longer holds them
+func carryStampedKeys(prepared, payload json.RawMessage, fields ...string) (json.RawMessage, error) {
+	for _, field := range fields {
+		v := lookupValue(payload, field)
+		if v == "" {
+			continue
+		}
+
+		var err error
+
+		if prepared, _, err = jsonx.SetObjectKey(prepared, field, v); err != nil {
+			return nil, err
+		}
+	}
+
+	return prepared, nil
+}
+
 // activeIntegrationsKey carries the ctx-scoped set of integration active answers
 var activeIntegrationsKey = contextx.NewKey[map[string]bool]()
 
@@ -1313,7 +1349,15 @@ var (
 				return "", logError(ctx, ref, ErrDecodeFailed, err)
 			}
 
-			entity, err := client.{{ .Name }}.Create().SetInput(decoded).Save(ctx)
+			builder := client.{{ .Name }}.Create().SetInput(decoded)
+{{- if .StampedCreateFields }}
+
+			if err := applyStampedFields(builder.Mutation(), input{{ range .StampedCreateFields }}, Field{{ . }}{{ end }}); err != nil {
+				return "", logError(ctx, ref, ErrCreateFailed, err)
+			}
+{{- end }}
+
+			entity, err := builder.Save(ctx)
 			if err != nil {
 				return "", logPersistError(ctx, ref, ErrCreateFailed, err)
 			}
@@ -1330,7 +1374,15 @@ var (
 				return logError(ctx, ref, ErrDecodeFailed, err)
 			}
 
-			if err := client.{{ .Name }}.UpdateOneID(entityID).SetInput(decoded).Exec(ctx); err != nil {
+			builder := client.{{ .Name }}.UpdateOneID(entityID).SetInput(decoded)
+{{- if .StampedUpdateFields }}
+
+			if err := applyStampedFields(builder.Mutation(), input{{ range .StampedUpdateFields }}, Field{{ . }}{{ end }}); err != nil {
+				return logError(ctx, ref, ErrUpdateFailed, err)
+			}
+{{- end }}
+
+			if err := builder.Exec(ctx); err != nil {
 				return logPersistError(ctx, ref, ErrUpdateFailed, err)
 			}
 
@@ -1533,6 +1585,13 @@ func init() {
 		if err != nil {
 			return nil, logError(ctx, ref, ErrMarshalFailed, err)
 		}
+{{- if $schema.StampedCreateFields }}
+
+		prepared, err = carryStampedKeys(prepared, payload{{ range $schema.StampedCreateFields }}, Field{{ . }}{{ end }})
+		if err != nil {
+			return nil, logError(ctx, ref, ErrMarshalFailed, err)
+		}
+{{- end }}
 
 		return prepared, nil
 	}
@@ -1554,6 +1613,12 @@ func init() {
 		}
 
 		update := client.{{ $schema.Name }}.UpdateOne(&existing).SetInput(input)
+{{- if $schema.StampedUpdateFields }}
+
+		if err := applyStampedFields(update.Mutation(), payload{{ range $schema.StampedUpdateFields }}, Field{{ . }}{{ end }}); err != nil {
+			return nil, nil, logError(ctx, ref, ErrUpdateFailed, err)
+		}
+{{- end }}
 
 		guarded := false
 {{- if $schema.HasIntegrationRunID }}
