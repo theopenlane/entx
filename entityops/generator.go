@@ -519,7 +519,7 @@ func ingestSanitizable(field *gen.Field, im integrationFieldMeta) bool {
 // collectEntityData iterates the ent graph and collects every primary schema. Optional
 // workflow, integration, and task-rule annotations add capabilities to the canonical schema;
 // they do not control whether the schema exists in the registry.
-func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) {
+func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:gocyclo
 	data := EntityData{
 		PackageName:        c.PackageName,
 		EntPackage:         c.EntPackage,
