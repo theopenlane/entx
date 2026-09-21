@@ -69,9 +69,10 @@ type NotifySpec struct {
 type EmailRecipient struct {
 	// User is the recipient user row
 	User *generated.User
-	// Title and Body are the rendered notification content for this emission
+	// Title is the rendered notification title for this emission
 	Title string
-	Body  string
+	// Body is the rendered notification body for this emission
+	Body string
 	// Data is the rendered notification data, including the console url when the schema has a route
 	Data map[string]any
 }
