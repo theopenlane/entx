@@ -147,7 +147,7 @@ func (listener MutationListener) rowMatches(row json.RawMessage) bool {
 	entity, _ := jsonx.Decode[map[string]any](row)
 
 	for _, match := range listener.RowMatch {
-		value, ok := ValueAsString(entity[match.Field])
+		value, ok := nonEmptyString(entity[match.Field])
 		if !ok {
 			return false
 		}
