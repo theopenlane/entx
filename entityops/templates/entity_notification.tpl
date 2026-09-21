@@ -68,7 +68,7 @@ type NotifySpec struct {
 // EmailRecipient is the resolved recipient set an email spec builds its input for: one user per
 // send by default, or every resolved user at once for a batched spec
 type EmailRecipient struct {
-	// Users are the recipient user rows for this send, a single entry unless the spec is batched
+	// Users are the recipient user rows to address this send to
 	Users []*generated.User
 	// Title is the rendered notification title for this emission
 	Title string
