@@ -87,6 +87,20 @@ type EmailSpec struct {
 	Input func(Invocation, MutationPayload, json.RawMessage, EmailRecipient) (any, error)
 }
 
+// DefaultEmail is the email spec used when a notify spec lists the email channel without naming
+// an operation; the host registers it once at startup, typically a generic branded message built
+// from the rendered title, body, and data
+var DefaultEmail *EmailSpec
+
+// emailSpecFor returns the spec's own email entry or the registered default
+func emailSpecFor(spec *NotifySpec) *EmailSpec {
+	if spec.Email != nil {
+		return spec.Email
+	}
+
+	return DefaultEmail
+}
+
 // EmailVia builds an EmailSpec for a typed operation so the input builder stays typed while the
 // spec itself carries only the definition id and operation name
 func EmailVia[T any](definition types.DefinitionRef, operation types.OperationRef[T], build func(Invocation, MutationPayload, json.RawMessage, EmailRecipient) (T, error)) *EmailSpec {
@@ -110,6 +124,13 @@ type OperationDispatcher interface {
 // Failures are logged rather than returned: the notifications already exist, dispatch only
 // enqueues a durable job, and retrying the listener would duplicate the notification rows
 func dispatchEmails(inv Invocation, payload MutationPayload, row json.RawMessage, spec *NotifySpec, recipients []string, title, body string, data map[string]any) {
+	emailSpec := emailSpecFor(spec)
+	if emailSpec == nil {
+		logx.FromContext(inv.Context).Error().Msg("notify spec: email channel set but no email operation or default registered, skipping email")
+
+		return
+	}
+
 	dispatcher, err := do.InvokeAs[OperationDispatcher](inv.Injector)
 	if err != nil {
 		logx.FromContext(inv.Context).Debug().Err(err).Msg("notify spec: no operation dispatcher wired, skipping email")
@@ -125,9 +146,9 @@ func dispatchEmails(inv Invocation, payload MutationPayload, row json.RawMessage
 			continue
 		}
 
-		input, err := spec.Email.Input(inv, payload, row, EmailRecipient{User: user, Title: title, Body: body, Data: data})
+		input, err := emailSpec.Input(inv, payload, row, EmailRecipient{User: user, Title: title, Body: body, Data: data})
 		if err != nil {
-			logx.FromContext(inv.Context).Error().Err(err).Str("user_id", userID).Str("operation", spec.Email.Operation).Msg("notify spec: email input build failed, skipping email")
+			logx.FromContext(inv.Context).Error().Err(err).Str("user_id", userID).Str("operation", emailSpec.Operation).Msg("notify spec: email input build failed, skipping email")
 
 			continue
 		}
@@ -138,19 +159,19 @@ func dispatchEmails(inv Invocation, payload MutationPayload, row json.RawMessage
 
 		config, err := json.Marshal(input)
 		if err != nil {
-			logx.FromContext(inv.Context).Error().Err(err).Str("user_id", userID).Str("operation", spec.Email.Operation).Msg("notify spec: email input encode failed, skipping email")
+			logx.FromContext(inv.Context).Error().Err(err).Str("user_id", userID).Str("operation", emailSpec.Operation).Msg("notify spec: email input encode failed, skipping email")
 
 			continue
 		}
 
 		if _, err := dispatcher.Dispatch(inv.Context, types.DispatchRequest{
-			DefinitionID: spec.Email.DefinitionID,
-			Operation:    spec.Email.Operation,
+			DefinitionID: emailSpec.DefinitionID,
+			Operation:    emailSpec.Operation,
 			Config:       config,
 			RunType:      enums.IntegrationRunTypeEvent,
 			Runtime:      true,
 		}); err != nil {
-			logx.FromContext(inv.Context).Error().Err(err).Str("user_id", userID).Str("operation", spec.Email.Operation).Msg("notify spec: email dispatch failed, skipping email")
+			logx.FromContext(inv.Context).Error().Err(err).Str("user_id", userID).Str("operation", emailSpec.Operation).Msg("notify spec: email dispatch failed, skipping email")
 		}
 	}
 }
@@ -310,7 +331,7 @@ func notifyHandler(listener MutationListener) func(Invocation, MutationPayload) 
 		}
 {{- if .IntegrationTypesPackage }}
 
-		if spec.Email != nil && lo.Contains(spec.Content.Channels, enums.ChannelEmail) {
+		if lo.Contains(spec.Content.Channels, enums.ChannelEmail) {
 			dispatchEmails(inv, payload, row, spec, recipients, title, body, data)
 		}
 {{- end }}
