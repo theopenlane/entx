@@ -50,6 +50,8 @@ type EntityData struct {
 	EnumsPackageName string
 	// SlateparserPackage is the slateparser package import path for mention scanning
 	SlateparserPackage string
+	// IntegrationTypesPackage is the integrations types package import path for notify spec dispatch
+	IntegrationTypesPackage string
 	// Schemas contains all schemas eligible for entity operations
 	Schemas []EntitySchema
 }
@@ -521,17 +523,18 @@ func ingestSanitizable(field *gen.Field, im integrationFieldMeta) bool {
 // they do not control whether the schema exists in the registry.
 func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:gocyclo
 	data := EntityData{
-		PackageName:        c.PackageName,
-		EntPackage:         c.EntPackage,
-		GalaPackage:        c.GalaPackage,
-		JsonxPackage:       c.JsonxPackage,
-		LogxPackage:        c.LogxPackage,
-		CelxPackage:        c.CelxPackage,
-		MapxPackage:        c.MapxPackage,
-		EnumsPackage:       c.EnumsPackage,
-		EnumsPackageName:   c.EnumsPackageName,
-		SlateparserPackage: c.SlateparserPackage,
-		Schemas:            []EntitySchema{},
+		PackageName:             c.PackageName,
+		EntPackage:              c.EntPackage,
+		GalaPackage:             c.GalaPackage,
+		JsonxPackage:            c.JsonxPackage,
+		LogxPackage:             c.LogxPackage,
+		CelxPackage:             c.CelxPackage,
+		MapxPackage:             c.MapxPackage,
+		EnumsPackage:            c.EnumsPackage,
+		EnumsPackageName:        c.EnumsPackageName,
+		SlateparserPackage:      c.SlateparserPackage,
+		IntegrationTypesPackage: c.IntegrationTypesPackage,
+		Schemas:                 []EntitySchema{},
 	}
 
 	var registeredSchemas []string

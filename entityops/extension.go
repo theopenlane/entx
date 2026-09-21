@@ -34,6 +34,9 @@ type Config struct {
 	EnumsPackageName string
 	// SlateparserPackage is the slateparser package import path for mention scanning
 	SlateparserPackage string
+	// IntegrationTypesPackage is the integrations types package import path for dispatching
+	// operations from notify specs
+	IntegrationTypesPackage string
 }
 
 // Extension implements entc.Extension for entity operations generation
@@ -82,6 +85,13 @@ func WithEntPackage(path string) ExtensionOption {
 func WithGalaPackage(path string) ExtensionOption {
 	return func(c *Config) {
 		c.GalaPackage = path
+	}
+}
+
+// WithIntegrationTypesPackage sets the integrations types package import path
+func WithIntegrationTypesPackage(path string) ExtensionOption {
+	return func(c *Config) {
+		c.IntegrationTypesPackage = path
 	}
 }
 

@@ -6,9 +6,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"text/template"
 
+{{- if .IntegrationTypesPackage }}
+	"github.com/samber/do/v2"
+{{- end }}
 	"github.com/samber/lo"
 	"github.com/stoewer/go-strcase"
 	"github.com/theopenlane/iam/auth"
@@ -18,6 +22,9 @@ import (
 	group "{{ .EntPackage }}/group"
 	orgmembership "{{ .EntPackage }}/orgmembership"
 	gala "{{ .GalaPackage }}"
+{{- if .IntegrationTypesPackage }}
+	types "{{ .IntegrationTypesPackage }}"
+{{- end }}
 	jsonx "{{ .JsonxPackage }}"
 	logx "{{ .LogxPackage }}"
 	slateparser "{{ .SlateparserPackage }}"
@@ -37,6 +44,9 @@ type NotificationContent struct {
 	// Data is static base data carried on the notification; string values render as templates
 	// and empty rendered values are omitted, matching the ent defaults column semantics
 	Data map[string]any
+	// Channels are the delivery channels set on emitted notifications, matching the ent channels
+	// column; when none are specified the notification is delivered in-app only
+	Channels []enums.Channel
 }
 
 // NotifySpec declares a declarative notification on a mutation listener: recipients resolve
@@ -46,7 +56,105 @@ type NotifySpec struct {
 	Recipients func(Invocation, MutationPayload, json.RawMessage) ([]string, error)
 	// Content is the notification content rendered per emission
 	Content NotificationContent
+{{- if .IntegrationTypesPackage }}
+	// Email optionally dispatches a registered email operation to every recipient alongside the
+	// notification; it only runs when Content.Channels includes the email channel
+	Email *EmailSpec
+{{- end }}
 }
+
+{{- if .IntegrationTypesPackage }}
+
+// EmailRecipient is the resolved user an email spec builds its input for
+type EmailRecipient struct {
+	// User is the recipient user row
+	User *generated.User
+	// Title and Body are the rendered notification content for this emission
+	Title string
+	Body  string
+	// Data is the rendered notification data, including the console url when the schema has a route
+	Data map[string]any
+}
+
+// EmailSpec routes the email channel of a notify spec to a registered email operation; the
+// operation config is built per recipient from the invocation, payload, row, and recipient
+type EmailSpec struct {
+	// DefinitionID is the integration definition hosting the operation
+	DefinitionID string
+	// Operation is the registered operation name
+	Operation string
+	// Input builds the operation config for one recipient; a nil result skips that recipient
+	Input func(Invocation, MutationPayload, json.RawMessage, EmailRecipient) (any, error)
+}
+
+// EmailVia builds an EmailSpec for a typed operation so the input builder stays typed while the
+// spec itself carries only the definition id and operation name
+func EmailVia[T any](definition types.DefinitionRef, operation types.OperationRef[T], build func(Invocation, MutationPayload, json.RawMessage, EmailRecipient) (T, error)) *EmailSpec {
+	return &EmailSpec{
+		DefinitionID: definition.ID(),
+		Operation:    operation.Name(),
+		Input: func(inv Invocation, payload MutationPayload, row json.RawMessage, recipient EmailRecipient) (any, error) {
+			return build(inv, payload, row, recipient)
+		},
+	}
+}
+
+// OperationDispatcher enqueues one integration operation; the integration runtime attached to
+// the listener injector satisfies it
+type OperationDispatcher interface {
+	Dispatch(ctx context.Context, req types.DispatchRequest) (types.DispatchResult, error)
+}
+
+// dispatchEmails sends the spec's email operation to each recipient through the runtime on
+// the injector, skipping when the runtime is not wired or the recipient cannot be resolved.
+// Failures are logged rather than returned: the notifications already exist, dispatch only
+// enqueues a durable job, and retrying the listener would duplicate the notification rows
+func dispatchEmails(inv Invocation, payload MutationPayload, row json.RawMessage, spec *NotifySpec, recipients []string, title, body string, data map[string]any) {
+	dispatcher, err := do.InvokeAs[OperationDispatcher](inv.Injector)
+	if err != nil {
+		logx.FromContext(inv.Context).Debug().Err(err).Msg("notify spec: no operation dispatcher wired, skipping email")
+
+		return
+	}
+
+	for _, userID := range recipients {
+		user, err := inv.Client.User.Get(inv.Context, userID)
+		if err != nil {
+			logx.FromContext(inv.Context).Warn().Err(err).Str("user_id", userID).Msg("notify spec: recipient not found, skipping email")
+
+			continue
+		}
+
+		input, err := spec.Email.Input(inv, payload, row, EmailRecipient{User: user, Title: title, Body: body, Data: data})
+		if err != nil {
+			logx.FromContext(inv.Context).Error().Err(err).Str("user_id", userID).Str("operation", spec.Email.Operation).Msg("notify spec: email input build failed, skipping email")
+
+			continue
+		}
+
+		if input == nil {
+			continue
+		}
+
+		config, err := json.Marshal(input)
+		if err != nil {
+			logx.FromContext(inv.Context).Error().Err(err).Str("user_id", userID).Str("operation", spec.Email.Operation).Msg("notify spec: email input encode failed, skipping email")
+
+			continue
+		}
+
+		if _, err := dispatcher.Dispatch(inv.Context, types.DispatchRequest{
+			DefinitionID: spec.Email.DefinitionID,
+			Operation:    spec.Email.Operation,
+			Config:       config,
+			RunType:      enums.IntegrationRunTypeEvent,
+			Runtime:      true,
+		}); err != nil {
+			logx.FromContext(inv.Context).Error().Err(err).Str("user_id", userID).Str("operation", spec.Email.Operation).Msg("notify spec: email dispatch failed, skipping email")
+		}
+	}
+}
+{{- end }}
 
 // RecipientsFromField resolves a single recipient from the payload's proposed value for the
 // field, falling back to the loaded row; an empty value skips emission
@@ -158,13 +266,10 @@ func notifyHandler(listener MutationListener) func(Invocation, MutationPayload) 
 	spec := listener.Notify
 
 	return func(inv Invocation, payload MutationPayload) error {
-		row, err := inv.Schema.Load(inv.Context, inv.Client, payload.EntityID)
-		switch {
-		case generated.IsNotFound(err):
-			return nil
-		case err != nil:
-			logx.FromContext(inv.Context).Error().Err(err).Msg("failed to load entity for notification")
-			return err
+		// the mutation handler loads the row for notify listeners before invoking this
+		row := inv.Row
+		if row == nil {
+			return fmt.Errorf("%w: %s", ErrMutationListenerInvalid, listener.Name())
 		}
 
 		recipients, err := spec.Recipients(inv, payload, row)
@@ -191,6 +296,7 @@ func notifyHandler(listener MutationListener) func(Invocation, MutationPayload) 
 			Title:            title,
 			Body:             body,
 			Data:             data,
+			Channels:         spec.Content.Channels,
 			Topic:            &topic,
 			ObjectType:       payload.MutationType,
 		}
@@ -199,7 +305,17 @@ func notifyHandler(listener MutationListener) func(Invocation, MutationPayload) 
 			input.OwnerID = &ownerID
 		}
 
-		return CreateNotifications(inv.Context, inv.Client, recipients, input)
+		if err := CreateNotifications(inv.Context, inv.Client, recipients, input); err != nil {
+			return err
+		}
+{{- if .IntegrationTypesPackage }}
+
+		if spec.Email != nil && lo.Contains(spec.Content.Channels, enums.ChannelEmail) {
+			dispatchEmails(inv, payload, row, spec, recipients, title, body, data)
+		}
+{{- end }}
+
+		return nil
 	}
 }
 
