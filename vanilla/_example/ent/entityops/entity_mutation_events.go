@@ -50,6 +50,9 @@ const (
 	MutationConcernWorkflow MutationConcern = "workflow"
 	// MutationConcernNotification is the concern for notification mutation listeners
 	MutationConcernNotification MutationConcern = "notification"
+	// MutationConcernTaskRule is the concern for task rule listeners, kept off the direct
+	// namespace so suggested tasks are not queued behind slower direct listeners
+	MutationConcernTaskRule MutationConcern = "task_rule"
 )
 
 const (
@@ -69,6 +72,8 @@ func concernNamespace(concern MutationConcern) gala.Namespace {
 		return gala.Mutation.Prefixed("workflow")
 	case MutationConcernNotification:
 		return gala.Mutation.Prefixed("notification")
+	case MutationConcernTaskRule:
+		return gala.Mutation.Prefixed("task_rule")
 	default:
 		return gala.Mutation
 	}
@@ -82,19 +87,6 @@ func MutationTopicName(concern MutationConcern, schemaType string) gala.TopicNam
 	}
 
 	return concernNamespace(concern).Name(schemaType)
-}
-
-// LegacyTopicRenames maps the historical unprefixed direct mutation topic of every schema
-// to its designated topic
-func LegacyTopicRenames() map[gala.TopicName]gala.TopicName {
-	buildSchemaLookup()
-
-	renames := make(map[gala.TopicName]gala.TopicName, len(allSchemas))
-	for _, schema := range allSchemas {
-		renames[gala.TopicName(schema.Name)] = MutationTopicName(MutationConcernDirect, schema.Name)
-	}
-
-	return renames
 }
 
 // MutationPayload is the durable mutation event payload dispatched to gala listeners.
@@ -133,24 +125,18 @@ func (payload MutationPayload) PayloadOperation() string {
 	return payload.Operation
 }
 
-// WithPayloadOperation returns a copy of the payload with its operation replaced
-func (payload MutationPayload) WithPayloadOperation(operation string) any {
-	payload.Operation = operation
-
-	return payload
-}
-
 // MutationTopic returns the typed mutation topic for a concern + schema type pair
 func MutationTopic(concern MutationConcern, schemaType string) gala.Topic[MutationPayload] {
 	return gala.NamespacedTopic[MutationPayload](concernNamespace(concern), strings.TrimSpace(schemaType))
 }
 
 // MutationConcernTopics returns the concern topic names a schema mutation fans out to
-func MutationConcernTopics(schemaType string) [3]gala.TopicName {
-	return [3]gala.TopicName{
+func MutationConcernTopics(schemaType string) [4]gala.TopicName {
+	return [4]gala.TopicName{
 		MutationTopicName(MutationConcernDirect, schemaType),
 		MutationTopicName(MutationConcernWorkflow, schemaType),
 		MutationTopicName(MutationConcernNotification, schemaType),
+		MutationTopicName(MutationConcernTaskRule, schemaType),
 	}
 }
 
