@@ -40,3 +40,27 @@ var ErrLookupAlternativeWithoutMapping = errors.New("entityops: lookup alternati
 
 // ErrSnapshotRemovalConflict indicates a schema marks more than one snapshot-removal field
 var ErrSnapshotRemovalConflict = errors.New("entityops: schema declares multiple snapshot removal fields")
+
+// ErrCatalogEdgeInvalid indicates a catalog edge is not a unique self edge owning its foreign-key field
+var ErrCatalogEdgeInvalid = errors.New("entityops: catalog edge must be a unique self edge with a foreign-key field")
+
+// ErrCatalogEdgeConflict indicates a schema marks more than one catalog edge
+var ErrCatalogEdgeConflict = errors.New("entityops: schema declares multiple catalog edges")
+
+// ErrCatalogInputsMissing indicates a catalogue-capable schema lacks the create or update input adopt and refresh use
+var ErrCatalogInputsMissing = errors.New("entityops: catalog adoption requires create and update inputs")
+
+// ErrCatalogVisibilityMissing indicates a schema with a catalog edge lacks the CatalogVisibilityField-annotated field
+var ErrCatalogVisibilityMissing = errors.New("entityops: catalog adoption requires a visibility field")
+
+// ErrCatalogKeyMissing indicates a schema with a catalog edge lacks the CatalogKeyField-annotated field
+var ErrCatalogKeyMissing = errors.New("entityops: catalog adoption requires a key field")
+
+// ErrCatalogLookupKeyMissing indicates a schema with a catalog edge lacks an integration lookup key field
+var ErrCatalogLookupKeyMissing = errors.New("entityops: catalog adoption requires a lookup key field")
+
+// ErrCatalogOwnerMissing indicates a schema with a catalog edge is not org owned, so adopted rows have no owner to scope by
+var ErrCatalogOwnerMissing = errors.New("entityops: catalog adoption requires an org-owned schema")
+
+// ErrOwnerEdgeMissing indicates an org-owned schema lacks an owner edge with a foreign-key field
+var ErrOwnerEdgeMissing = errors.New("entityops: org-owned schema requires an owner edge with a foreign-key field")

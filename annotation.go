@@ -246,6 +246,18 @@ type ConsoleRouteAnnotation struct {
 // SnapshotRemovalAnnotationName is the annotation name for a schema's removed_at-style field
 var SnapshotRemovalAnnotationName = "OPENLANE_SNAPSHOT_REMOVAL"
 
+// FieldSourceManagedAnnotationName is the annotation name for fields whose value is owned by the upstream source
+var FieldSourceManagedAnnotationName = "OPENLANE_FIELD_SOURCE_MANAGED"
+
+// CatalogEdgeAnnotationName is the annotation name for the self edge pointing at a schema's catalogue row
+var CatalogEdgeAnnotationName = "OPENLANE_CATALOG_EDGE"
+
+// CatalogVisibilityFieldAnnotationName is the annotation name for the bool field marking a catalogue row as visible to organizations
+var CatalogVisibilityFieldAnnotationName = "OPENLANE_CATALOG_VISIBILITY_FIELD"
+
+// CatalogKeyFieldAnnotationName is the annotation name for the field holding the catalogue row's lookup key on adopted rows
+var CatalogKeyFieldAnnotationName = "OPENLANE_CATALOG_KEY_FIELD"
+
 // DisplayNameAnnotation marks the single field carrying a schema's display name; at most
 // one field per schema may carry it
 type DisplayNameAnnotation struct{}
@@ -255,6 +267,18 @@ type SnapshotRemovalAnnotation struct {
 	// Episodic treats removal as a recurring observation rather than a permanent tombstone
 	Episodic bool
 }
+
+// FieldSourceManagedAnnotation marks a field whose value is owned by its upstream source and overwritten on refresh or reconcile
+type FieldSourceManagedAnnotation struct{}
+
+// CatalogEdgeAnnotation marks the unique self edge whose foreign key points at the catalogue row
+type CatalogEdgeAnnotation struct{}
+
+// CatalogVisibilityFieldAnnotation marks the bool field reporting whether a catalogue row is visible to organizations
+type CatalogVisibilityFieldAnnotation struct{}
+
+// CatalogKeyFieldAnnotation marks the field holding the catalogue row's lookup key on adopted rows
+type CatalogKeyFieldAnnotation struct{}
 
 // MentionSourceAnnotation marks a rich-text field scanned for mentions; the generator
 // classifies the field by its ent type: JSON fields carry the slate document and string
@@ -373,6 +397,26 @@ func (a MentionSourceAnnotation) Name() string {
 // Name returns the name of the SnapshotRemovalAnnotation
 func (a SnapshotRemovalAnnotation) Name() string {
 	return SnapshotRemovalAnnotationName
+}
+
+// Name returns the name of the FieldSourceManagedAnnotation
+func (a FieldSourceManagedAnnotation) Name() string {
+	return FieldSourceManagedAnnotationName
+}
+
+// Name returns the name of the CatalogEdgeAnnotation
+func (a CatalogEdgeAnnotation) Name() string {
+	return CatalogEdgeAnnotationName
+}
+
+// Name returns the name of the CatalogVisibilityFieldAnnotation
+func (a CatalogVisibilityFieldAnnotation) Name() string {
+	return CatalogVisibilityFieldAnnotationName
+}
+
+// Name returns the name of the CatalogKeyFieldAnnotation
+func (a CatalogKeyFieldAnnotation) Name() string {
+	return CatalogKeyFieldAnnotationName
 }
 
 // Name returns the name of the ApprovalStatusAnnotation
@@ -519,6 +563,106 @@ func (b *SnapshotRemovalBuilder) MarshalJSON() ([]byte, error) {
 
 // Decode unmarshalls the SnapshotRemovalAnnotation
 func (a *SnapshotRemovalAnnotation) Decode(annotation any) error {
+	return DecodeAnnotation(annotation, a)
+}
+
+// FieldSourceManagedBuilder provides a fluent interface for FieldSourceManagedAnnotation
+type FieldSourceManagedBuilder struct {
+	annotation FieldSourceManagedAnnotation
+}
+
+// FieldSourceManaged marks a field whose value is owned by its upstream source and overwritten on refresh or reconcile
+func FieldSourceManaged() *FieldSourceManagedBuilder {
+	return &FieldSourceManagedBuilder{}
+}
+
+// Name returns the annotation name, implementing the ent Annotation interface
+func (b *FieldSourceManagedBuilder) Name() string {
+	return b.annotation.Name()
+}
+
+// MarshalJSON serializes the builder as the underlying FieldSourceManagedAnnotation
+func (b *FieldSourceManagedBuilder) MarshalJSON() ([]byte, error) {
+	return json.Marshal(b.annotation)
+}
+
+// Decode unmarshalls the FieldSourceManagedAnnotation
+func (a *FieldSourceManagedAnnotation) Decode(annotation any) error {
+	return DecodeAnnotation(annotation, a)
+}
+
+// CatalogEdgeBuilder provides a fluent interface for CatalogEdgeAnnotation
+type CatalogEdgeBuilder struct {
+	annotation CatalogEdgeAnnotation
+}
+
+// CatalogEdge marks the unique self edge whose foreign key points at the catalogue row
+func CatalogEdge() *CatalogEdgeBuilder {
+	return &CatalogEdgeBuilder{}
+}
+
+// Name returns the annotation name, implementing the ent Annotation interface
+func (b *CatalogEdgeBuilder) Name() string {
+	return b.annotation.Name()
+}
+
+// MarshalJSON serializes the builder as the underlying CatalogEdgeAnnotation
+func (b *CatalogEdgeBuilder) MarshalJSON() ([]byte, error) {
+	return json.Marshal(b.annotation)
+}
+
+// Decode unmarshalls the CatalogEdgeAnnotation
+func (a *CatalogEdgeAnnotation) Decode(annotation any) error {
+	return DecodeAnnotation(annotation, a)
+}
+
+// CatalogVisibilityFieldBuilder provides a fluent interface for CatalogVisibilityFieldAnnotation
+type CatalogVisibilityFieldBuilder struct {
+	annotation CatalogVisibilityFieldAnnotation
+}
+
+// CatalogVisibilityField marks the bool field reporting whether a catalogue row is visible to organizations
+func CatalogVisibilityField() *CatalogVisibilityFieldBuilder {
+	return &CatalogVisibilityFieldBuilder{}
+}
+
+// Name returns the annotation name, implementing the ent Annotation interface
+func (b *CatalogVisibilityFieldBuilder) Name() string {
+	return b.annotation.Name()
+}
+
+// MarshalJSON serializes the builder as the underlying CatalogVisibilityFieldAnnotation
+func (b *CatalogVisibilityFieldBuilder) MarshalJSON() ([]byte, error) {
+	return json.Marshal(b.annotation)
+}
+
+// Decode unmarshalls the CatalogVisibilityFieldAnnotation
+func (a *CatalogVisibilityFieldAnnotation) Decode(annotation any) error {
+	return DecodeAnnotation(annotation, a)
+}
+
+// CatalogKeyFieldBuilder provides a fluent interface for CatalogKeyFieldAnnotation
+type CatalogKeyFieldBuilder struct {
+	annotation CatalogKeyFieldAnnotation
+}
+
+// CatalogKeyField marks the field holding the catalogue row's lookup key on adopted rows
+func CatalogKeyField() *CatalogKeyFieldBuilder {
+	return &CatalogKeyFieldBuilder{}
+}
+
+// Name returns the annotation name, implementing the ent Annotation interface
+func (b *CatalogKeyFieldBuilder) Name() string {
+	return b.annotation.Name()
+}
+
+// MarshalJSON serializes the builder as the underlying CatalogKeyFieldAnnotation
+func (b *CatalogKeyFieldBuilder) MarshalJSON() ([]byte, error) {
+	return json.Marshal(b.annotation)
+}
+
+// Decode unmarshalls the CatalogKeyFieldAnnotation
+func (a *CatalogKeyFieldAnnotation) Decode(annotation any) error {
 	return DecodeAnnotation(annotation, a)
 }
 

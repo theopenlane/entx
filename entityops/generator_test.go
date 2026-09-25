@@ -7,10 +7,13 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"text/template"
 
 	"entgo.io/ent/entc/gen"
+	"entgo.io/ent/entc/load"
+	entfield "entgo.io/ent/schema/field"
 	"github.com/stretchr/testify/require"
+
+	"github.com/theopenlane/entx"
 )
 
 // TestStaticTemplatesRenderValidGo verifies the schema-independent templates render to
@@ -31,10 +34,7 @@ func TestStaticTemplatesRenderValidGo(t *testing.T) {
 		"entity_changeset", "entity_mutation_events", "entity_listener",
 	} {
 		t.Run(name, func(t *testing.T) {
-			raw, err := _templates.ReadFile("templates/" + name + ".tpl")
-			require.NoError(t, err)
-
-			tmpl, err := template.New(name).Funcs(gen.Funcs).Parse(string(raw))
+			tmpl, err := parseTemplate(name)
 			require.NoError(t, err)
 
 			var buf bytes.Buffer
@@ -62,7 +62,7 @@ func TestCapabilityGatedEmission(t *testing.T) {
 		Schemas: []EntitySchema{
 			{
 				Name: "Asset", Snake: "asset", Lower: "asset",
-				HasCreate: true, HasUpdate: true, HasOwnerID: true,
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
 				CreateInputType: "CreateAssetInput", UpdateInputType: "UpdateAssetInput",
 				PredicatePackage: "asset", PredicateImport: "example.com/app/ent/generated/asset",
 				IntegrationMapped: true,
@@ -71,7 +71,7 @@ func TestCapabilityGatedEmission(t *testing.T) {
 			},
 			{
 				Name: "Control", Snake: "control", Lower: "control",
-				HasCreate: true, HasUpdate: true, HasOwnerID: true,
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
 				CreateInputType: "CreateControlInput", UpdateInputType: "UpdateControlInput",
 				PredicatePackage: "control", PredicateImport: "example.com/app/ent/generated/control",
 				LinkTarget:       true,
@@ -80,7 +80,7 @@ func TestCapabilityGatedEmission(t *testing.T) {
 			},
 			{
 				Name: "Note", Snake: "note", Lower: "note",
-				HasCreate: true, HasUpdate: true, HasOwnerID: true,
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
 				CreateInputType: "CreateNoteInput", UpdateInputType: "UpdateNoteInput",
 				PredicatePackage: "note", PredicateImport: "example.com/app/ent/generated/note",
 				ObjectFields: []EntityField{{Name: "Text", Snake: "text", Type: "string", Projectable: true}},
@@ -89,10 +89,7 @@ func TestCapabilityGatedEmission(t *testing.T) {
 	}
 
 	render := func(name string) string {
-		raw, err := _templates.ReadFile("templates/" + name + ".tpl")
-		require.NoError(t, err)
-
-		tmpl, err := template.New(name).Funcs(gen.Funcs).Parse(string(raw))
+		tmpl, err := parseTemplate(name)
 		require.NoError(t, err)
 
 		var buf bytes.Buffer
@@ -131,6 +128,8 @@ func TestCapabilityGatedEmission(t *testing.T) {
 	require.Contains(t, registry, "SchemaControl.QueryByKey = func")
 	require.NotContains(t, registry, "SchemaNote.QueryByKey")
 	require.NotContains(t, registry, "LoadMany")
+	require.NotContains(t, registry, "func CatalogListeners()")
+	require.NotContains(t, registry, "theopenlane/iam/auth")
 
 	projections := render("entity_projection")
 	require.Contains(t, projections, "type AssetProjection struct")
@@ -189,10 +188,7 @@ func TestFieldContractTemplates(t *testing.T) {
 		},
 	}
 
-	raw, err := _templates.ReadFile("templates/entity_schema.tpl")
-	require.NoError(t, err)
-
-	tmpl, err := template.New("entity_schema").Funcs(gen.Funcs).Parse(string(raw))
+	tmpl, err := parseTemplate("entity_schema")
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -210,10 +206,7 @@ func TestFieldContractTemplates(t *testing.T) {
 	require.NotContains(t, schema, "\tFromIntegration bool")
 	require.NotContains(t, schema, "\tIntegrationField string")
 
-	raw, err = _templates.ReadFile("templates/entity_integration.tpl")
-	require.NoError(t, err)
-
-	tmpl, err = template.New("entity_integration").Funcs(gen.Funcs).Parse(string(raw))
+	tmpl, err = parseTemplate("entity_integration")
 	require.NoError(t, err)
 
 	buf.Reset()
@@ -223,7 +216,7 @@ func TestFieldContractTemplates(t *testing.T) {
 	require.NoError(t, err, buf.String())
 
 	index := buf.String()
-	require.Contains(t, index, `ExternalID: FieldDescriptor{Name: "external_id", InputKey: "external_id"}`)
+	require.Contains(t, index, `ExternalID: FieldDescriptor{Name: "external_id", Label: "ExternalID", Type: "string", InputKey: "external_id"}`)
 	require.NotContains(t, index, "SourceDefinitionID")
 	require.NotContains(t, index, "SchemaAsset")
 	require.NotContains(t, index, "func init")
@@ -239,7 +232,7 @@ func TestFieldContractTemplates(t *testing.T) {
 		Schemas: []EntitySchema{
 			{
 				Name: "Asset", Snake: "asset", Lower: "asset",
-				HasCreate: true, HasUpdate: true, HasOwnerID: true,
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
 				CreateInputType: "CreateAssetInput", UpdateInputType: "UpdateAssetInput",
 				PredicatePackage: "asset", PredicateImport: "example.com/app/ent/generated/asset",
 				IntegrationMapped: true,
@@ -259,10 +252,7 @@ func TestFieldContractTemplates(t *testing.T) {
 		},
 	}
 
-	raw, err = _templates.ReadFile("templates/entity_registry.tpl")
-	require.NoError(t, err)
-
-	tmpl, err = template.New("entity_registry").Funcs(gen.Funcs).Parse(string(raw))
+	tmpl, err = parseTemplate("entity_registry")
 	require.NoError(t, err)
 
 	buf.Reset()
@@ -273,7 +263,7 @@ func TestFieldContractTemplates(t *testing.T) {
 
 	registry := buf.String()
 	require.Contains(t, registry, "CaseInsensitive: true")
-	require.Contains(t, registry, `s.FieldByName(FieldOwnerID)`)
+	require.Contains(t, registry, `s.OwnerField != "" && lookupValue(candidate, s.OwnerField) != ownerID`)
 	require.Contains(t, registry, "FieldSourceDefinitionID")
 	require.Contains(t, registry, "FieldSourceInstanceID")
 	require.NotContains(t, registry, "managedByFieldName")
@@ -379,10 +369,7 @@ func TestDetectIntegrationEdges(t *testing.T) {
 // TestEntityMetadataTemplate verifies the metadata template renders console paths and
 // mention specs into compilable map literals
 func TestEntityMetadataTemplate(t *testing.T) {
-	raw, err := _templates.ReadFile("templates/entity_metadata.tpl")
-	require.NoError(t, err)
-
-	tmpl, err := template.New("entity_metadata").Funcs(gen.Funcs).Parse(string(raw))
+	tmpl, err := parseTemplate("entity_metadata")
 	require.NoError(t, err)
 
 	data := EntityData{
@@ -401,10 +388,7 @@ func TestEntityMetadataTemplate(t *testing.T) {
 // TestEntityMetadataTemplateEmpty verifies the metadata template renders with no annotated
 // schemas, since most consuming repos start with empty metadata
 func TestEntityMetadataTemplateEmpty(t *testing.T) {
-	raw, err := _templates.ReadFile("templates/entity_metadata.tpl")
-	require.NoError(t, err)
-
-	tmpl, err := template.New("entity_metadata").Funcs(gen.Funcs).Parse(string(raw))
+	tmpl, err := parseTemplate("entity_metadata")
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -494,7 +478,7 @@ func TestIngestPhaseATemplateEmission(t *testing.T) {
 		Schemas: []EntitySchema{
 			{
 				Name: "Widget", Snake: "widget", Lower: "widget",
-				HasCreate: true, HasUpdate: true, HasOwnerID: true,
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
 				CreateInputType: "CreateWidgetInput", UpdateInputType: "UpdateWidgetInput",
 				PredicatePackage: "widget", PredicateImport: "example.com/app/ent/generated/widget",
 				IntegrationMapped:     true,
@@ -510,7 +494,7 @@ func TestIngestPhaseATemplateEmission(t *testing.T) {
 			},
 			{
 				Name: "Gadget", Snake: "gadget", Lower: "gadget",
-				HasCreate: true, HasUpdate: true, HasOwnerID: true,
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
 				CreateInputType: "CreateGadgetInput", UpdateInputType: "UpdateGadgetInput",
 				PredicatePackage: "gadget", PredicateImport: "example.com/app/ent/generated/gadget",
 				IntegrationMapped: true,
@@ -519,10 +503,7 @@ func TestIngestPhaseATemplateEmission(t *testing.T) {
 	}
 
 	render := func(name string) string {
-		raw, err := _templates.ReadFile("templates/" + name + ".tpl")
-		require.NoError(t, err)
-
-		tmpl, err := template.New(name).Funcs(gen.Funcs).Parse(string(raw))
+		tmpl, err := parseTemplate(name)
 		require.NoError(t, err)
 
 		var buf bytes.Buffer
@@ -595,6 +576,352 @@ func TestIngestPhaseATemplateEmission(t *testing.T) {
 	require.Contains(t, schemaGo, "type LookupValues map[string]string")
 }
 
+// TestOwnerScopeEmission verifies the null-owner scoping predicate is emitted and used only for
+// schemas whose owner_id is nullable, while non-nullable owners keep the plain OwnerID predicate
+func TestOwnerScopeEmission(t *testing.T) {
+	data := EntityData{
+		PackageName:  "entityops",
+		EntPackage:   "example.com/app/ent/generated",
+		GalaPackage:  "example.com/app/pkg/gala",
+		JsonxPackage: "example.com/app/pkg/jsonx",
+		LogxPackage:  "example.com/app/pkg/logx",
+		CelxPackage:  "example.com/app/pkg/celx",
+		MapxPackage:  "example.com/app/pkg/mapx",
+		Schemas: []EntitySchema{
+			{
+				Name: "Asset", Snake: "asset", Lower: "asset",
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id", SystemScoped: true,
+				CreateInputType: "CreateAssetInput", UpdateInputType: "UpdateAssetInput",
+				PredicatePackage: "asset", PredicateImport: "example.com/app/ent/generated/asset",
+				IntegrationMapped:  true,
+				LookupAlternatives: [][]string{{"external_id"}},
+				RemovedAtField:     "removed_at",
+				ObjectFields: []EntityField{
+					{Name: "ExternalID", Snake: "external_id", Type: "string", MatchKey: true, IntegrationMapped: true, InputKey: "external_id", LookupKey: true},
+				},
+			},
+			{
+				Name: "Control", Snake: "control", Lower: "control",
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
+				CreateInputType: "CreateControlInput", UpdateInputType: "UpdateControlInput",
+				PredicatePackage: "control", PredicateImport: "example.com/app/ent/generated/control",
+				IntegrationMapped:  true,
+				LookupAlternatives: [][]string{{"ref_code"}},
+				RemovedAtField:     "removed_at",
+				ObjectFields: []EntityField{
+					{Name: "RefCode", Snake: "ref_code", Type: "string", MatchKey: true, IntegrationMapped: true, InputKey: "ref_code", LookupKey: true},
+				},
+			},
+			{
+				Name: "Risk", Snake: "risk", Lower: "risk",
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
+				CreateInputType: "CreateRiskInput", UpdateInputType: "UpdateRiskInput",
+				PredicatePackage: "risk", PredicateImport: "example.com/app/ent/generated/risk",
+				IntegrationMapped:  true,
+				LookupAlternatives: [][]string{{"external_id"}},
+				ObjectFields: []EntityField{
+					{Name: "ExternalID", Snake: "external_id", Type: "string", MatchKey: true, IntegrationMapped: true, InputKey: "external_id", LookupKey: true},
+				},
+			},
+		},
+	}
+
+	tmpl, err := parseTemplate("entity_registry")
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	require.NoError(t, tmpl.Execute(&buf, data))
+
+	_, err = parser.ParseFile(token.NewFileSet(), "entity_registry.go", buf.Bytes(), parser.AllErrors)
+	require.NoError(t, err, buf.String())
+
+	registry := buf.String()
+
+	require.Contains(t, registry, "OwnerField: asset.FieldOwnerID,")
+	require.Contains(t, registry, "OwnerField: control.FieldOwnerID,")
+	require.NotContains(t, registry, `"owner_id"`)
+	require.Contains(t, registry, "func ownerScopeAsset(ownerID string) predicate.Asset")
+	require.Contains(t, registry, "asset.SystemOwned(true)")
+	require.NotContains(t, registry, "OwnerIDIsNil()")
+	require.Contains(t, registry, "Where(ownerScopeAsset(orgID)).")
+	require.Contains(t, registry, "query = query.Where(ownerScopeAsset(ownerID))")
+	require.Contains(t, registry, "ownerScopeAsset(ownerID),")
+	require.NotContains(t, registry, "Where(asset.OwnerID(orgID)).")
+	require.NotContains(t, registry, "query = query.Where(asset.OwnerID(ownerID))")
+	require.NotContains(t, registry, "\t\t\t\tasset.OwnerID(ownerID),")
+
+	require.NotContains(t, registry, "ownerScopeRisk")
+	require.Contains(t, registry, "query = query.Where(risk.OwnerID(ownerID))")
+
+	require.NotContains(t, registry, "ownerScopeControl")
+	require.NotContains(t, registry, "control.OwnerIDIsNil()")
+	require.Contains(t, registry, "Where(control.OwnerID(orgID)).")
+	require.Contains(t, registry, "query = query.Where(control.OwnerID(ownerID))")
+	require.Contains(t, registry, "control.OwnerID(ownerID),")
+}
+
+// TestFieldOptional verifies the owner field nullability probe reads the loaded field's Optional flag
+func TestFieldOptional(t *testing.T) {
+	schema := &load.Schema{Fields: []*load.Field{
+		{Name: "owner_id", Optional: true},
+		{Name: "name"},
+	}}
+
+	require.True(t, fieldOptional(schema, "owner_id"))
+	require.False(t, fieldOptional(schema, "name"))
+	require.False(t, fieldOptional(schema, "missing"))
+	require.False(t, fieldOptional(schema, ""))
+}
+
+// TestSchemaOwnerField verifies org-owned schemas derive the owner field from the owner edge and fail without one
+func TestSchemaOwnerField(t *testing.T) {
+	organization := &gen.Type{Name: "Organization"}
+	annotated := gen.Annotations{entx.OrgOwnedSchemaName: map[string]any{}}
+
+	t.Run("not org owned", func(t *testing.T) {
+		field, err := schemaOwnerField(&gen.Type{Name: "Widget", Edges: []*gen.Edge{{Name: "owner", Unique: true, Type: organization, Rel: gen.Relation{Type: gen.M2O, Columns: []string{"owner_id"}}}}})
+		require.NoError(t, err)
+		require.Empty(t, field)
+	})
+
+	t.Run("owner edge missing", func(t *testing.T) {
+		_, err := schemaOwnerField(&gen.Type{Name: "Widget", Annotations: annotated})
+		require.ErrorIs(t, err, ErrOwnerEdgeMissing)
+	})
+
+	t.Run("owner edge without a foreign-key field", func(t *testing.T) {
+		_, err := schemaOwnerField(&gen.Type{Name: "Widget", Annotations: annotated, Edges: []*gen.Edge{{Name: "owner", Type: organization, Rel: gen.Relation{Type: gen.O2M}}}})
+		require.ErrorIs(t, err, ErrOwnerEdgeMissing)
+	})
+
+	t.Run("owner edge owning its foreign key", func(t *testing.T) {
+		field, err := schemaOwnerField(&gen.Type{Name: "Widget", Annotations: annotated, Edges: []*gen.Edge{{Name: "owner", Unique: true, Type: organization, Rel: gen.Relation{Type: gen.M2O, Columns: []string{"owner_id"}}}}})
+		require.NoError(t, err)
+		require.Equal(t, "owner_id", field)
+	})
+}
+
+// TestFieldMatchKey verifies only plain string columns qualify as match keys
+func TestFieldMatchKey(t *testing.T) {
+	require.True(t, fieldMatchKey(&gen.Field{Name: "external_id", Type: &entfield.TypeInfo{Type: entfield.TypeString}}))
+	require.False(t, fieldMatchKey(&gen.Field{Name: "domains", Type: &entfield.TypeInfo{Type: entfield.TypeJSON, Ident: "[]string"}}))
+	require.False(t, fieldMatchKey(&gen.Field{Name: "metadata", Type: &entfield.TypeInfo{Type: entfield.TypeJSON, Ident: "map[string]any"}}))
+	require.False(t, fieldMatchKey(&gen.Field{Name: "count", Type: &entfield.TypeInfo{Type: entfield.TypeInt}}))
+	require.False(t, fieldMatchKey(&gen.Field{Name: "untyped"}))
+}
+
+// TestCatalogEmission verifies the catalogue capability, its adopt, refresh, relink, match, and visible
+// closures, the pointer-stamping Create, and the catalogue listeners are emitted only for schemas with HasCatalog
+func TestCatalogEmission(t *testing.T) {
+	data := EntityData{
+		PackageName:  "entityops",
+		EntPackage:   "example.com/app/ent/generated",
+		GalaPackage:  "example.com/app/pkg/gala",
+		JsonxPackage: "example.com/app/pkg/jsonx",
+		LogxPackage:  "example.com/app/pkg/logx",
+		CelxPackage:  "example.com/app/pkg/celx",
+		MapxPackage:  "example.com/app/pkg/mapx",
+		Schemas: []EntitySchema{
+			{
+				Name: "Gadget", Snake: "gadget", Lower: "gadget",
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
+				CreateInputType: "CreateGadgetInput", UpdateInputType: "UpdateGadgetInput",
+				PredicatePackage: "gadget", PredicateImport: "example.com/app/ent/generated/gadget",
+			},
+			{
+				Name: "Widget", Snake: "widget", Lower: "widget",
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id", SystemScoped: true,
+				CreateInputType: "CreateWidgetInput", UpdateInputType: "UpdateWidgetInput",
+				PredicatePackage: "widget", PredicateImport: "example.com/app/ent/generated/widget",
+				IntegrationMapped: true,
+				CatalogPointer:    "catalog_widget_id",
+				CatalogFields:     []string{"name", "description"},
+				CatalogVisibility: "externally_visible",
+				CatalogKey:        "catalog_widget_key",
+				CatalogLookupKey:  "external_id",
+				HasCatalog:        true,
+				ObjectFields: []EntityField{
+					{Name: "Description", Snake: "description", Type: "string", SourceManaged: true},
+					{Name: "Domains", Snake: "domains", Type: "[]string", MatchKey: true, SourceManaged: true},
+					{Name: "ExternalID", Snake: "external_id", Type: "string", MatchKey: true, IntegrationMapped: true, InputKey: "external_id", LookupKey: true},
+					{Name: "Name", Snake: "name", Type: "string", IntegrationMapped: true, InputKey: "name", SourceManaged: true},
+				},
+			},
+		},
+	}
+
+	render := func(name string) string {
+		tmpl, err := parseTemplate(name)
+		require.NoError(t, err)
+
+		var buf bytes.Buffer
+		require.NoError(t, tmpl.Execute(&buf, data))
+
+		_, err = parser.ParseFile(token.NewFileSet(), name+".go", buf.Bytes(), parser.AllErrors)
+		require.NoError(t, err, buf.String())
+
+		return buf.String()
+	}
+
+	registry := render("entity_registry")
+
+	require.Contains(t, registry, "func (s *Schema) Adopt(ctx context.Context, client *generated.Client, catalogID, ownerID string, overlay json.RawMessage) (id string, created bool, err error)")
+	require.Contains(t, registry, "func (s *Schema) RefreshAdopted(ctx context.Context, client *generated.Client, catalogID string) (int, error)")
+	require.Contains(t, registry, "func (s *Schema) RelinkAdopted(ctx context.Context, client *generated.Client, catalogID string) (int, error)")
+	require.Contains(t, registry, "func (s *Schema) Match(ctx context.Context, client *generated.Client, candidates ...MatchCandidate) (string, bool, error)")
+	require.Contains(t, registry, "type CatalogCapability struct")
+	require.Contains(t, registry, "type MatchCandidate struct")
+	require.Contains(t, registry, `"github.com/theopenlane/iam/auth"`)
+
+	widget := registry[strings.Index(registry, "SchemaWidget = &Schema{"):strings.Index(registry, "// init wires")]
+	require.Contains(t, widget, `Catalog: &CatalogCapability{PointerField: "catalog_widget_id", VisibilityField: "externally_visible", KeyField: "catalog_widget_key", Fields: []string{"name", "description"}},`)
+	require.Contains(t, widget, "Create: func")
+	require.Contains(t, widget, `applyStampedFields(builder.Mutation(), input, "catalog_widget_id", "catalog_widget_key")`)
+
+	gadget := registry[strings.Index(registry, "SchemaGadget = &Schema{"):strings.Index(registry, "SchemaWidget = &Schema{")]
+	require.NotContains(t, gadget, "Catalog:")
+	require.NotContains(t, gadget, "Create: func")
+	require.NotContains(t, gadget, "applyStampedFields")
+
+	require.Contains(t, registry, "func catalogRowWidget(ctx context.Context, client *generated.Client, ref SchemaRef, catalogID string) (json.RawMessage, string, error)")
+	require.Contains(t, registry, "Where(widget.ID(catalogID), widget.SystemOwned(true)).Only(ctx)")
+	require.Contains(t, registry, "case !row.ExternallyVisible:")
+	require.Contains(t, registry, "logError(ctx, ref, ErrCatalogRowNotVisible,")
+	require.Contains(t, registry, `lookupValue(raw, "external_id")`)
+
+	require.Contains(t, registry, "SchemaWidget.Catalog.adopt = func")
+	require.Contains(t, registry, "Where(widget.OwnerID(ownerID), widget.CatalogWidgetID(catalogID)).OnlyID(ctx)")
+	require.Contains(t, registry, "Where(widget.OwnerID(ownerID), widget.CatalogWidgetKey(key)).OnlyID(ctx)")
+	require.Contains(t, registry, "client.Widget.UpdateOneID(id).SetCatalogWidgetID(catalogID).Exec(ctx)")
+	require.Contains(t, registry, "jsonx.SetObjectKey(payload, widget.FieldOwnerID, ownerID)")
+	require.Contains(t, registry, "jsonx.SetObjectKey(payload, SchemaWidget.Catalog.KeyField, key)")
+	require.Contains(t, registry, "id, err = SchemaWidget.Create(ctx, client, payload)")
+
+	require.Contains(t, registry, "SchemaWidget.Catalog.refresh = func")
+	require.Contains(t, registry, "Where(widget.CatalogWidgetID(catalogID)).IDs(ctx)")
+	require.Contains(t, registry, "jsonx.Decode[generated.UpdateWidgetInput](payload)")
+
+	require.Contains(t, registry, "SchemaWidget.Catalog.relink = func")
+	require.Contains(t, registry, "Where(widget.CatalogWidgetKey(key), widget.CatalogWidgetIDNotNil()).Select(widget.FieldCatalogWidgetID).Strings(ctx)")
+	require.Contains(t, registry, "Where(widget.IDIn(lo.Uniq(pointers)...)).IDs(ctx)")
+	require.Contains(t, registry, "Where(widget.IDNEQ(catalogID), widget.CatalogWidgetKey(key), widget.Or(widget.CatalogWidgetIDIsNil(), widget.CatalogWidgetIDNotIn(live...))).")
+	require.Contains(t, registry, "SetCatalogWidgetID(catalogID).")
+
+	require.Contains(t, registry, "SchemaWidget.Catalog.match = func")
+	require.Contains(t, registry, "case \"domains\":")
+	require.Contains(t, registry, "s.Where(sqljson.ValueContains(widget.FieldDomains, candidate.Value))")
+	require.Contains(t, registry, "case \"external_id\":")
+	require.Contains(t, registry, "where = widget.ExternalIDEqualFold(candidate.Value)")
+	require.Contains(t, registry, "case \"name\":")
+	require.NotContains(t, registry, "case \"externally_visible\":")
+	require.Contains(t, registry, "Where(widget.SystemOwned(true), widget.ExternallyVisible(true), where).FirstID(ctx)")
+	require.Contains(t, registry, "ErrCatalogMatchFieldUnsupported")
+
+	require.Contains(t, registry, "SchemaWidget.Catalog.visible = func")
+	require.Contains(t, registry, "Where(widget.ID(catalogID), widget.SystemOwned(true), widget.ExternallyVisible(true)).Exist(ctx)")
+	require.Contains(t, registry, "if s.Catalog != nil && ownerID == \"\" {")
+	require.Contains(t, registry, "s.relinkCreated(ctx, client, id)")
+
+	require.Contains(t, registry, "func CatalogListeners() []gala.Registration")
+	require.Contains(t, registry, "Schema:     SchemaWidget,")
+	require.Contains(t, registry, "Operations: []string{OpUpdate, OpUpdateOne},")
+	require.Contains(t, registry, "Fields:     SchemaWidget.Catalog.Fields,")
+	require.Contains(t, registry, "Caller:     catalogListenerCaller,")
+	require.Contains(t, registry, "Handle:     catalogRefreshHandler(SchemaWidget),")
+	require.Contains(t, registry, "restored.WithCapabilities(auth.CapInternalOperation | auth.CapBypassOrgFilter | auth.CapBypassFGA)")
+
+	require.Contains(t, registry, "catalogRowWidget(ctx, client, ref, catalogID)")
+	require.NotContains(t, registry, "Schema:     SchemaGadget,")
+	require.NotContains(t, registry, "SchemaGadget.Catalog")
+
+	require.Contains(t, registry, `{Name: "name", Label: "Name", Type: "string", InputKey: "name", SourceManaged: true},`)
+	require.Contains(t, registry, `{Name: "description", Label: "Description", Type: "string", SourceManaged: true},`)
+
+	index := render("entity_integration")
+	require.Contains(t, index, `Name: FieldDescriptor{Name: "name", Label: "Name", Type: "string", InputKey: "name", SourceManaged: true},`)
+	require.NotContains(t, index, "Description")
+
+	errorsGo := render("entity_errors")
+	require.Contains(t, errorsGo, "ErrCatalogUnsupported")
+	require.Contains(t, errorsGo, "ErrCatalogRowNotSystemOwned")
+	require.Contains(t, errorsGo, "ErrCatalogRowNotVisible")
+	require.Contains(t, errorsGo, "ErrCatalogMatchFieldUnsupported")
+}
+
+// TestEdgeCatalogPointer verifies the catalog edge must be a unique self edge owning its foreign key
+func TestEdgeCatalogPointer(t *testing.T) {
+	node := &gen.Type{Name: "Widget"}
+	annotated := gen.Annotations{entx.CatalogEdgeAnnotationName: map[string]any{}}
+
+	t.Run("no annotation", func(t *testing.T) {
+		pointer, err := edgeCatalogPointer(node, &gen.Edge{Name: "parent", Unique: true, Type: node})
+		require.NoError(t, err)
+		require.Empty(t, pointer)
+	})
+
+	t.Run("non-unique edge", func(t *testing.T) {
+		_, err := edgeCatalogPointer(node, &gen.Edge{Name: "catalog_widgets", Type: node, Annotations: annotated})
+		require.ErrorIs(t, err, ErrCatalogEdgeInvalid)
+	})
+
+	t.Run("edge to another schema", func(t *testing.T) {
+		_, err := edgeCatalogPointer(node, &gen.Edge{Name: "catalog_gadget", Unique: true, Type: &gen.Type{Name: "Gadget"}, Annotations: annotated})
+		require.ErrorIs(t, err, ErrCatalogEdgeInvalid)
+	})
+
+	t.Run("edge without a foreign-key field", func(t *testing.T) {
+		_, err := edgeCatalogPointer(node, &gen.Edge{Name: "catalog_widget", Unique: true, Type: node, Annotations: annotated})
+		require.ErrorIs(t, err, ErrCatalogEdgeInvalid)
+	})
+
+	t.Run("unique self edge owning its foreign key", func(t *testing.T) {
+		edge := &gen.Edge{
+			Name: "catalog_widget", Unique: true, Type: node, Annotations: annotated,
+			Rel: gen.Relation{Type: gen.M2O, Columns: []string{"catalog_widget_id"}},
+		}
+
+		pointer, err := edgeCatalogPointer(node, edge)
+		require.NoError(t, err)
+		require.Equal(t, "catalog_widget_id", pointer)
+	})
+}
+
+// TestValidateCatalog verifies schemas with a catalog edge must carry both mutation inputs, the visibility
+// and key markers, a lookup key, and an owner
+func TestValidateCatalog(t *testing.T) {
+	complete := EntitySchema{
+		Name: "Widget", CatalogPointer: "catalog_widget_id", HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
+		CatalogVisibility: "externally_visible", CatalogKey: "catalog_widget_key", CatalogLookupKey: "external_id",
+	}
+
+	require.NoError(t, validateCatalog(complete))
+	require.NoError(t, validateCatalog(EntitySchema{Name: "Widget"}))
+
+	missingCreate := complete
+	missingCreate.HasCreate = false
+	require.ErrorIs(t, validateCatalog(missingCreate), ErrCatalogInputsMissing)
+
+	missingUpdate := complete
+	missingUpdate.HasUpdate = false
+	require.ErrorIs(t, validateCatalog(missingUpdate), ErrCatalogInputsMissing)
+
+	missingVisibility := complete
+	missingVisibility.CatalogVisibility = ""
+	require.ErrorIs(t, validateCatalog(missingVisibility), ErrCatalogVisibilityMissing)
+
+	missingKey := complete
+	missingKey.CatalogKey = ""
+	require.ErrorIs(t, validateCatalog(missingKey), ErrCatalogKeyMissing)
+
+	missingLookup := complete
+	missingLookup.CatalogLookupKey = ""
+	require.ErrorIs(t, validateCatalog(missingLookup), ErrCatalogLookupKeyMissing)
+
+	missingOwner := complete
+	missingOwner.OwnerField = ""
+	require.ErrorIs(t, validateCatalog(missingOwner), ErrCatalogOwnerMissing)
+}
+
 // TestFillProvenanceTemplateEmission verifies FillProvenance emission per link kind
 func TestFillProvenanceTemplateEmission(t *testing.T) {
 	data := EntityData{
@@ -608,7 +935,7 @@ func TestFillProvenanceTemplateEmission(t *testing.T) {
 		Schemas: []EntitySchema{
 			{
 				Name: "Widget", Snake: "widget", Lower: "widget",
-				HasCreate: true, HasUpdate: true, HasOwnerID: true,
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
 				CreateInputType: "CreateWidgetInput", UpdateInputType: "UpdateWidgetInput",
 				PredicatePackage: "widget", PredicateImport: "example.com/app/ent/generated/widget",
 				IntegrationMapped:  true,
@@ -617,7 +944,7 @@ func TestFillProvenanceTemplateEmission(t *testing.T) {
 			},
 			{
 				Name: "Gizmo", Snake: "gizmo", Lower: "gizmo",
-				HasCreate: true, HasUpdate: true, HasOwnerID: true,
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
 				CreateInputType: "CreateGizmoInput", UpdateInputType: "UpdateGizmoInput",
 				PredicatePackage: "gizmo", PredicateImport: "example.com/app/ent/generated/gizmo",
 				IntegrationMapped:  true,
@@ -625,7 +952,7 @@ func TestFillProvenanceTemplateEmission(t *testing.T) {
 			},
 			{
 				Name: "Gadget", Snake: "gadget", Lower: "gadget",
-				HasCreate: true, HasUpdate: true, HasOwnerID: true,
+				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
 				CreateInputType: "CreateGadgetInput", UpdateInputType: "UpdateGadgetInput",
 				PredicatePackage: "gadget", PredicateImport: "example.com/app/ent/generated/gadget",
 				IntegrationMapped: true,
@@ -633,10 +960,7 @@ func TestFillProvenanceTemplateEmission(t *testing.T) {
 		},
 	}
 
-	raw, err := _templates.ReadFile("templates/entity_registry.tpl")
-	require.NoError(t, err)
-
-	tmpl, err := template.New("entity_registry").Funcs(gen.Funcs).Parse(string(raw))
+	tmpl, err := parseTemplate("entity_registry")
 	require.NoError(t, err)
 
 	var buf bytes.Buffer

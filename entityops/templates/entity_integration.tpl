@@ -21,7 +21,7 @@ var {{ $schema.Name }}Fields = struct {
 }{
 {{- range $schema.ObjectFields }}
 {{- if and .IntegrationMapped (not .SystemControlled) }}
-	{{ .Name }}: FieldDescriptor{Name: "{{ .Snake }}", InputKey: "{{ .InputKey }}"},
+	{{ .Name }}: FieldDescriptor{{ template "fieldDescriptorLiteral" . }},
 {{- end }}
 {{- end }}
 }

@@ -28,6 +28,9 @@ var _templates embed.FS
 
 const dirPermissions = 0o755
 
+// literalsTemplate holds the descriptor literal partials shared by every rendered template
+const literalsTemplate = "templates/entity_literals.tpl"
+
 // EntityData holds all collected schema data for generation
 type EntityData struct {
 	// PackageName is the Go package name for generated files
@@ -106,8 +109,10 @@ type EntitySchema struct {
 	PredicatePackage string
 	// PredicateImport is the ent predicate package import path
 	PredicateImport string
-	// HasOwnerID indicates the schema has an owner_id field for org-scoped queries
-	HasOwnerID bool
+	// OwnerField is the foreign-key field of the owner edge on org-owned schemas, empty for schemas without an owner
+	OwnerField string
+	// SystemScoped indicates the owner field is optional and the schema carries the system_owned marker, so an empty owner scopes queries to system-owned rows
+	SystemScoped bool
 	// ObjectFields is the unified per-schema field catalog (every field with capability flags),
 	// consumed by both the workflow builder and the integration cross-link config. It is the single
 	// field list: update-input re-keying, key-match columns, link source context, and workflow-eligible
@@ -157,6 +162,18 @@ type EntitySchema struct {
 	RemovedAtField string
 	// RemovedAtEpisodic reports whether removal is a recurring observation rather than a permanent tombstone
 	RemovedAtEpisodic bool
+	// CatalogPointer is the foreign-key field of the CatalogEdge-annotated self edge, empty when the schema has no catalogue
+	CatalogPointer string
+	// CatalogFields lists the snake_case fields copied from a catalogue row on adopt and refresh
+	CatalogFields []string
+	// CatalogVisibility is the snake_case bool field marking a catalogue row as visible to organizations, empty when absent
+	CatalogVisibility string
+	// CatalogKey is the snake_case field on adopted rows holding the catalogue row's lookup key, empty when absent
+	CatalogKey string
+	// CatalogLookupKey is the snake_case lookup-key field whose value identifies a catalogue row, empty when absent
+	CatalogLookupKey string
+	// HasCatalog reports whether the schema supports catalogue adoption: a pointer, copied fields, the system_owned marker, and the visibility and key fields
+	HasCatalog bool
 }
 
 // EntityField represents a field with its name variations and capability flags
@@ -195,6 +212,8 @@ type EntityField struct {
 	TaskRules []entx.TaskRuleSpec
 	// SystemControlled excludes the field from provider mappings
 	SystemControlled bool
+	// SourceManaged reports whether the upstream source owns the value and overwrites it on refresh or reconcile
+	SourceManaged bool
 	// Volatile excludes the field from triggering an ingest change
 	Volatile bool
 	// Stamped reports the field is system-controlled by annotation and written by StampProvenance
@@ -320,6 +339,69 @@ func edgeWorkflowEligible(edge *gen.Edge) (bool, error) {
 	return ann.Eligible, nil
 }
 
+// edgeCatalogPointer returns the foreign-key column of a CatalogEdge-annotated edge, which must be a
+// unique self edge owning its foreign key; it returns empty when the edge carries no annotation
+func edgeCatalogPointer(node *gen.Type, edge *gen.Edge) (string, error) {
+	raw, ok := edge.Annotations[entx.CatalogEdgeAnnotationName]
+	if !ok {
+		return "", nil
+	}
+
+	ann := &entx.CatalogEdgeAnnotation{}
+	if err := ann.Decode(raw); err != nil {
+		return "", fmt.Errorf("decode catalog edge annotation on %s.%s: %w", node.Name, edge.Name, err)
+	}
+
+	if !edge.Unique || edge.Type.Name != node.Name || !edge.OwnFK() {
+		return "", fmt.Errorf("%w: %s.%s", ErrCatalogEdgeInvalid, node.Name, edge.Name)
+	}
+
+	return edge.Rel.Column(), nil
+}
+
+// ownerEdgeName is the edge naming the organization that owns a row
+const ownerEdgeName = "owner"
+
+// schemaOwnerField returns the foreign-key column of the owner edge on an org-owned schema, empty when the schema is not org owned
+func schemaOwnerField(node *gen.Type) (string, error) {
+	if _, ok := node.Annotations[entx.OrgOwnedSchemaName]; !ok {
+		return "", nil
+	}
+
+	for _, edge := range node.Edges {
+		if edge.Name == ownerEdgeName && edge.Unique && edge.OwnFK() {
+			return edge.Rel.Column(), nil
+		}
+	}
+
+	return "", fmt.Errorf("%w: %s", ErrOwnerEdgeMissing, node.Name)
+}
+
+// systemOwnedFieldName is the marker column distinguishing catalogue rows from organization-owned rows
+const systemOwnedFieldName = "system_owned"
+
+// validateCatalog fails generation when a schema with a catalog edge lacks the inputs, markers, or lookup key adoption uses
+func validateCatalog(schema EntitySchema) error {
+	if schema.CatalogPointer == "" {
+		return nil
+	}
+
+	switch {
+	case !schema.HasCreate || !schema.HasUpdate:
+		return fmt.Errorf("%w: %s", ErrCatalogInputsMissing, schema.Name)
+	case schema.CatalogVisibility == "":
+		return fmt.Errorf("%w: %s", ErrCatalogVisibilityMissing, schema.Name)
+	case schema.CatalogKey == "":
+		return fmt.Errorf("%w: %s", ErrCatalogKeyMissing, schema.Name)
+	case schema.CatalogLookupKey == "":
+		return fmt.Errorf("%w: %s", ErrCatalogLookupKeyMissing, schema.Name)
+	case schema.OwnerField == "":
+		return fmt.Errorf("%w: %s", ErrCatalogOwnerMissing, schema.Name)
+	}
+
+	return nil
+}
+
 // provenanceFieldNames are the record provenance columns every ingest-capable schema must carry
 var provenanceFieldNames = []string{"source_definition_id", "source_definition_version", "source_instance_id", "managed_by"}
 
@@ -385,6 +467,36 @@ func fieldCaseInsensitive(field *gen.Field) bool {
 	ann, ok := entx.GetAnnotation[*entx.CaseInsensitiveFieldAnnotation](field)
 
 	return ok && ann.CaseInsensitive
+}
+
+// fieldSourceManaged reports whether the field carries entx.FieldSourceManaged
+func fieldSourceManaged(field *gen.Field) bool {
+	_, ok := field.Annotations[entx.FieldSourceManagedAnnotationName]
+
+	return ok
+}
+
+// fieldCatalogVisibility reports whether the field carries entx.CatalogVisibilityField
+func fieldCatalogVisibility(field *gen.Field) bool {
+	_, ok := field.Annotations[entx.CatalogVisibilityFieldAnnotationName]
+
+	return ok
+}
+
+// fieldCatalogKey reports whether the field carries entx.CatalogKeyField
+func fieldCatalogKey(field *gen.Field) bool {
+	_, ok := field.Annotations[entx.CatalogKeyFieldAnnotationName]
+
+	return ok
+}
+
+// fieldMatchKey reports whether the field is a plain string column usable as a match key
+func fieldMatchKey(field *gen.Field) bool {
+	if field.Type == nil || field.Sensitive() {
+		return false
+	}
+
+	return field.Type.Type == entfield.TypeString && !field.HasGoType()
 }
 
 // fieldProjectable excludes secrets and fields hidden from the GraphQL type surface.
@@ -453,10 +565,9 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 		fieldType = field.Type.String()
 	}
 
-	// MatchKey: plain-string indexed columns (e.g. external_id, ref_code) usable as cross-link
-	// match keys; custom Go types and enums are excluded because their In predicates reject plain strings
 	systemControlled := isIntegrationSystemField(field.StorageKey())
 	volatile, stamped := false, false
+
 	if ant, ok := entx.GetAnnotation[*entx.IntegrationMappingFieldAnnotation](field); ok {
 		systemControlled = systemControlled || ant.SystemControlled
 		volatile = ant.Volatile
@@ -474,12 +585,13 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 		Snake:              field.StorageKey(),
 		Type:               fieldType,
 		WorkflowEligible:   eligible,
-		MatchKey:           field.Type != nil && field.Type.Type == entfield.TypeString && !field.HasGoType() && !field.Sensitive(),
+		MatchKey:           fieldMatchKey(field),
 		Clearable:          field.Optional || field.Nillable,
 		WebhookPayload:     fieldWebhookPayload(field),
 		Projectable:        fieldProjectable(field),
 		TaskRules:          taskRules,
 		SystemControlled:   systemControlled,
+		SourceManaged:      fieldSourceManaged(field),
 		Volatile:           volatile,
 		Stamped:            stamped,
 		CreateInputSkipped: createInputSkipped,
@@ -566,6 +678,11 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 
 		_, orgOwned := node.Annotations[entx.OrgOwnedSchemaName]
 
+		ownerField, err := schemaOwnerField(node)
+		if err != nil {
+			return EntityData{}, err
+		}
+
 		entitySchema := EntitySchema{
 			Name:                node.Name,
 			Snake:               strcase.SnakeCase(node.Name),
@@ -575,7 +692,8 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 			HasUpdate:           hasUpdate,
 			PredicatePackage:    predAlias,
 			PredicateImport:     predImport,
-			HasOwnerID:          hasField(schema, "owner_id"),
+			OwnerField:          ownerField,
+			SystemScoped:        fieldOptional(schema, ownerField) && hasField(schema, systemOwnedFieldName),
 			HasIntegrationID:    hasField(schema, integrationIDFieldName),
 			HasIntegrationRunID: hasField(schema, integrationRunIDFieldName),
 		}
@@ -615,8 +733,22 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 				lookupOrder = append(lookupOrder, entityField.Snake)
 			}
 
+			if entityField.SourceManaged {
+				entitySchema.CatalogFields = append(entitySchema.CatalogFields, entityField.Snake)
+			}
+
+			if fieldCatalogVisibility(field) {
+				entitySchema.CatalogVisibility = entityField.Snake
+			}
+
+			if fieldCatalogKey(field) {
+				entitySchema.CatalogKey = entityField.Snake
+			}
+
 			entitySchema.ObjectFields = append(entitySchema.ObjectFields, entityField)
 		}
+
+		entitySchema.CatalogLookupKey = lo.FirstOr(lookupOrder, "")
 
 		slices.SortFunc(entitySchema.ObjectFields, func(a, b EntityField) int {
 			return cmp.Compare(a.Snake, b.Snake)
@@ -642,6 +774,19 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 			workflowEligible, err := edgeWorkflowEligible(edge)
 			if err != nil {
 				return EntityData{}, fmt.Errorf("decode workflow eligible annotation on %s.%s: %w", node.Name, edge.Name, err)
+			}
+
+			catalogPointer, err := edgeCatalogPointer(node, edge)
+			if err != nil {
+				return EntityData{}, err
+			}
+
+			if catalogPointer != "" {
+				if entitySchema.CatalogPointer != "" {
+					return EntityData{}, fmt.Errorf("%w: %s.%s and %s.%s", ErrCatalogEdgeConflict, node.Name, entitySchema.CatalogPointer, node.Name, catalogPointer)
+				}
+
+				entitySchema.CatalogPointer = catalogPointer
 			}
 
 			targetInRegistry := slices.Contains(registeredSchemas, edge.Type.Name)
@@ -709,6 +854,12 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 		entitySchema.IntegrationMapped = integrationMeta.Mapped
 		entitySchema.InstanceScoped = integrationMeta.InstanceScoped
 		entitySchema.LookupAlternatives = synthesizeLookupAlternatives(integrationMeta.LookupAlternatives, lookupOrder)
+		entitySchema.HasCatalog = entitySchema.CatalogPointer != "" && len(entitySchema.CatalogFields) > 0 && hasField(schema, systemOwnedFieldName) &&
+			entitySchema.CatalogVisibility != "" && entitySchema.CatalogKey != ""
+
+		if err := validateCatalog(entitySchema); err != nil {
+			return EntityData{}, err
+		}
 
 		if err := validateLookupAlternatives(entitySchema); err != nil {
 			return EntityData{}, err
@@ -934,7 +1085,7 @@ func applyFieldMarkers(schema *EntitySchema, name string, markers schemaFieldMar
 			NameField:        markers.display,
 			DetailsField:     markers.details,
 			DetailsJSONField: markers.detailsJSON,
-			OwnerField:       "owner_id",
+			OwnerField:       schema.OwnerField,
 		}
 	}
 
@@ -970,23 +1121,22 @@ func generateEntityFiles(outputDir string, data EntityData) error {
 	type templateSpec struct {
 		name     string
 		filename string
-		tmplFile string
 	}
 
 	specs := []templateSpec{
-		{name: "entity_schema", filename: "entity_schema.go", tmplFile: "templates/entity_schema.tpl"},
-		{name: "entity_errors", filename: "entity_errors.go", tmplFile: "templates/entity_errors.tpl"},
-		{name: "entity_registry", filename: "entity_registry.go", tmplFile: "templates/entity_registry.tpl"},
-		{name: "entity_workflow", filename: "entity_workflow.go", tmplFile: "templates/entity_workflow.tpl"},
-		{name: "entity_tasks", filename: "entity_tasks.go", tmplFile: "templates/entity_tasks.tpl"},
-		{name: "entity_links", filename: "entity_links.go", tmplFile: "templates/entity_links.tpl"},
-		{name: "entity_integration", filename: "entity_integration.go", tmplFile: "templates/entity_integration.tpl"},
-		{name: "entity_projection", filename: "entity_projection.go", tmplFile: "templates/entity_projection.tpl"},
-		{name: "entity_metadata", filename: "entity_metadata.go", tmplFile: "templates/entity_metadata.tpl"},
-		{name: "entity_changeset", filename: "entity_changeset.go", tmplFile: "templates/entity_changeset.tpl"},
-		{name: "entity_mutation_events", filename: "entity_mutation_events.go", tmplFile: "templates/entity_mutation_events.tpl"},
-		{name: "entity_listener", filename: "entity_listener.go", tmplFile: "templates/entity_listener.tpl"},
-		{name: "entity_notification", filename: "entity_notification.go", tmplFile: "templates/entity_notification.tpl"},
+		{name: "entity_schema", filename: "entity_schema.go"},
+		{name: "entity_errors", filename: "entity_errors.go"},
+		{name: "entity_registry", filename: "entity_registry.go"},
+		{name: "entity_workflow", filename: "entity_workflow.go"},
+		{name: "entity_tasks", filename: "entity_tasks.go"},
+		{name: "entity_links", filename: "entity_links.go"},
+		{name: "entity_integration", filename: "entity_integration.go"},
+		{name: "entity_projection", filename: "entity_projection.go"},
+		{name: "entity_metadata", filename: "entity_metadata.go"},
+		{name: "entity_changeset", filename: "entity_changeset.go"},
+		{name: "entity_mutation_events", filename: "entity_mutation_events.go"},
+		{name: "entity_listener", filename: "entity_listener.go"},
+		{name: "entity_notification", filename: "entity_notification.go"},
 	}
 
 	for _, filename := range []string{"entity_handlers.go"} {
@@ -996,14 +1146,9 @@ func generateEntityFiles(outputDir string, data EntityData) error {
 	}
 
 	for _, spec := range specs {
-		raw, err := _templates.ReadFile(spec.tmplFile)
+		tmpl, err := parseTemplate(spec.name)
 		if err != nil {
-			return fmt.Errorf("read template %s: %w", spec.tmplFile, err)
-		}
-
-		tmpl, err := template.New(spec.name).Funcs(gen.Funcs).Parse(string(raw))
-		if err != nil {
-			return fmt.Errorf("parse template %s: %w", spec.name, err)
+			return err
 		}
 
 		if err := writeFile(outputDir, spec.filename, tmpl, data); err != nil {
@@ -1014,17 +1159,30 @@ func generateEntityFiles(outputDir string, data EntityData) error {
 	return nil
 }
 
+// parseTemplate parses the named template together with the shared literal partial
+func parseTemplate(name string) (*template.Template, error) {
+	tmpl := template.New(name).Funcs(gen.Funcs)
+
+	for _, file := range []string{literalsTemplate, "templates/" + name + ".tpl"} {
+		raw, err := _templates.ReadFile(file)
+		if err != nil {
+			return nil, fmt.Errorf("read template %s: %w", file, err)
+		}
+
+		if _, err := tmpl.Parse(string(raw)); err != nil {
+			return nil, fmt.Errorf("parse template %s: %w", file, err)
+		}
+	}
+
+	return tmpl, nil
+}
+
 // generateEnumFiles renders the WorkflowObjectType enum into the enums package, replacing the
 // standalone workflowgen enum output with the same catalog-driven eligibility
 func generateEnumFiles(outputDir string, data EntityData) error {
-	raw, err := _templates.ReadFile("templates/entity_enums.tpl")
+	tmpl, err := parseTemplate("entity_enums")
 	if err != nil {
-		return fmt.Errorf("read template templates/entity_enums.tpl: %w", err)
-	}
-
-	tmpl, err := template.New("entity_enums").Funcs(gen.Funcs).Parse(string(raw))
-	if err != nil {
-		return fmt.Errorf("parse template entity_enums: %w", err)
+		return err
 	}
 
 	return writeFile(outputDir, "workflow_object_type.go", tmpl, data)
@@ -1131,6 +1289,17 @@ func hasField(schema *load.Schema, name string) bool {
 	for _, f := range schema.Fields {
 		if f.Name == name {
 			return true
+		}
+	}
+
+	return false
+}
+
+// fieldOptional reports whether a schema declares the named field as optional
+func fieldOptional(schema *load.Schema, name string) bool {
+	for _, f := range schema.Fields {
+		if f.Name == name {
+			return f.Optional
 		}
 	}
 
