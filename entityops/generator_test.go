@@ -710,8 +710,8 @@ func TestFieldMatchKey(t *testing.T) {
 	require.False(t, fieldMatchKey(&gen.Field{Name: "untyped"}))
 }
 
-// TestCatalogEmission verifies the catalogue capability, its adopt, refresh, relink, match, and visible
-// closures, the pointer-stamping Create, and the catalogue listeners are emitted only for schemas with HasCatalog
+// TestCatalogEmission verifies the catalog capability, its adopt, refresh, relink, match, and visible
+// closures, the pointer-stamping Create, and the catalog listeners are emitted only for schemas with HasCatalog
 func TestCatalogEmission(t *testing.T) {
 	data := EntityData{
 		PackageName:  "entityops",
@@ -798,7 +798,7 @@ func TestCatalogEmission(t *testing.T) {
 	require.Contains(t, registry, "id, err = SchemaWidget.Create(ctx, client, payload)")
 
 	require.Contains(t, registry, "SchemaWidget.Catalog.refresh = func")
-	require.Contains(t, registry, "Where(widget.CatalogWidgetID(catalogID)).IDs(ctx)")
+	require.Contains(t, registry, "client.Widget.Update().Where(widget.CatalogWidgetID(catalogID)).SetInput(input).Save(ctx)")
 	require.Contains(t, registry, "jsonx.Decode[generated.UpdateWidgetInput](payload)")
 
 	require.Contains(t, registry, "SchemaWidget.Catalog.relink = func")

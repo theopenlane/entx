@@ -162,17 +162,17 @@ type EntitySchema struct {
 	RemovedAtField string
 	// RemovedAtEpisodic reports whether removal is a recurring observation rather than a permanent tombstone
 	RemovedAtEpisodic bool
-	// CatalogPointer is the foreign-key field of the CatalogEdge-annotated self edge, empty when the schema has no catalogue
+	// CatalogPointer is the foreign-key field of the CatalogEdge-annotated self edge, empty when the schema has no catalog
 	CatalogPointer string
-	// CatalogFields lists the snake_case fields copied from a catalogue row on adopt and refresh
+	// CatalogFields lists the snake_case fields copied from a catalog row on adopt and refresh
 	CatalogFields []string
-	// CatalogVisibility is the snake_case bool field marking a catalogue row as visible to organizations, empty when absent
+	// CatalogVisibility is the snake_case bool field marking a catalog row as visible to organizations, empty when absent
 	CatalogVisibility string
-	// CatalogKey is the snake_case field on adopted rows holding the catalogue row's lookup key, empty when absent
+	// CatalogKey is the snake_case field on adopted rows holding the catalog row's lookup key, empty when absent
 	CatalogKey string
-	// CatalogLookupKey is the snake_case lookup-key field whose value identifies a catalogue row, empty when absent
+	// CatalogLookupKey is the snake_case lookup-key field whose value identifies a catalog row, empty when absent
 	CatalogLookupKey string
-	// HasCatalog reports whether the schema supports catalogue adoption: a pointer, copied fields, the system_owned marker, and the visibility and key fields
+	// HasCatalog reports whether the schema supports catalog adoption: a pointer, copied fields, the system_owned marker, and the visibility and key fields
 	HasCatalog bool
 }
 
@@ -342,14 +342,8 @@ func edgeWorkflowEligible(edge *gen.Edge) (bool, error) {
 // edgeCatalogPointer returns the foreign-key column of a CatalogEdge-annotated edge, which must be a
 // unique self edge owning its foreign key; it returns empty when the edge carries no annotation
 func edgeCatalogPointer(node *gen.Type, edge *gen.Edge) (string, error) {
-	raw, ok := edge.Annotations[entx.CatalogEdgeAnnotationName]
-	if !ok {
+	if _, ok := edge.Annotations[entx.CatalogEdgeAnnotationName]; !ok {
 		return "", nil
-	}
-
-	ann := &entx.CatalogEdgeAnnotation{}
-	if err := ann.Decode(raw); err != nil {
-		return "", fmt.Errorf("decode catalog edge annotation on %s.%s: %w", node.Name, edge.Name, err)
 	}
 
 	if !edge.Unique || edge.Type.Name != node.Name || !edge.OwnFK() {
@@ -377,7 +371,7 @@ func schemaOwnerField(node *gen.Type) (string, error) {
 	return "", fmt.Errorf("%w: %s", ErrOwnerEdgeMissing, node.Name)
 }
 
-// systemOwnedFieldName is the marker column distinguishing catalogue rows from organization-owned rows
+// systemOwnedFieldName is the marker column distinguishing catalog rows from organization-owned rows
 const systemOwnedFieldName = "system_owned"
 
 // validateCatalog fails generation when a schema with a catalog edge lacks the inputs, markers, or lookup key adoption uses

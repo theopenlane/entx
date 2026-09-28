@@ -227,10 +227,7 @@ func TestCatalogEdgeAnnotation(t *testing.T) {
 	raw, err := b.MarshalJSON()
 	require.NoError(t, err)
 	assert.JSONEq(t, `{}`, string(raw))
-
-	decoded := &CatalogEdgeAnnotation{}
-	require.NoError(t, decoded.Decode(json.RawMessage(raw)))
-	assert.Equal(t, CatalogEdgeAnnotationName, decoded.Name())
+	assert.Equal(t, CatalogEdgeAnnotationName, CatalogEdgeAnnotation{}.Name())
 }
 
 func TestCatalogVisibilityFieldAnnotation(t *testing.T) {
@@ -242,9 +239,7 @@ func TestCatalogVisibilityFieldAnnotation(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{}`, string(raw))
 
-	decoded := &CatalogVisibilityFieldAnnotation{}
-	require.NoError(t, decoded.Decode(json.RawMessage(raw)))
-	assert.Equal(t, CatalogVisibilityFieldAnnotationName, decoded.Name())
+	assert.Equal(t, CatalogVisibilityFieldAnnotationName, CatalogVisibilityFieldAnnotation{}.Name())
 }
 
 func TestCatalogKeyFieldAnnotation(t *testing.T) {
@@ -256,9 +251,7 @@ func TestCatalogKeyFieldAnnotation(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{}`, string(raw))
 
-	decoded := &CatalogKeyFieldAnnotation{}
-	require.NoError(t, decoded.Decode(json.RawMessage(raw)))
-	assert.Equal(t, CatalogKeyFieldAnnotationName, decoded.Name())
+	assert.Equal(t, CatalogKeyFieldAnnotationName, CatalogKeyFieldAnnotation{}.Name())
 }
 
 func TestCSVReferenceAnnotationDecode(t *testing.T) {

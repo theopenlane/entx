@@ -76,29 +76,29 @@ type IngestCapability struct {
 	buildUpdate func(context.Context, *generated.Client, json.RawMessage, json.RawMessage) (ent.Mutation, func(context.Context) error, error)
 }
 
-// CatalogCapability describes the catalogue pointer, the visibility and key markers, and the fields copied from a catalogue row
+// CatalogCapability describes the catalog pointer, the visibility and key markers, and the fields copied from a catalog row
 type CatalogCapability struct {
-	// PointerField is the snake_case foreign-key field naming the catalogue row an adopted row came from
+	// PointerField is the snake_case foreign-key field naming the catalog row an adopted row came from
 	PointerField string
-	// VisibilityField is the snake_case bool field marking a catalogue row as visible to organizations
+	// VisibilityField is the snake_case bool field marking a catalog row as visible to organizations
 	VisibilityField string
-	// KeyField is the snake_case field on adopted rows holding the catalogue row's lookup key
+	// KeyField is the snake_case field on adopted rows holding the catalog row's lookup key
 	KeyField string
-	// Fields lists the snake_case fields copied from the catalogue row on adopt and refresh
+	// Fields lists the snake_case fields copied from the catalog row on adopt and refresh
 	Fields []string
-	// adopt finds or creates one organization's adopted row for a catalogue row
+	// adopt finds or creates one organization's adopted row for a catalog row
 	adopt func(ctx context.Context, client *generated.Client, catalogID, ownerID string, overlay json.RawMessage) (string, bool, error)
-	// refresh re-copies the catalogue fields onto every adopted row of a catalogue row
+	// refresh re-copies the catalog fields onto every adopted row of a catalog row
 	refresh func(ctx context.Context, client *generated.Client, catalogID string) (int, error)
-	// relink points rows carrying a catalogue row's key at that row when their pointer is null or stale
+	// relink points rows carrying a catalog row's key at that row when their pointer is null or stale
 	relink func(ctx context.Context, client *generated.Client, catalogID string) (int, error)
-	// match returns the first visible catalogue row matching a candidate in order
+	// match returns the first visible catalog row matching a candidate in order
 	match func(ctx context.Context, client *generated.Client, candidates []MatchCandidate) (string, bool, error)
-	// visible reports whether the row is a visible system-owned catalogue row
+	// visible reports whether the row is a visible system-owned catalog row
 	visible func(ctx context.Context, client *generated.Client, catalogID string) (bool, error)
 }
 
-// MatchCandidate is one field and value to match a catalogue row on, tried in the order given
+// MatchCandidate is one field and value to match a catalog row on, tried in the order given
 type MatchCandidate struct {
 	Field string
 	Value string
@@ -110,7 +110,7 @@ type MatchCandidate struct {
 type Schema struct {
 	SchemaDescriptor
 	// Create creates a new entity from a JSON input and returns the entity ID; emitted only for
-	// integration-mapped and catalogue schemas, whose ingest upsert and adopt are the sole callers
+	// integration-mapped and catalog schemas, whose ingest upsert and adopt are the sole callers
 	Create func(ctx context.Context, client *generated.Client, input json.RawMessage) (string, error)
 	// Update applies a typed update input to an entity by ID; emitted only for integration-mapped
 	// and workflow-eligible schemas
@@ -1348,9 +1348,9 @@ func entityID(row json.RawMessage) string {
 	return id
 }
 
-// --- Catalogue adoption ---
+// --- Catalog adoption ---
 
-// Adopt returns the organization's adopted row for the catalogue row, creating it from the catalogue
+// Adopt returns the organization's adopted row for the catalog row, creating it from the catalog
 // fields plus overlay when absent; created reports whether a row was created
 func (s *Schema) Adopt(ctx context.Context, client *generated.Client, catalogID, ownerID string, overlay json.RawMessage) (id string, created bool, err error) {
 	if s.Catalog == nil {
@@ -1360,7 +1360,7 @@ func (s *Schema) Adopt(ctx context.Context, client *generated.Client, catalogID,
 	return s.Catalog.adopt(ctx, client, catalogID, ownerID, overlay)
 }
 
-// RefreshAdopted re-copies the catalogue fields onto every row adopted from the catalogue row and returns how many changed
+// RefreshAdopted re-copies the catalog fields onto every row adopted from the catalog row and returns how many changed
 func (s *Schema) RefreshAdopted(ctx context.Context, client *generated.Client, catalogID string) (int, error) {
 	if s.Catalog == nil {
 		return 0, ErrCatalogUnsupported
@@ -1369,7 +1369,7 @@ func (s *Schema) RefreshAdopted(ctx context.Context, client *generated.Client, c
 	return s.Catalog.refresh(ctx, client, catalogID)
 }
 
-// RelinkAdopted points rows carrying the catalogue row's key at it when their pointer is null or stale and returns how many moved
+// RelinkAdopted points rows carrying the catalog row's key at it when their pointer is null or stale and returns how many moved
 func (s *Schema) RelinkAdopted(ctx context.Context, client *generated.Client, catalogID string) (int, error) {
 	if s.Catalog == nil {
 		return 0, ErrCatalogUnsupported
@@ -1378,7 +1378,7 @@ func (s *Schema) RelinkAdopted(ctx context.Context, client *generated.Client, ca
 	return s.Catalog.relink(ctx, client, catalogID)
 }
 
-// Match returns the id of the first visible catalogue row matching a candidate in order
+// Match returns the id of the first visible catalog row matching a candidate in order
 func (s *Schema) Match(ctx context.Context, client *generated.Client, candidates ...MatchCandidate) (string, bool, error) {
 	if s.Catalog == nil {
 		return "", false, ErrCatalogUnsupported
@@ -1387,7 +1387,7 @@ func (s *Schema) Match(ctx context.Context, client *generated.Client, candidates
 	return s.Catalog.match(ctx, client, candidates)
 }
 
-// relinkCreated points adopted rows at a newly created row when it is a visible catalogue row
+// relinkCreated points adopted rows at a newly created row when it is a visible catalog row
 func (s *Schema) relinkCreated(ctx context.Context, client *generated.Client, id string) error {
 	visible, err := s.Catalog.visible(ctx, client, id)
 	if err != nil {
@@ -1404,12 +1404,12 @@ func (s *Schema) relinkCreated(ctx context.Context, client *generated.Client, id
 }
 {{- if $hasCatalog }}
 
-// catalogListenerCaller lets a catalogue refresh update adopted rows in every organization
+// catalogListenerCaller lets a catalog refresh update adopted rows in every organization
 func catalogListenerCaller(restored *auth.Caller, _ MutationPayload) *auth.Caller {
 	return restored.WithCapabilities(auth.CapInternalOperation | auth.CapBypassOrgFilter | auth.CapBypassFGA)
 }
 
-// catalogRefreshHandler refreshes the adopted rows of a mutated row when it is a visible catalogue row
+// catalogRefreshHandler refreshes the adopted rows of a mutated row when it is a visible catalog row
 func catalogRefreshHandler(s *Schema) func(Invocation, MutationPayload) error {
 	return func(inv Invocation, _ MutationPayload) error {
 		visible, err := s.Catalog.visible(inv.Context, inv.Client, inv.EntityID)
@@ -1432,7 +1432,7 @@ func catalogRefreshHandler(s *Schema) func(Invocation, MutationPayload) error {
 	}
 }
 
-// CatalogListeners refreshes adopted rows when a visible catalogue row's source-managed fields change
+// CatalogListeners refreshes adopted rows when a visible catalog row's source-managed fields change
 func CatalogListeners() []gala.Registration {
 	return []gala.Registration{
 {{- range $schema := .Schemas }}
@@ -1450,7 +1450,7 @@ func CatalogListeners() []gala.Registration {
 }
 {{- end }}
 
-// catalogPayload keeps only the keys copied onto adopted rows from a marshaled catalogue row
+// catalogPayload keeps only the keys copied onto adopted rows from a marshaled catalog row
 func catalogPayload(row json.RawMessage, fields []string) (json.RawMessage, error) {
 	document, err := jsonx.ToRawMap(row)
 	if err != nil {
@@ -2092,19 +2092,9 @@ func init() {
 			return 0, logError(ctx, ref, ErrDecodeFailed, err)
 		}
 
-		ids, err := client.{{ $schema.Name }}.Query().Where({{ $schema.PredicatePackage }}.{{ $schema.CatalogPointer | pascal }}(catalogID)).IDs(ctx)
+		updated, err := client.{{ $schema.Name }}.Update().Where({{ $pkg }}.{{ $pointer }}(catalogID)).SetInput(input).Save(ctx)
 		if err != nil {
-			return 0, logError(ctx, ref, ErrQueryFailed, err)
-		}
-
-		updated := 0
-
-		for _, id := range ids {
-			if err := client.{{ $schema.Name }}.UpdateOneID(id).SetInput(input).Exec(ctx); err != nil {
-				return updated, logPersistError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpUpdate, EntityID: id}, ErrUpdateFailed, err)
-			}
-
-			updated++
+			return 0, logPersistError(ctx, ref, ErrUpdateFailed, err)
 		}
 
 		return updated, nil
@@ -2247,7 +2237,7 @@ func ownerScope{{ $schema.Name }}(ownerID string) predicate.{{ $schema.Name }} {
 {{- range $schema := .Schemas }}
 {{- if $schema.HasCatalog }}
 
-// catalogRow{{ $schema.Name }} loads a visible system-owned catalogue {{ $schema.Snake }} as JSON with its lookup key, distinguishing hidden rows from missing ones
+// catalogRow{{ $schema.Name }} loads a visible system-owned catalog {{ $schema.Snake }} as JSON with its lookup key, distinguishing hidden rows from missing ones
 func catalogRow{{ $schema.Name }}(ctx context.Context, client *generated.Client, ref SchemaRef, catalogID string) (json.RawMessage, string, error) {
 	row, err := client.{{ $schema.Name }}.Query().Where({{ $schema.PredicatePackage }}.ID(catalogID), {{ $schema.PredicatePackage }}.SystemOwned(true)).Only(ctx)
 

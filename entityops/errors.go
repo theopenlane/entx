@@ -47,7 +47,7 @@ var ErrCatalogEdgeInvalid = errors.New("entityops: catalog edge must be a unique
 // ErrCatalogEdgeConflict indicates a schema marks more than one catalog edge
 var ErrCatalogEdgeConflict = errors.New("entityops: schema declares multiple catalog edges")
 
-// ErrCatalogInputsMissing indicates a catalogue-capable schema lacks the create or update input adopt and refresh use
+// ErrCatalogInputsMissing indicates a catalog-capable schema lacks the create or update input adopt and refresh use
 var ErrCatalogInputsMissing = errors.New("entityops: catalog adoption requires create and update inputs")
 
 // ErrCatalogVisibilityMissing indicates a schema with a catalog edge lacks the CatalogVisibilityField-annotated field

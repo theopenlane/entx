@@ -249,13 +249,13 @@ var SnapshotRemovalAnnotationName = "OPENLANE_SNAPSHOT_REMOVAL"
 // FieldSourceManagedAnnotationName is the annotation name for fields whose value is owned by the upstream source
 var FieldSourceManagedAnnotationName = "OPENLANE_FIELD_SOURCE_MANAGED"
 
-// CatalogEdgeAnnotationName is the annotation name for the self edge pointing at a schema's catalogue row
+// CatalogEdgeAnnotationName is the annotation name for the self edge pointing at a schema's catalog row
 var CatalogEdgeAnnotationName = "OPENLANE_CATALOG_EDGE"
 
-// CatalogVisibilityFieldAnnotationName is the annotation name for the bool field marking a catalogue row as visible to organizations
+// CatalogVisibilityFieldAnnotationName is the annotation name for the bool field marking a catalog row as visible to organizations
 var CatalogVisibilityFieldAnnotationName = "OPENLANE_CATALOG_VISIBILITY_FIELD"
 
-// CatalogKeyFieldAnnotationName is the annotation name for the field holding the catalogue row's lookup key on adopted rows
+// CatalogKeyFieldAnnotationName is the annotation name for the field holding the catalog row's lookup key on adopted rows
 var CatalogKeyFieldAnnotationName = "OPENLANE_CATALOG_KEY_FIELD"
 
 // DisplayNameAnnotation marks the single field carrying a schema's display name; at most
@@ -271,13 +271,13 @@ type SnapshotRemovalAnnotation struct {
 // FieldSourceManagedAnnotation marks a field whose value is owned by its upstream source and overwritten on refresh or reconcile
 type FieldSourceManagedAnnotation struct{}
 
-// CatalogEdgeAnnotation marks the unique self edge whose foreign key points at the catalogue row
+// CatalogEdgeAnnotation marks the unique self edge whose foreign key points at the catalog row
 type CatalogEdgeAnnotation struct{}
 
-// CatalogVisibilityFieldAnnotation marks the bool field reporting whether a catalogue row is visible to organizations
+// CatalogVisibilityFieldAnnotation marks the bool field reporting whether a catalog row is visible to organizations
 type CatalogVisibilityFieldAnnotation struct{}
 
-// CatalogKeyFieldAnnotation marks the field holding the catalogue row's lookup key on adopted rows
+// CatalogKeyFieldAnnotation marks the field holding the catalog row's lookup key on adopted rows
 type CatalogKeyFieldAnnotation struct{}
 
 // MentionSourceAnnotation marks a rich-text field scanned for mentions; the generator
@@ -596,7 +596,7 @@ type CatalogEdgeBuilder struct {
 	annotation CatalogEdgeAnnotation
 }
 
-// CatalogEdge marks the unique self edge whose foreign key points at the catalogue row
+// CatalogEdge marks the unique self edge whose foreign key points at the catalog row
 func CatalogEdge() *CatalogEdgeBuilder {
 	return &CatalogEdgeBuilder{}
 }
@@ -611,17 +611,12 @@ func (b *CatalogEdgeBuilder) MarshalJSON() ([]byte, error) {
 	return json.Marshal(b.annotation)
 }
 
-// Decode unmarshalls the CatalogEdgeAnnotation
-func (a *CatalogEdgeAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation(annotation, a)
-}
-
 // CatalogVisibilityFieldBuilder provides a fluent interface for CatalogVisibilityFieldAnnotation
 type CatalogVisibilityFieldBuilder struct {
 	annotation CatalogVisibilityFieldAnnotation
 }
 
-// CatalogVisibilityField marks the bool field reporting whether a catalogue row is visible to organizations
+// CatalogVisibilityField marks the bool field reporting whether a catalog row is visible to organizations
 func CatalogVisibilityField() *CatalogVisibilityFieldBuilder {
 	return &CatalogVisibilityFieldBuilder{}
 }
@@ -636,17 +631,12 @@ func (b *CatalogVisibilityFieldBuilder) MarshalJSON() ([]byte, error) {
 	return json.Marshal(b.annotation)
 }
 
-// Decode unmarshalls the CatalogVisibilityFieldAnnotation
-func (a *CatalogVisibilityFieldAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation(annotation, a)
-}
-
 // CatalogKeyFieldBuilder provides a fluent interface for CatalogKeyFieldAnnotation
 type CatalogKeyFieldBuilder struct {
 	annotation CatalogKeyFieldAnnotation
 }
 
-// CatalogKeyField marks the field holding the catalogue row's lookup key on adopted rows
+// CatalogKeyField marks the field holding the catalog row's lookup key on adopted rows
 func CatalogKeyField() *CatalogKeyFieldBuilder {
 	return &CatalogKeyFieldBuilder{}
 }
@@ -659,11 +649,6 @@ func (b *CatalogKeyFieldBuilder) Name() string {
 // MarshalJSON serializes the builder as the underlying CatalogKeyFieldAnnotation
 func (b *CatalogKeyFieldBuilder) MarshalJSON() ([]byte, error) {
 	return json.Marshal(b.annotation)
-}
-
-// Decode unmarshalls the CatalogKeyFieldAnnotation
-func (a *CatalogKeyFieldAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation(annotation, a)
 }
 
 // ApprovalStatus marks the enum field carrying a schema's approval status
