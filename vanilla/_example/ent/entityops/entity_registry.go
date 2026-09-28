@@ -18,6 +18,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"github.com/samber/lo"
 	"github.com/stoewer/go-strcase"
 	"github.com/theopenlane/utils/contextx"
@@ -65,13 +66,41 @@ type IngestCapability struct {
 	buildUpdate func(context.Context, *generated.Client, json.RawMessage, json.RawMessage) (ent.Mutation, func(context.Context) error, error)
 }
 
+// CatalogCapability describes the catalog pointer, the visibility and key markers, and the fields copied from a catalog row
+type CatalogCapability struct {
+	// PointerField is the snake_case foreign-key field naming the catalog row an adopted row came from
+	PointerField string
+	// VisibilityField is the snake_case bool field marking a catalog row as visible to organizations
+	VisibilityField string
+	// KeyField is the snake_case field on adopted rows holding the catalog row's lookup key
+	KeyField string
+	// Fields lists the snake_case fields copied from the catalog row on adopt and refresh
+	Fields []string
+	// adopt finds or creates one organization's adopted row for a catalog row
+	adopt func(ctx context.Context, client *generated.Client, catalogID, ownerID string, overlay json.RawMessage) (string, bool, error)
+	// refresh re-copies the catalog fields onto every adopted row of a catalog row
+	refresh func(ctx context.Context, client *generated.Client, catalogID string) (int, error)
+	// relink points rows carrying a catalog row's key at that row when their pointer is null or stale
+	relink func(ctx context.Context, client *generated.Client, catalogID string) (int, error)
+	// match returns the first visible catalog row matching a candidate in order
+	match func(ctx context.Context, client *generated.Client, candidates []MatchCandidate) (string, bool, error)
+	// visible reports whether the row is a visible system-owned catalog row
+	visible func(ctx context.Context, client *generated.Client, catalogID string) (bool, error)
+}
+
+// MatchCandidate is one field and value to match a catalog row on, tried in the order given
+type MatchCandidate struct {
+	Field string
+	Value string
+}
+
 // Schema is the runtime representation of a registered entity schema. It carries the schema
 // identity and its operation closures. Load, Fields, and Edges are universal; the remaining
 // closures are emitted only for schemas whose capabilities can reach them and are nil otherwise
 type Schema struct {
 	SchemaDescriptor
 	// Create creates a new entity from a JSON input and returns the entity ID; emitted only for
-	// integration-mapped schemas, whose ingest upsert is the sole caller
+	// integration-mapped and catalog schemas, whose ingest upsert and adopt are the sole callers
 	Create func(ctx context.Context, client *generated.Client, input json.RawMessage) (string, error)
 	// Update applies a typed update input to an entity by ID; emitted only for integration-mapped
 	// and workflow-eligible schemas
@@ -83,6 +112,8 @@ type Schema struct {
 	// field matches any of the provided values, pushing the predicate into the database; emitted
 	// only for integration-mapped schemas and link-rule targets with match-key columns
 	QueryByKey func(ctx context.Context, client *generated.Client, orgID string, field string, values []string) ([]json.RawMessage, error)
+	// OwnerField is the snake_case foreign-key field of the owner edge, empty for schemas without an owner
+	OwnerField string
 	// IntegrationFKField is the schema's mutable FK column to Integration, if any
 	IntegrationFKField string
 	// IntegrationM2MEdge is the name of the schema's to-many edge to Integration, if any
@@ -124,6 +155,8 @@ type Schema struct {
 	ProjectionType reflect.Type
 	// Ingest is present when this schema supports mapped integration ingestion
 	Ingest *IngestCapability
+	// Catalog describes how organizations adopt this schema's system-owned rows, nil when unsupported
+	Catalog *CatalogCapability
 	// ConsoleRoute is present only when the schema explicitly declares a console route
 	ConsoleRoute *ConsoleRoute
 	// MentionSpec is present only when the schema explicitly declares mention scanning
@@ -135,7 +168,7 @@ type Schema struct {
 // defaultIngestPersist returns the stock upsert-backed persistence for an ingest schema
 func defaultIngestPersist(s *Schema) IngestPersist {
 	return func(ctx context.Context, client *generated.Client, integration *generated.Integration, payload json.RawMessage) (string, bool, bool, error) {
-		owner := lookupValue(payload, FieldOwnerID)
+		owner := lookupValue(payload, s.OwnerField)
 		if owner == "" && integration != nil {
 			owner = integration.OwnerID
 		}
@@ -270,7 +303,7 @@ func (s *Schema) handleIngest(ctx context.Context, client *generated.Client, res
 		return err
 	}
 
-	payload = StampProvenance(payload, s, integration, request.RunID)
+	payload = StampProvenance(payload, s, integration, integration.DefinitionID, request.RunID)
 
 	payload, err = s.Ingest.prepare(ctx, integration, payload)
 	if err != nil {
@@ -611,10 +644,20 @@ func coerceTime(value any) (time.Time, error) {
 	}
 }
 
-// matchKeyIn returns a selector predicate matching the given match-key column against any of values
-func matchKeyIn(field string, values []string) func(*sql.Selector) {
+// matchKeyIn returns a selector predicate matching the given match-key column against any of values,
+// testing JSON string arrays for membership and every other column for equality
+func matchKeyIn(schema *Schema, field string, values []string) func(*sql.Selector) {
+	descriptor, _ := schema.FieldByName(field)
+
 	return func(s *sql.Selector) {
-		s.Where(sql.In(s.C(field), lo.ToAnySlice(values)...))
+		switch descriptor.Type {
+		case "[]string":
+			s.Where(sql.Or(lo.Map(values, func(value string, _ int) *sql.Predicate {
+				return sqljson.ValueContains(s.C(field), value)
+			})...))
+		default:
+			s.Where(sql.In(s.C(field), lo.ToAnySlice(values)...))
+		}
 	}
 }
 
@@ -622,8 +665,6 @@ func matchKeyIn(field string, values []string) func(*sql.Selector) {
 const ingestQueryChunkSize = 500
 
 const (
-	// FieldOwnerID is the provenance column recording the owning organization
-	FieldOwnerID = "owner_id"
 	// FieldIntegrationID is the provenance column recording the writing installation's FK
 	FieldIntegrationID = "integration_id"
 	// FieldManagedBy is the provenance column recording which installation owns a record
@@ -643,20 +684,29 @@ const (
 // StampProvenance writes the schema's trusted integration-derived provenance columns and ownership
 // edges onto an ingest payload from the writing installation, overriding anything the mapping
 // emitted for them; it is the sole writer of provenance columns for both the synchronous and the
-// durable ingest paths, so a queued record persists with the same provenance a batched one does
-func StampProvenance(payload json.RawMessage, schema *Schema, integration *generated.Integration, runID string) json.RawMessage {
-	values := []struct {
+// durable ingest paths, so a queued record persists with the same provenance a batched one does;
+// a nil installation stamps only the run id and the definition id, which is how runtime ingest writes system-owned rows
+func StampProvenance(payload json.RawMessage, schema *Schema, integration *generated.Integration, definitionID, runID string) json.RawMessage {
+	type provenanceValue struct {
 		field string
 		value string
-	}{
-		{FieldOwnerID, integration.OwnerID},
-		{FieldIntegrationID, integration.ID},
-		{FieldManagedBy, integration.ID},
-		{FieldPlatformID, integration.PlatformID},
-		{FieldSourceDefinitionID, integration.DefinitionID},
-		{FieldSourceDefinitionVersion, integration.DefinitionVersion},
-		{FieldSourceInstanceID, integration.InstallationMetadata.Display.ExternalID},
-		{FieldIntegrationRunID, runID},
+	}
+
+	values := []provenanceValue{provenanceValue{FieldIntegrationRunID, runID}}
+
+	switch {
+	case integration == nil:
+		values = append(values, provenanceValue{FieldSourceDefinitionID, definitionID})
+	default:
+		values = append(values,
+			provenanceValue{schema.OwnerField, integration.OwnerID},
+			provenanceValue{FieldIntegrationID, integration.ID},
+			provenanceValue{FieldManagedBy, integration.ID},
+			provenanceValue{FieldPlatformID, integration.PlatformID},
+			provenanceValue{FieldSourceDefinitionID, integration.DefinitionID},
+			provenanceValue{FieldSourceDefinitionVersion, integration.DefinitionVersion},
+			provenanceValue{FieldSourceInstanceID, integration.InstallationMetadata.Display.ExternalID},
+		)
 	}
 
 	return jsonx.EditObject(payload, func(doc map[string]json.RawMessage) bool {
@@ -677,7 +727,7 @@ func StampProvenance(payload json.RawMessage, schema *Schema, integration *gener
 			}
 		}
 
-		if schema.IntegrationM2MEdge != "" {
+		if integration != nil && schema.IntegrationM2MEdge != "" {
 			if edge, ok := schema.EdgeByName(schema.IntegrationM2MEdge); ok && stampProvenanceKey(doc, edge.CreateField, []string{integration.ID}) {
 				changed = true
 			}
@@ -1032,6 +1082,12 @@ func (s *Schema) Upsert(ctx context.Context, client *generated.Client, ownerID s
 			return "", false, false, err
 		}
 
+		if s.Catalog != nil && ownerID == "" {
+			if err := s.relinkCreated(ctx, client, id); err != nil {
+				return "", false, false, err
+			}
+		}
+
 		if cacheable {
 			if cache, ok := lookupMatchCacheContextKey.Get(ctx); ok {
 				entry := cache[cacheKey]
@@ -1045,8 +1101,7 @@ func (s *Schema) Upsert(ctx context.Context, client *generated.Client, ownerID s
 
 	id = entityID(candidate)
 
-	_, hasOwner := s.FieldByName(FieldOwnerID)
-	if id == "" || (hasOwner && lookupValue(candidate, FieldOwnerID) != ownerID) {
+	if id == "" || (s.OwnerField != "" && lookupValue(candidate, s.OwnerField) != ownerID) {
 		return "", false, false, logError(ctx, ref, ErrUpsertConflict, fmt.Errorf("invalid or cross-organization match for %s", s.Name))
 	}
 
@@ -1281,6 +1336,84 @@ func entityID(row json.RawMessage) string {
 	id, _ := jsonx.DecodeObjectKey[string](row, "id")
 
 	return id
+}
+
+// --- Catalog adoption ---
+
+// Adopt returns the organization's adopted row for the catalog row, creating it from the catalog
+// fields plus overlay when absent; created reports whether a row was created
+func (s *Schema) Adopt(ctx context.Context, client *generated.Client, catalogID, ownerID string, overlay json.RawMessage) (id string, created bool, err error) {
+	if s.Catalog == nil {
+		return "", false, ErrCatalogUnsupported
+	}
+
+	return s.Catalog.adopt(ctx, client, catalogID, ownerID, overlay)
+}
+
+// RefreshAdopted re-copies the catalog fields onto every row adopted from the catalog row and returns how many changed
+func (s *Schema) RefreshAdopted(ctx context.Context, client *generated.Client, catalogID string) (int, error) {
+	if s.Catalog == nil {
+		return 0, ErrCatalogUnsupported
+	}
+
+	return s.Catalog.refresh(ctx, client, catalogID)
+}
+
+// RelinkAdopted points rows carrying the catalog row's key at it when their pointer is null or stale and returns how many moved
+func (s *Schema) RelinkAdopted(ctx context.Context, client *generated.Client, catalogID string) (int, error) {
+	if s.Catalog == nil {
+		return 0, ErrCatalogUnsupported
+	}
+
+	return s.Catalog.relink(ctx, client, catalogID)
+}
+
+// Match returns the id of the first visible catalog row matching a candidate in order
+func (s *Schema) Match(ctx context.Context, client *generated.Client, candidates ...MatchCandidate) (string, bool, error) {
+	if s.Catalog == nil {
+		return "", false, ErrCatalogUnsupported
+	}
+
+	return s.Catalog.match(ctx, client, candidates)
+}
+
+// relinkCreated points adopted rows at a newly created row when it is a visible catalog row
+func (s *Schema) relinkCreated(ctx context.Context, client *generated.Client, id string) error {
+	visible, err := s.Catalog.visible(ctx, client, id)
+	if err != nil {
+		return logError(ctx, SchemaRef{Schema: s.Snake, Operation: refOpQuery, EntityID: id}, ErrQueryFailed, err)
+	}
+
+	if !visible {
+		return nil
+	}
+
+	_, err = s.Catalog.relink(ctx, client, id)
+
+	return err
+}
+
+// catalogPayload keeps only the keys copied onto adopted rows from a marshaled catalog row
+func catalogPayload(row json.RawMessage, fields []string) (json.RawMessage, error) {
+	document, err := jsonx.ToRawMap(row)
+	if err != nil {
+		return nil, err
+	}
+
+	kept := make(map[string]json.RawMessage, len(fields))
+
+	for _, field := range fields {
+		if value, ok := document[field]; ok {
+			kept[field] = value
+		}
+	}
+
+	payload, err := json.Marshal(kept)
+	if err != nil {
+		return nil, err
+	}
+
+	return payload, nil
 }
 
 // --- Per-schema registrations ---
