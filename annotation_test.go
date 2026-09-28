@@ -205,6 +205,55 @@ func TestSnapshotRemovalAnnotation(t *testing.T) {
 	assert.True(t, decoded.Episodic)
 }
 
+func TestFieldSourceManagedAnnotation(t *testing.T) {
+	b := FieldSourceManaged()
+
+	assert.Equal(t, FieldSourceManagedAnnotationName, b.Name())
+
+	raw, err := b.MarshalJSON()
+	require.NoError(t, err)
+	assert.JSONEq(t, `{}`, string(raw))
+
+	decoded := &FieldSourceManagedAnnotation{}
+	require.NoError(t, decoded.Decode(json.RawMessage(raw)))
+	assert.Equal(t, FieldSourceManagedAnnotationName, decoded.Name())
+}
+
+func TestCatalogEdgeAnnotation(t *testing.T) {
+	b := CatalogEdge()
+
+	assert.Equal(t, CatalogEdgeAnnotationName, b.Name())
+
+	raw, err := b.MarshalJSON()
+	require.NoError(t, err)
+	assert.JSONEq(t, `{}`, string(raw))
+	assert.Equal(t, CatalogEdgeAnnotationName, CatalogEdgeAnnotation{}.Name())
+}
+
+func TestCatalogVisibilityFieldAnnotation(t *testing.T) {
+	b := CatalogVisibilityField()
+
+	assert.Equal(t, CatalogVisibilityFieldAnnotationName, b.Name())
+
+	raw, err := b.MarshalJSON()
+	require.NoError(t, err)
+	assert.JSONEq(t, `{}`, string(raw))
+
+	assert.Equal(t, CatalogVisibilityFieldAnnotationName, CatalogVisibilityFieldAnnotation{}.Name())
+}
+
+func TestCatalogKeyFieldAnnotation(t *testing.T) {
+	b := CatalogKeyField()
+
+	assert.Equal(t, CatalogKeyFieldAnnotationName, b.Name())
+
+	raw, err := b.MarshalJSON()
+	require.NoError(t, err)
+	assert.JSONEq(t, `{}`, string(raw))
+
+	assert.Equal(t, CatalogKeyFieldAnnotationName, CatalogKeyFieldAnnotation{}.Name())
+}
+
 func TestCSVReferenceAnnotationDecode(t *testing.T) {
 	decoded := &CSVReferenceAnnotation{}
 	err := decoded.Decode(map[string]any{
