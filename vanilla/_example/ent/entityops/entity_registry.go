@@ -1569,6 +1569,14 @@ func init() {
 	}
 	SchemaWorkflowObjectRef.Edges = []EdgeDescriptor{
 		{
+			Name:        "linked_organizations",
+			Label:       "LinkedOrganizations",
+			Target:      SchemaOrganization,
+			TargetType:  "Organization",
+			CreateField: "linked_organization_ids",
+			AddField:    "add_linked_organization_ids",
+		},
+		{
 			Name:             "organization",
 			Label:            "Organization",
 			Target:           SchemaOrganization,

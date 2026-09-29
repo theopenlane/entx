@@ -783,6 +783,22 @@ func (c *WorkflowObjectRefClient) QueryOrganization(_m *WorkflowObjectRef) *Orga
 	return query
 }
 
+// QueryLinkedOrganizations queries the linked_organizations edge of a WorkflowObjectRef.
+func (c *WorkflowObjectRefClient) QueryLinkedOrganizations(_m *WorkflowObjectRef) *OrganizationQuery {
+	query := (&OrganizationClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(workflowobjectref.Table, workflowobjectref.FieldID, id),
+			sqlgraph.To(organization.Table, organization.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, workflowobjectref.LinkedOrganizationsTable, workflowobjectref.LinkedOrganizationsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *WorkflowObjectRefClient) Hooks() []Hook {
 	return c.hooks.WorkflowObjectRef

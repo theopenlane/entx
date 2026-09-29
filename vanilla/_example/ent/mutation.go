@@ -1712,17 +1712,20 @@ func (m *WorkflowInstanceMutation) ResetEdge(name string) error {
 // WorkflowObjectRefMutation represents an operation that mutates the WorkflowObjectRef nodes in the graph.
 type WorkflowObjectRefMutation struct {
 	config
-	op                       Op
-	typ                      string
-	id                       *string
-	clearedFields            map[string]struct{}
-	workflow_instance        *string
-	clearedworkflow_instance bool
-	organization             *string
-	clearedorganization      bool
-	done                     bool
-	oldValue                 func(context.Context) (*WorkflowObjectRef, error)
-	predicates               []predicate.WorkflowObjectRef
+	op                          Op
+	typ                         string
+	id                          *string
+	clearedFields               map[string]struct{}
+	workflow_instance           *string
+	clearedworkflow_instance    bool
+	organization                *string
+	clearedorganization         bool
+	linked_organizations        map[string]struct{}
+	removedlinked_organizations map[string]struct{}
+	clearedlinked_organizations bool
+	done                        bool
+	oldValue                    func(context.Context) (*WorkflowObjectRef, error)
+	predicates                  []predicate.WorkflowObjectRef
 }
 
 var _ ent.Mutation = (*WorkflowObjectRefMutation)(nil)
@@ -1968,6 +1971,60 @@ func (m *WorkflowObjectRefMutation) ResetOrganization() {
 	m.clearedorganization = false
 }
 
+// AddLinkedOrganizationIDs adds the "linked_organizations" edge to the Organization entity by ids.
+func (m *WorkflowObjectRefMutation) AddLinkedOrganizationIDs(ids ...string) {
+	if m.linked_organizations == nil {
+		m.linked_organizations = make(map[string]struct{})
+	}
+	for i := range ids {
+		m.linked_organizations[ids[i]] = struct{}{}
+	}
+}
+
+// ClearLinkedOrganizations clears the "linked_organizations" edge to the Organization entity.
+func (m *WorkflowObjectRefMutation) ClearLinkedOrganizations() {
+	m.clearedlinked_organizations = true
+}
+
+// LinkedOrganizationsCleared reports if the "linked_organizations" edge to the Organization entity was cleared.
+func (m *WorkflowObjectRefMutation) LinkedOrganizationsCleared() bool {
+	return m.clearedlinked_organizations
+}
+
+// RemoveLinkedOrganizationIDs removes the "linked_organizations" edge to the Organization entity by IDs.
+func (m *WorkflowObjectRefMutation) RemoveLinkedOrganizationIDs(ids ...string) {
+	if m.removedlinked_organizations == nil {
+		m.removedlinked_organizations = make(map[string]struct{})
+	}
+	for i := range ids {
+		delete(m.linked_organizations, ids[i])
+		m.removedlinked_organizations[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedLinkedOrganizations returns the removed IDs of the "linked_organizations" edge to the Organization entity.
+func (m *WorkflowObjectRefMutation) RemovedLinkedOrganizationsIDs() (ids []string) {
+	for id := range m.removedlinked_organizations {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// LinkedOrganizationsIDs returns the "linked_organizations" edge IDs in the mutation.
+func (m *WorkflowObjectRefMutation) LinkedOrganizationsIDs() (ids []string) {
+	for id := range m.linked_organizations {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetLinkedOrganizations resets all changes to the "linked_organizations" edge.
+func (m *WorkflowObjectRefMutation) ResetLinkedOrganizations() {
+	m.linked_organizations = nil
+	m.clearedlinked_organizations = false
+	m.removedlinked_organizations = nil
+}
+
 // Where appends a list predicates to the WorkflowObjectRefMutation builder.
 func (m *WorkflowObjectRefMutation) Where(ps ...predicate.WorkflowObjectRef) {
 	m.predicates = append(m.predicates, ps...)
@@ -2127,12 +2184,15 @@ func (m *WorkflowObjectRefMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *WorkflowObjectRefMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 3)
 	if m.workflow_instance != nil {
 		edges = append(edges, workflowobjectref.EdgeWorkflowInstance)
 	}
 	if m.organization != nil {
 		edges = append(edges, workflowobjectref.EdgeOrganization)
+	}
+	if m.linked_organizations != nil {
+		edges = append(edges, workflowobjectref.EdgeLinkedOrganizations)
 	}
 	return edges
 }
@@ -2149,30 +2209,50 @@ func (m *WorkflowObjectRefMutation) AddedIDs(name string) []ent.Value {
 		if id := m.organization; id != nil {
 			return []ent.Value{*id}
 		}
+	case workflowobjectref.EdgeLinkedOrganizations:
+		ids := make([]ent.Value, 0, len(m.linked_organizations))
+		for id := range m.linked_organizations {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *WorkflowObjectRefMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 3)
+	if m.removedlinked_organizations != nil {
+		edges = append(edges, workflowobjectref.EdgeLinkedOrganizations)
+	}
 	return edges
 }
 
 // RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
 // the given name in this mutation.
 func (m *WorkflowObjectRefMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case workflowobjectref.EdgeLinkedOrganizations:
+		ids := make([]ent.Value, 0, len(m.removedlinked_organizations))
+		for id := range m.removedlinked_organizations {
+			ids = append(ids, id)
+		}
+		return ids
+	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *WorkflowObjectRefMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 3)
 	if m.clearedworkflow_instance {
 		edges = append(edges, workflowobjectref.EdgeWorkflowInstance)
 	}
 	if m.clearedorganization {
 		edges = append(edges, workflowobjectref.EdgeOrganization)
+	}
+	if m.clearedlinked_organizations {
+		edges = append(edges, workflowobjectref.EdgeLinkedOrganizations)
 	}
 	return edges
 }
@@ -2185,6 +2265,8 @@ func (m *WorkflowObjectRefMutation) EdgeCleared(name string) bool {
 		return m.clearedworkflow_instance
 	case workflowobjectref.EdgeOrganization:
 		return m.clearedorganization
+	case workflowobjectref.EdgeLinkedOrganizations:
+		return m.clearedlinked_organizations
 	}
 	return false
 }
@@ -2212,6 +2294,9 @@ func (m *WorkflowObjectRefMutation) ResetEdge(name string) error {
 		return nil
 	case workflowobjectref.EdgeOrganization:
 		m.ResetOrganization()
+		return nil
+	case workflowobjectref.EdgeLinkedOrganizations:
+		m.ResetLinkedOrganizations()
 		return nil
 	}
 	return fmt.Errorf("unknown WorkflowObjectRef edge %s", name)

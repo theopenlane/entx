@@ -34,11 +34,15 @@ type WorkflowObjectRefEdges struct {
 	WorkflowInstance *WorkflowInstance `json:"workflow_instance,omitempty"`
 	// Organization holds the value of the organization edge.
 	Organization *Organization `json:"organization,omitempty"`
+	// LinkedOrganizations holds the value of the linked_organizations edge.
+	LinkedOrganizations []*Organization `json:"linked_organizations,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [3]bool
 	// totalCount holds the count of the edges above.
-	totalCount [2]map[string]int
+	totalCount [3]map[string]int
+
+	namedLinkedOrganizations map[string][]*Organization
 }
 
 // WorkflowInstanceOrErr returns the WorkflowInstance value or an error if the edge
@@ -61,6 +65,15 @@ func (e WorkflowObjectRefEdges) OrganizationOrErr() (*Organization, error) {
 		return nil, &NotFoundError{label: organization.Label}
 	}
 	return nil, &NotLoadedError{edge: "organization"}
+}
+
+// LinkedOrganizationsOrErr returns the LinkedOrganizations value or an error if the edge
+// was not loaded in eager-loading.
+func (e WorkflowObjectRefEdges) LinkedOrganizationsOrErr() ([]*Organization, error) {
+	if e.loadedTypes[2] {
+		return e.LinkedOrganizations, nil
+	}
+	return nil, &NotLoadedError{edge: "linked_organizations"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -126,6 +139,11 @@ func (_m *WorkflowObjectRef) QueryOrganization() *OrganizationQuery {
 	return NewWorkflowObjectRefClient(_m.config).QueryOrganization(_m)
 }
 
+// QueryLinkedOrganizations queries the "linked_organizations" edge of the WorkflowObjectRef entity.
+func (_m *WorkflowObjectRef) QueryLinkedOrganizations() *OrganizationQuery {
+	return NewWorkflowObjectRefClient(_m.config).QueryLinkedOrganizations(_m)
+}
+
 // Update returns a builder for updating this WorkflowObjectRef.
 // Note that you need to call WorkflowObjectRef.Unwrap() before calling this method if this WorkflowObjectRef
 // was returned from a transaction, and the transaction was committed or rolled back.
@@ -156,6 +174,30 @@ func (_m *WorkflowObjectRef) String() string {
 	builder.WriteString(_m.OrganizationID)
 	builder.WriteByte(')')
 	return builder.String()
+}
+
+// NamedLinkedOrganizations returns the LinkedOrganizations named value or an error if the edge was not
+// loaded in eager-loading with this name.
+func (_m *WorkflowObjectRef) NamedLinkedOrganizations(name string) ([]*Organization, error) {
+	if _m.Edges.namedLinkedOrganizations == nil {
+		return nil, &NotLoadedError{edge: name}
+	}
+	nodes, ok := _m.Edges.namedLinkedOrganizations[name]
+	if !ok {
+		return nil, &NotLoadedError{edge: name}
+	}
+	return nodes, nil
+}
+
+func (_m *WorkflowObjectRef) appendNamedLinkedOrganizations(name string, edges ...*Organization) {
+	if _m.Edges.namedLinkedOrganizations == nil {
+		_m.Edges.namedLinkedOrganizations = make(map[string][]*Organization)
+	}
+	if len(edges) == 0 {
+		_m.Edges.namedLinkedOrganizations[name] = []*Organization{}
+	} else {
+		_m.Edges.namedLinkedOrganizations[name] = append(_m.Edges.namedLinkedOrganizations[name], edges...)
+	}
 }
 
 // WorkflowObjectRefs is a parsable slice of WorkflowObjectRef.

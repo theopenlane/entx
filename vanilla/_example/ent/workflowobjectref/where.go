@@ -259,6 +259,29 @@ func HasOrganizationWith(preds ...predicate.Organization) predicate.WorkflowObje
 	})
 }
 
+// HasLinkedOrganizations applies the HasEdge predicate on the "linked_organizations" edge.
+func HasLinkedOrganizations() predicate.WorkflowObjectRef {
+	return predicate.WorkflowObjectRef(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, LinkedOrganizationsTable, LinkedOrganizationsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasLinkedOrganizationsWith applies the HasEdge predicate on the "linked_organizations" edge with a given conditions (other predicates).
+func HasLinkedOrganizationsWith(preds ...predicate.Organization) predicate.WorkflowObjectRef {
+	return predicate.WorkflowObjectRef(func(s *sql.Selector) {
+		step := newLinkedOrganizationsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.WorkflowObjectRef) predicate.WorkflowObjectRef {
 	return predicate.WorkflowObjectRef(sql.AndPredicates(predicates...))

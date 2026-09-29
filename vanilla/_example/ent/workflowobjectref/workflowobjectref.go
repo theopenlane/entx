@@ -20,6 +20,8 @@ const (
 	EdgeWorkflowInstance = "workflow_instance"
 	// EdgeOrganization holds the string denoting the organization edge name in mutations.
 	EdgeOrganization = "organization"
+	// EdgeLinkedOrganizations holds the string denoting the linked_organizations edge name in mutations.
+	EdgeLinkedOrganizations = "linked_organizations"
 	// Table holds the table name of the workflowobjectref in the database.
 	Table = "workflow_object_refs"
 	// WorkflowInstanceTable is the table that holds the workflow_instance relation/edge.
@@ -36,6 +38,13 @@ const (
 	OrganizationInverseTable = "organizations"
 	// OrganizationColumn is the table column denoting the organization relation/edge.
 	OrganizationColumn = "organization_id"
+	// LinkedOrganizationsTable is the table that holds the linked_organizations relation/edge.
+	LinkedOrganizationsTable = "organizations"
+	// LinkedOrganizationsInverseTable is the table name for the Organization entity.
+	// It exists in this package in order to avoid circular dependency with the "organization" package.
+	LinkedOrganizationsInverseTable = "organizations"
+	// LinkedOrganizationsColumn is the table column denoting the linked_organizations relation/edge.
+	LinkedOrganizationsColumn = "workflow_object_ref_linked_organizations"
 )
 
 // Columns holds all SQL columns for workflowobjectref fields.
@@ -86,6 +95,20 @@ func ByOrganizationField(field string, opts ...sql.OrderTermOption) OrderOption 
 		sqlgraph.OrderByNeighborTerms(s, newOrganizationStep(), sql.OrderByField(field, opts...))
 	}
 }
+
+// ByLinkedOrganizationsCount orders the results by linked_organizations count.
+func ByLinkedOrganizationsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newLinkedOrganizationsStep(), opts...)
+	}
+}
+
+// ByLinkedOrganizations orders the results by linked_organizations terms.
+func ByLinkedOrganizations(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newLinkedOrganizationsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newWorkflowInstanceStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -98,5 +121,12 @@ func newOrganizationStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(OrganizationInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, false, OrganizationTable, OrganizationColumn),
+	)
+}
+func newLinkedOrganizationsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(LinkedOrganizationsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, LinkedOrganizationsTable, LinkedOrganizationsColumn),
 	)
 }

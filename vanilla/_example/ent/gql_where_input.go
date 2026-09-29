@@ -1057,6 +1057,10 @@ type WorkflowObjectRefWhereInput struct {
 	// "organization" edge predicates.
 	HasOrganization     *bool                     `json:"hasOrganization,omitempty"`
 	HasOrganizationWith []*OrganizationWhereInput `json:"hasOrganizationWith,omitempty"`
+
+	// "linked_organizations" edge predicates.
+	HasLinkedOrganizations     *bool                     `json:"hasLinkedOrganizations,omitempty"`
+	HasLinkedOrganizationsWith []*OrganizationWhereInput `json:"hasLinkedOrganizationsWith,omitempty"`
 }
 
 // AddPredicates adds custom predicates to the where input to be used during the filtering phase.
@@ -1280,6 +1284,24 @@ func (i *WorkflowObjectRefWhereInput) P() (predicate.WorkflowObjectRef, error) {
 			with = append(with, p)
 		}
 		predicates = append(predicates, workflowobjectref.HasOrganizationWith(with...))
+	}
+	if i.HasLinkedOrganizations != nil {
+		p := workflowobjectref.HasLinkedOrganizations()
+		if !*i.HasLinkedOrganizations {
+			p = workflowobjectref.Not(p)
+		}
+		predicates = append(predicates, p)
+	}
+	if len(i.HasLinkedOrganizationsWith) > 0 {
+		with := make([]predicate.Organization, 0, len(i.HasLinkedOrganizationsWith))
+		for _, w := range i.HasLinkedOrganizationsWith {
+			p, err := w.P()
+			if err != nil {
+				return nil, fmt.Errorf("%w: field 'HasLinkedOrganizationsWith'", err)
+			}
+			with = append(with, p)
+		}
+		predicates = append(predicates, workflowobjectref.HasLinkedOrganizationsWith(with...))
 	}
 	switch len(predicates) {
 	case 0:

@@ -33,8 +33,9 @@ type Organization struct {
 	// An optional description of the organization
 	Description string `json:"description,omitempty"`
 	// free-form organization preferences, including compliance setup answers
-	Preferences  map[string]interface{} `json:"preferences,omitempty"`
-	selectValues sql.SelectValues
+	Preferences                              map[string]interface{} `json:"preferences,omitempty"`
+	workflow_object_ref_linked_organizations *string
+	selectValues                             sql.SelectValues
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -48,6 +49,8 @@ func (*Organization) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullString)
 		case organization.FieldCreatedAt, organization.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
+		case organization.ForeignKeys[0]: // workflow_object_ref_linked_organizations
+			values[i] = new(sql.NullString)
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -118,6 +121,13 @@ func (_m *Organization) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.Preferences); err != nil {
 					return fmt.Errorf("unmarshal field preferences: %w", err)
 				}
+			}
+		case organization.ForeignKeys[0]:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field workflow_object_ref_linked_organizations", values[i])
+			} else if value.Valid {
+				_m.workflow_object_ref_linked_organizations = new(string)
+				*_m.workflow_object_ref_linked_organizations = value.String
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])

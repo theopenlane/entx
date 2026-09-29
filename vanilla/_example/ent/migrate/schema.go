@@ -47,12 +47,21 @@ var (
 		{Name: "name", Type: field.TypeString},
 		{Name: "description", Type: field.TypeString, Nullable: true},
 		{Name: "preferences", Type: field.TypeJSON, Nullable: true},
+		{Name: "workflow_object_ref_linked_organizations", Type: field.TypeString, Nullable: true},
 	}
 	// OrganizationsTable holds the schema information for the "organizations" table.
 	OrganizationsTable = &schema.Table{
 		Name:       "organizations",
 		Columns:    OrganizationsColumns,
 		PrimaryKey: []*schema.Column{OrganizationsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "organizations_workflow_object_refs_linked_organizations",
+				Columns:    []*schema.Column{OrganizationsColumns[9]},
+				RefColumns: []*schema.Column{WorkflowObjectRefsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
 		Indexes: []*schema.Index{
 			{
 				Name:    "organization_name",
@@ -109,6 +118,7 @@ var (
 
 func init() {
 	OrgMembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable
+	OrganizationsTable.ForeignKeys[0].RefTable = WorkflowObjectRefsTable
 	WorkflowObjectRefsTable.ForeignKeys[0].RefTable = WorkflowInstancesTable
 	WorkflowObjectRefsTable.ForeignKeys[1].RefTable = OrganizationsTable
 }

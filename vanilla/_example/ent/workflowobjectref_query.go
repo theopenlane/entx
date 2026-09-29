@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -20,14 +21,16 @@ import (
 // WorkflowObjectRefQuery is the builder for querying WorkflowObjectRef entities.
 type WorkflowObjectRefQuery struct {
 	config
-	ctx                  *QueryContext
-	order                []workflowobjectref.OrderOption
-	inters               []Interceptor
-	predicates           []predicate.WorkflowObjectRef
-	withWorkflowInstance *WorkflowInstanceQuery
-	withOrganization     *OrganizationQuery
-	modifiers            []func(*sql.Selector)
-	loadTotal            []func(context.Context, []*WorkflowObjectRef) error
+	ctx                          *QueryContext
+	order                        []workflowobjectref.OrderOption
+	inters                       []Interceptor
+	predicates                   []predicate.WorkflowObjectRef
+	withWorkflowInstance         *WorkflowInstanceQuery
+	withOrganization             *OrganizationQuery
+	withLinkedOrganizations      *OrganizationQuery
+	modifiers                    []func(*sql.Selector)
+	loadTotal                    []func(context.Context, []*WorkflowObjectRef) error
+	withNamedLinkedOrganizations map[string]*OrganizationQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -101,6 +104,28 @@ func (_q *WorkflowObjectRefQuery) QueryOrganization() *OrganizationQuery {
 			sqlgraph.From(workflowobjectref.Table, workflowobjectref.FieldID, selector),
 			sqlgraph.To(organization.Table, organization.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, false, workflowobjectref.OrganizationTable, workflowobjectref.OrganizationColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryLinkedOrganizations chains the current query on the "linked_organizations" edge.
+func (_q *WorkflowObjectRefQuery) QueryLinkedOrganizations() *OrganizationQuery {
+	query := (&OrganizationClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(workflowobjectref.Table, workflowobjectref.FieldID, selector),
+			sqlgraph.To(organization.Table, organization.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, workflowobjectref.LinkedOrganizationsTable, workflowobjectref.LinkedOrganizationsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -295,13 +320,14 @@ func (_q *WorkflowObjectRefQuery) Clone() *WorkflowObjectRefQuery {
 		return nil
 	}
 	return &WorkflowObjectRefQuery{
-		config:               _q.config,
-		ctx:                  _q.ctx.Clone(),
-		order:                append([]workflowobjectref.OrderOption{}, _q.order...),
-		inters:               append([]Interceptor{}, _q.inters...),
-		predicates:           append([]predicate.WorkflowObjectRef{}, _q.predicates...),
-		withWorkflowInstance: _q.withWorkflowInstance.Clone(),
-		withOrganization:     _q.withOrganization.Clone(),
+		config:                  _q.config,
+		ctx:                     _q.ctx.Clone(),
+		order:                   append([]workflowobjectref.OrderOption{}, _q.order...),
+		inters:                  append([]Interceptor{}, _q.inters...),
+		predicates:              append([]predicate.WorkflowObjectRef{}, _q.predicates...),
+		withWorkflowInstance:    _q.withWorkflowInstance.Clone(),
+		withOrganization:        _q.withOrganization.Clone(),
+		withLinkedOrganizations: _q.withLinkedOrganizations.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -327,6 +353,17 @@ func (_q *WorkflowObjectRefQuery) WithOrganization(opts ...func(*OrganizationQue
 		opt(query)
 	}
 	_q.withOrganization = query
+	return _q
+}
+
+// WithLinkedOrganizations tells the query-builder to eager-load the nodes that are connected to
+// the "linked_organizations" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *WorkflowObjectRefQuery) WithLinkedOrganizations(opts ...func(*OrganizationQuery)) *WorkflowObjectRefQuery {
+	query := (&OrganizationClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withLinkedOrganizations = query
 	return _q
 }
 
@@ -408,9 +445,10 @@ func (_q *WorkflowObjectRefQuery) sqlAll(ctx context.Context, hooks ...queryHook
 	var (
 		nodes       = []*WorkflowObjectRef{}
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
+		loadedTypes = [3]bool{
 			_q.withWorkflowInstance != nil,
 			_q.withOrganization != nil,
+			_q.withLinkedOrganizations != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -443,6 +481,22 @@ func (_q *WorkflowObjectRefQuery) sqlAll(ctx context.Context, hooks ...queryHook
 	if query := _q.withOrganization; query != nil {
 		if err := _q.loadOrganization(ctx, query, nodes, nil,
 			func(n *WorkflowObjectRef, e *Organization) { n.Edges.Organization = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withLinkedOrganizations; query != nil {
+		if err := _q.loadLinkedOrganizations(ctx, query, nodes,
+			func(n *WorkflowObjectRef) { n.Edges.LinkedOrganizations = []*Organization{} },
+			func(n *WorkflowObjectRef, e *Organization) {
+				n.Edges.LinkedOrganizations = append(n.Edges.LinkedOrganizations, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	for name, query := range _q.withNamedLinkedOrganizations {
+		if err := _q.loadLinkedOrganizations(ctx, query, nodes,
+			func(n *WorkflowObjectRef) { n.appendNamedLinkedOrganizations(name) },
+			func(n *WorkflowObjectRef, e *Organization) { n.appendNamedLinkedOrganizations(name, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -509,6 +563,37 @@ func (_q *WorkflowObjectRefQuery) loadOrganization(ctx context.Context, query *O
 		for i := range nodes {
 			assign(nodes[i], n)
 		}
+	}
+	return nil
+}
+func (_q *WorkflowObjectRefQuery) loadLinkedOrganizations(ctx context.Context, query *OrganizationQuery, nodes []*WorkflowObjectRef, init func(*WorkflowObjectRef), assign func(*WorkflowObjectRef, *Organization)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*WorkflowObjectRef)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.Organization(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(workflowobjectref.LinkedOrganizationsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.workflow_object_ref_linked_organizations
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "workflow_object_ref_linked_organizations" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "workflow_object_ref_linked_organizations" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
 	}
 	return nil
 }
@@ -601,6 +686,20 @@ func (_q *WorkflowObjectRefQuery) sqlQuery(ctx context.Context) *sql.Selector {
 		selector.Limit(*limit)
 	}
 	return selector
+}
+
+// WithNamedLinkedOrganizations tells the query-builder to eager-load the nodes that are connected to the "linked_organizations"
+// edge with the given name. The optional arguments are used to configure the query builder of the edge.
+func (_q *WorkflowObjectRefQuery) WithNamedLinkedOrganizations(name string, opts ...func(*OrganizationQuery)) *WorkflowObjectRefQuery {
+	query := (&OrganizationClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	if _q.withNamedLinkedOrganizations == nil {
+		_q.withNamedLinkedOrganizations = make(map[string]*OrganizationQuery)
+	}
+	_q.withNamedLinkedOrganizations[name] = query
+	return _q
 }
 
 // WorkflowObjectRefGroupBy is the group-by builder for WorkflowObjectRef entities.
