@@ -87,6 +87,10 @@ var ApprovalStatusAnnotationName = "OPENLANE_APPROVAL_STATUS"
 // ApprovalApproverAnnotationName is the annotation name for a schema's approval-approver field
 var ApprovalApproverAnnotationName = "OPENLANE_APPROVAL_APPROVER"
 
+// BulkCreateAnnotationName is the annotation to determine if to sequentially create
+// bulk items or use the bulk builders.
+var BulkCreateAnnotationName = "OPENLANE_BULK_CREATE_METHOD"
+
 // CascadeAnnotation is an annotation used to indicate that an edge should be cascaded
 type CascadeAnnotation struct {
 	Field string
