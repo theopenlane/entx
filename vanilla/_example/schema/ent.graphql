@@ -442,6 +442,7 @@ type WorkflowObjectRef implements Node {
   organizationID: ID
   workflowInstance: WorkflowInstance!
   organization: Organization
+  linkedOrganizations: [Organization!]
 }
 """
 WorkflowObjectRefWhereInput is used for filtering WorkflowObjectRef objects.
@@ -508,4 +509,9 @@ input WorkflowObjectRefWhereInput {
   """
   hasOrganization: Boolean
   hasOrganizationWith: [OrganizationWhereInput!]
+  """
+  linked_organizations edge predicates
+  """
+  hasLinkedOrganizations: Boolean
+  hasLinkedOrganizationsWith: [OrganizationWhereInput!]
 }

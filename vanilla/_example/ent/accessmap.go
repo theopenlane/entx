@@ -11,7 +11,7 @@ type EdgeAccess struct {
 
 // EdgeAccessMap maps <SchemaName> -> <edgeName> -> metadata.
 // If an edge defines the accessmap.EdgeAccess annotation, its values are used.
-// Otherwise, defaults are used: ObjectType = edge name, SkipEditCheck = false.
+// Otherwise, defaults are used: ObjectType = edge target type, SkipEditCheck = false.
 var EdgeAccessMap = map[string]map[string]EdgeAccess{"org_membership": {"organization": {
 	ObjectType:          "organization",
 	SkipEditCheck:       false,
@@ -24,6 +24,11 @@ var EdgeAccessMap = map[string]map[string]EdgeAccess{"org_membership": {"organiz
 	CheckViewAccess:     false,
 	HasSystemOwnedField: false,
 }, "organization": {
+	ObjectType:          "organization",
+	SkipEditCheck:       false,
+	CheckViewAccess:     false,
+	HasSystemOwnedField: false,
+}, "linked_organizations": {
 	ObjectType:          "organization",
 	SkipEditCheck:       false,
 	CheckViewAccess:     false,

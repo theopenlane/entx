@@ -4,6 +4,8 @@ package ent
 
 import (
 	"context"
+
+	"github.com/99designs/gqlgen/graphql"
 )
 
 func (_m *OrgMembership) Organization(ctx context.Context) (*Organization, error) {
@@ -28,4 +30,16 @@ func (_m *WorkflowObjectRef) Organization(ctx context.Context) (*Organization, e
 		result, err = _m.QueryOrganization().Only(ctx)
 	}
 	return result, MaskNotFound(err)
+}
+
+func (_m *WorkflowObjectRef) LinkedOrganizations(ctx context.Context) (result []*Organization, err error) {
+	if fc := graphql.GetFieldContext(ctx); fc != nil && fc.Field.Alias != "" {
+		result, err = _m.NamedLinkedOrganizations(graphql.GetFieldContext(ctx).Field.Alias)
+	} else {
+		result, err = _m.Edges.LinkedOrganizationsOrErr()
+	}
+	if IsNotLoaded(err) {
+		result, err = _m.QueryLinkedOrganizations().All(ctx)
+	}
+	return result, err
 }

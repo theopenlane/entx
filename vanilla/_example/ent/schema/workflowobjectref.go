@@ -42,6 +42,8 @@ func (WorkflowObjectRef) Edges() []ent.Edge {
 			Unique().
 			Immutable().
 			Annotations(entx.FieldWorkflowEligible()),
+		// the edge name differs from its target, so the access map object type defaults to organization
+		edge.To("linked_organizations", Organization.Type),
 	}
 }
 

@@ -57,6 +57,21 @@ func (_c *WorkflowObjectRefCreate) SetOrganization(v *Organization) *WorkflowObj
 	return _c.SetOrganizationID(v.ID)
 }
 
+// AddLinkedOrganizationIDs adds the "linked_organizations" edge to the Organization entity by IDs.
+func (_c *WorkflowObjectRefCreate) AddLinkedOrganizationIDs(ids ...string) *WorkflowObjectRefCreate {
+	_c.mutation.AddLinkedOrganizationIDs(ids...)
+	return _c
+}
+
+// AddLinkedOrganizations adds the "linked_organizations" edges to the Organization entity.
+func (_c *WorkflowObjectRefCreate) AddLinkedOrganizations(v ...*Organization) *WorkflowObjectRefCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddLinkedOrganizationIDs(ids...)
+}
+
 // Mutation returns the WorkflowObjectRefMutation object of the builder.
 func (_c *WorkflowObjectRefCreate) Mutation() *WorkflowObjectRefMutation {
 	return _c.mutation
@@ -164,6 +179,22 @@ func (_c *WorkflowObjectRefCreate) createSpec() (*WorkflowObjectRef, *sqlgraph.C
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.OrganizationID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.LinkedOrganizationsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   workflowobjectref.LinkedOrganizationsTable,
+			Columns: []string{workflowobjectref.LinkedOrganizationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

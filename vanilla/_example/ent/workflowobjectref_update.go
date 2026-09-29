@@ -10,6 +10,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/predicate"
 	"github.com/theopenlane/entx/vanilla/_example/ent/workflowobjectref"
 )
@@ -27,9 +28,45 @@ func (_u *WorkflowObjectRefUpdate) Where(ps ...predicate.WorkflowObjectRef) *Wor
 	return _u
 }
 
+// AddLinkedOrganizationIDs adds the "linked_organizations" edge to the Organization entity by IDs.
+func (_u *WorkflowObjectRefUpdate) AddLinkedOrganizationIDs(ids ...string) *WorkflowObjectRefUpdate {
+	_u.mutation.AddLinkedOrganizationIDs(ids...)
+	return _u
+}
+
+// AddLinkedOrganizations adds the "linked_organizations" edges to the Organization entity.
+func (_u *WorkflowObjectRefUpdate) AddLinkedOrganizations(v ...*Organization) *WorkflowObjectRefUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddLinkedOrganizationIDs(ids...)
+}
+
 // Mutation returns the WorkflowObjectRefMutation object of the builder.
 func (_u *WorkflowObjectRefUpdate) Mutation() *WorkflowObjectRefMutation {
 	return _u.mutation
+}
+
+// ClearLinkedOrganizations clears all "linked_organizations" edges to the Organization entity.
+func (_u *WorkflowObjectRefUpdate) ClearLinkedOrganizations() *WorkflowObjectRefUpdate {
+	_u.mutation.ClearLinkedOrganizations()
+	return _u
+}
+
+// RemoveLinkedOrganizationIDs removes the "linked_organizations" edge to Organization entities by IDs.
+func (_u *WorkflowObjectRefUpdate) RemoveLinkedOrganizationIDs(ids ...string) *WorkflowObjectRefUpdate {
+	_u.mutation.RemoveLinkedOrganizationIDs(ids...)
+	return _u
+}
+
+// RemoveLinkedOrganizations removes "linked_organizations" edges to Organization entities.
+func (_u *WorkflowObjectRefUpdate) RemoveLinkedOrganizations(v ...*Organization) *WorkflowObjectRefUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveLinkedOrganizationIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -79,6 +116,51 @@ func (_u *WorkflowObjectRefUpdate) sqlSave(ctx context.Context) (_node int, err 
 			}
 		}
 	}
+	if _u.mutation.LinkedOrganizationsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   workflowobjectref.LinkedOrganizationsTable,
+			Columns: []string{workflowobjectref.LinkedOrganizationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedLinkedOrganizationsIDs(); len(nodes) > 0 && !_u.mutation.LinkedOrganizationsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   workflowobjectref.LinkedOrganizationsTable,
+			Columns: []string{workflowobjectref.LinkedOrganizationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.LinkedOrganizationsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   workflowobjectref.LinkedOrganizationsTable,
+			Columns: []string{workflowobjectref.LinkedOrganizationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{workflowobjectref.Label}
@@ -99,9 +181,45 @@ type WorkflowObjectRefUpdateOne struct {
 	mutation *WorkflowObjectRefMutation
 }
 
+// AddLinkedOrganizationIDs adds the "linked_organizations" edge to the Organization entity by IDs.
+func (_u *WorkflowObjectRefUpdateOne) AddLinkedOrganizationIDs(ids ...string) *WorkflowObjectRefUpdateOne {
+	_u.mutation.AddLinkedOrganizationIDs(ids...)
+	return _u
+}
+
+// AddLinkedOrganizations adds the "linked_organizations" edges to the Organization entity.
+func (_u *WorkflowObjectRefUpdateOne) AddLinkedOrganizations(v ...*Organization) *WorkflowObjectRefUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddLinkedOrganizationIDs(ids...)
+}
+
 // Mutation returns the WorkflowObjectRefMutation object of the builder.
 func (_u *WorkflowObjectRefUpdateOne) Mutation() *WorkflowObjectRefMutation {
 	return _u.mutation
+}
+
+// ClearLinkedOrganizations clears all "linked_organizations" edges to the Organization entity.
+func (_u *WorkflowObjectRefUpdateOne) ClearLinkedOrganizations() *WorkflowObjectRefUpdateOne {
+	_u.mutation.ClearLinkedOrganizations()
+	return _u
+}
+
+// RemoveLinkedOrganizationIDs removes the "linked_organizations" edge to Organization entities by IDs.
+func (_u *WorkflowObjectRefUpdateOne) RemoveLinkedOrganizationIDs(ids ...string) *WorkflowObjectRefUpdateOne {
+	_u.mutation.RemoveLinkedOrganizationIDs(ids...)
+	return _u
+}
+
+// RemoveLinkedOrganizations removes "linked_organizations" edges to Organization entities.
+func (_u *WorkflowObjectRefUpdateOne) RemoveLinkedOrganizations(v ...*Organization) *WorkflowObjectRefUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveLinkedOrganizationIDs(ids...)
 }
 
 // Where appends a list predicates to the WorkflowObjectRefUpdate builder.
@@ -180,6 +298,51 @@ func (_u *WorkflowObjectRefUpdateOne) sqlSave(ctx context.Context) (_node *Workf
 				ps[i](selector)
 			}
 		}
+	}
+	if _u.mutation.LinkedOrganizationsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   workflowobjectref.LinkedOrganizationsTable,
+			Columns: []string{workflowobjectref.LinkedOrganizationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedLinkedOrganizationsIDs(); len(nodes) > 0 && !_u.mutation.LinkedOrganizationsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   workflowobjectref.LinkedOrganizationsTable,
+			Columns: []string{workflowobjectref.LinkedOrganizationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.LinkedOrganizationsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   workflowobjectref.LinkedOrganizationsTable,
+			Columns: []string{workflowobjectref.LinkedOrganizationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_node = &WorkflowObjectRef{config: _u.config}
 	_spec.Assign = _node.assignValues

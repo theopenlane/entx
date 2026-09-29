@@ -347,6 +347,19 @@ func (_q *WorkflowObjectRefQuery) collectField(ctx context.Context, oneNode bool
 				selectedFields = append(selectedFields, workflowobjectref.FieldOrganizationID)
 				fieldSeen[workflowobjectref.FieldOrganizationID] = struct{}{}
 			}
+
+		case "linkedOrganizations":
+			var (
+				alias = field.Alias
+				path  = append(path, alias)
+				query = (&OrganizationClient{config: _q.config}).Query()
+			)
+			if err := query.collectField(ctx, false, opCtx, field, path, mayAddCondition(satisfies, organizationImplementors)...); err != nil {
+				return err
+			}
+			_q.WithNamedLinkedOrganizations(alias, func(wq *OrganizationQuery) {
+				*wq = *query
+			})
 		case "workflowInstanceID":
 			if _, ok := fieldSeen[workflowobjectref.FieldWorkflowInstanceID]; !ok {
 				selectedFields = append(selectedFields, workflowobjectref.FieldWorkflowInstanceID)
