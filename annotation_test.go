@@ -42,6 +42,13 @@ func TestSchemaGenAnnotation(t *testing.T) {
 	assert.Equal(t, sa.Skip, s)
 }
 
+func TestAnonymousFieldsAnnotation(t *testing.T) {
+	a := AnonymousFields("email", "trust_center_id")
+
+	assert.Equal(t, AnonymousFieldsAnnotationName, a.Name())
+	assert.Equal(t, []string{"email", "trust_center_id"}, a.Fields)
+}
+
 func TestExportableAnnotation(t *testing.T) {
 	ea := &Exportable{}
 

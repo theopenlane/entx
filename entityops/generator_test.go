@@ -16,6 +16,29 @@ import (
 	"github.com/theopenlane/entx"
 )
 
+func TestCollectAnonymousFields(t *testing.T) {
+	node := &gen.Type{
+		Name: "Subscriber",
+		Annotations: gen.Annotations{
+			entx.AnonymousFieldsAnnotationName: entx.AnonymousFields("email", "trust_center_id"),
+		},
+	}
+	loaded := &load.Schema{Name: "Subscriber", Fields: []*load.Field{{Name: "email"}, {Name: "trust_center_id"}}}
+
+	schema := &EntitySchema{}
+	require.NoError(t, collectAnonymousFields(node, loaded, schema))
+	require.Equal(t, []string{"email", "trustCenterID"}, schema.AnonymousInputFields)
+
+	node.Annotations[entx.AnonymousFieldsAnnotationName] = entx.AnonymousFields("unknown")
+	require.ErrorIs(t, collectAnonymousFields(node, loaded, &EntitySchema{}), ErrAnonymousFieldUnknown)
+
+	delete(node.Annotations, entx.AnonymousFieldsAnnotationName)
+
+	schema = &EntitySchema{}
+	require.NoError(t, collectAnonymousFields(node, loaded, schema))
+	require.Empty(t, schema.AnonymousInputFields)
+}
+
 // TestStaticTemplatesRenderValidGo verifies the schema-independent templates render to
 // syntactically valid Go for a fully configured generator
 func TestStaticTemplatesRenderValidGo(t *testing.T) {

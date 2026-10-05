@@ -122,6 +122,8 @@ type EntitySchema struct {
 	StampedCreateFields []string
 	// StampedUpdateFields are the Go names of stamped fields the GraphQL update input does not carry
 	StampedUpdateFields []string
+	// AnonymousInputFields are the graphql input field names anonymous callers may set in create and update mutations
+	AnonymousInputFields []string
 	// Edges contains every edge to an entityops schema (any cardinality/direction, mutable or immutable)
 	// plus workflow group-permission edges; the single edge list for linking, workflow, and runtime ops
 	Edges []EntityEdge
@@ -925,6 +927,10 @@ func collectSchemaMetadata(g *gen.Graph, data *EntityData) error {
 			return err
 		}
 
+		if err := collectAnonymousFields(node, findSchema(g, node.Name), &data.Schemas[index]); err != nil {
+			return err
+		}
+
 		markers, err := collectFieldMarkers(node)
 		if err != nil {
 			return err
@@ -958,6 +964,31 @@ func collectConsoleRoute(node *gen.Type, schema *EntitySchema) error {
 		Base:    cmp.Or(routeAnn.Base, node.Table()),
 		IDParam: routeAnn.IDParam,
 		Suffix:  routeAnn.Suffix,
+	}
+
+	return nil
+}
+
+// collectAnonymousFields decodes a node's anonymous fields annotation onto its schema as graphql input field names
+func collectAnonymousFields(node *gen.Type, loaded *load.Schema, schema *EntitySchema) error {
+	raw, ok := node.Annotations[entx.AnonymousFieldsAnnotationName]
+	if !ok {
+		return nil
+	}
+
+	anonAnn := &entx.AnonymousFieldsAnnotation{}
+	if err := anonAnn.Decode(raw); err != nil {
+		return fmt.Errorf("decode anonymous fields annotation on %s: %w", node.Name, err)
+	}
+
+	camel := gen.Funcs["camel"].(func(string) string)
+
+	for _, name := range anonAnn.Fields {
+		if loaded == nil || !hasField(loaded, name) {
+			return fmt.Errorf("%w: %s.%s", ErrAnonymousFieldUnknown, node.Name, name)
+		}
+
+		schema.AnonymousInputFields = append(schema.AnonymousInputFields, camel(name))
 	}
 
 	return nil
