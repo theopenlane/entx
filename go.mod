@@ -9,15 +9,15 @@ require (
 	github.com/XSAM/otelsql v0.44.0
 	github.com/brianvoe/gofakeit/v7 v7.17.1
 	github.com/gertd/go-pluralize v0.2.1
-	github.com/go-openapi/inflect v1.0.0
+	github.com/go-openapi/inflect v1.0.1
 	github.com/rs/zerolog v1.35.1
 	github.com/samber/lo v1.53.0
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.12.1
 	github.com/theopenlane/iam v0.39.3
 	github.com/theopenlane/oscalot v0.1.0
-	github.com/theopenlane/utils v0.7.1
-	github.com/vektah/gqlparser/v2 v2.5.37
+	github.com/theopenlane/utils v0.7.2
+	github.com/vektah/gqlparser/v2 v2.5.58
 	go.opentelemetry.io/otel v1.46.0
 	golang.org/x/tools v0.50.0
 )
