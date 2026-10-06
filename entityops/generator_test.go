@@ -851,7 +851,7 @@ func TestCatalogEmission(t *testing.T) {
 	require.Contains(t, registry, "Fields:     SchemaWidget.Catalog.Fields,")
 	require.Contains(t, registry, "Caller:     catalogListenerCaller,")
 	require.Contains(t, registry, "Handle:     catalogRefreshHandler(SchemaWidget),")
-	require.Contains(t, registry, "restored.WithCapabilities(auth.CapInternalOperation | auth.CapBypassOrgFilter | auth.CapBypassFGA)")
+	require.Contains(t, registry, "restored.WithCapabilities(auth.CapInternalOperation)")
 
 	require.Contains(t, registry, "catalogRowWidget(ctx, client, ref, catalogID)")
 	require.NotContains(t, registry, "Schema:     SchemaGadget,")

@@ -1409,7 +1409,7 @@ func (s *Schema) relinkCreated(ctx context.Context, client *generated.Client, id
 
 // catalogListenerCaller lets a catalog refresh update adopted rows in every organization
 func catalogListenerCaller(restored *auth.Caller, _ MutationPayload) *auth.Caller {
-	return restored.WithCapabilities(auth.CapInternalOperation | auth.CapBypassOrgFilter | auth.CapBypassFGA)
+	return restored.WithCapabilities(auth.CapInternalOperation)
 }
 
 // catalogRefreshHandler refreshes the adopted rows of a mutated row when it is a visible catalog row
