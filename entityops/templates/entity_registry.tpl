@@ -154,6 +154,9 @@ type Schema struct {
 	// Fields is the unified field catalog for this schema, consumed by the workflow builder and the
 	// integration cross-link config; workflow-eligible and match-key views are filtered from it
 	Fields []FieldDescriptor
+	// AnonymousInputFields are the graphql input field names anonymous callers may set in create and update mutations,
+	// declared via entx.AnonymousFields; empty when anonymous callers may not set any field
+	AnonymousInputFields []string
 	// Edges lists every edge to an entityops schema (and workflow group edges) for this schema
 	Edges []EdgeDescriptor
 	// TaskRules are schema-level (unconditional) suggested-task rules declared via entx.SchemaTaskRule
@@ -1486,6 +1489,9 @@ var (
 		},
 {{- if or .IntegrationMapped .WorkflowEligible .LinkTarget }}
 		ProjectionType: reflect.TypeFor[{{ .Name }}Projection](),
+{{- end }}
+{{- if .AnonymousInputFields }}
+		AnonymousInputFields: []string{ {{- range $i, $f := .AnonymousInputFields }}{{ if $i }}, {{ end }}"{{ $f }}"{{ end -}} },
 {{- end }}
 {{- if .ConsoleRoute }}
 		ConsoleRoute: &ConsoleRoute{Base: "{{ .ConsoleRoute.Base }}"{{ if .ConsoleRoute.IDParam }}, IDParam: "{{ .ConsoleRoute.IDParam }}"{{ end }}{{ if .ConsoleRoute.Suffix }}, Suffix: "{{ .ConsoleRoute.Suffix }}"{{ end }}},
