@@ -8,8 +8,10 @@ package entityops
 // the full generated.WorkflowInstance whose edge graph cannot be reflected
 type WorkflowInstanceProjection struct {
 	// ID is the entity identifier, exposed to expressions as "id"
-	ID     string `json:"id,omitempty"`
-	Status string `json:"status,omitempty"`
+	ID       string `json:"id,omitempty"`
+	Email    string `json:"email,omitempty"`
+	FullName string `json:"full_name,omitempty"`
+	Status   string `json:"status,omitempty"`
 }
 
 // WorkflowObjectRefProjection is the flat, CEL- and jsonschema-facing view of a WorkflowObjectRef: its

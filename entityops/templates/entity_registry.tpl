@@ -155,7 +155,7 @@ type Schema struct {
 	// integration cross-link config; workflow-eligible and match-key views are filtered from it
 	Fields []FieldDescriptor
 	// AnonymousInputFields are the graphql input field names anonymous callers may set in create and update mutations,
-	// declared via entx.AnonymousFields; empty when anonymous callers may not set any field
+	// declared via entx.AnonymousField; empty when anonymous callers may not set any field
 	AnonymousInputFields []string
 	// Edges lists every edge to an entityops schema (and workflow group edges) for this schema
 	Edges []EdgeDescriptor

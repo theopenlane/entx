@@ -1362,6 +1362,8 @@ type WorkflowInstanceMutation struct {
 	typ           string
 	id            *string
 	status        *string
+	email         *string
+	full_name     *string
 	clearedFields map[string]struct{}
 	done          bool
 	oldValue      func(context.Context) (*WorkflowInstance, error)
@@ -1521,6 +1523,104 @@ func (m *WorkflowInstanceMutation) ResetStatus() {
 	delete(m.clearedFields, workflowinstance.FieldStatus)
 }
 
+// SetEmail sets the "email" field.
+func (m *WorkflowInstanceMutation) SetEmail(s string) {
+	m.email = &s
+}
+
+// Email returns the value of the "email" field in the mutation.
+func (m *WorkflowInstanceMutation) Email() (r string, exists bool) {
+	v := m.email
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmail returns the old "email" field's value of the WorkflowInstance entity.
+// If the WorkflowInstance object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkflowInstanceMutation) OldEmail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmail: %w", err)
+	}
+	return oldValue.Email, nil
+}
+
+// ClearEmail clears the value of the "email" field.
+func (m *WorkflowInstanceMutation) ClearEmail() {
+	m.email = nil
+	m.clearedFields[workflowinstance.FieldEmail] = struct{}{}
+}
+
+// EmailCleared returns if the "email" field was cleared in this mutation.
+func (m *WorkflowInstanceMutation) EmailCleared() bool {
+	_, ok := m.clearedFields[workflowinstance.FieldEmail]
+	return ok
+}
+
+// ResetEmail resets all changes to the "email" field.
+func (m *WorkflowInstanceMutation) ResetEmail() {
+	m.email = nil
+	delete(m.clearedFields, workflowinstance.FieldEmail)
+}
+
+// SetFullName sets the "full_name" field.
+func (m *WorkflowInstanceMutation) SetFullName(s string) {
+	m.full_name = &s
+}
+
+// FullName returns the value of the "full_name" field in the mutation.
+func (m *WorkflowInstanceMutation) FullName() (r string, exists bool) {
+	v := m.full_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFullName returns the old "full_name" field's value of the WorkflowInstance entity.
+// If the WorkflowInstance object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkflowInstanceMutation) OldFullName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFullName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFullName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFullName: %w", err)
+	}
+	return oldValue.FullName, nil
+}
+
+// ClearFullName clears the value of the "full_name" field.
+func (m *WorkflowInstanceMutation) ClearFullName() {
+	m.full_name = nil
+	m.clearedFields[workflowinstance.FieldFullName] = struct{}{}
+}
+
+// FullNameCleared returns if the "full_name" field was cleared in this mutation.
+func (m *WorkflowInstanceMutation) FullNameCleared() bool {
+	_, ok := m.clearedFields[workflowinstance.FieldFullName]
+	return ok
+}
+
+// ResetFullName resets all changes to the "full_name" field.
+func (m *WorkflowInstanceMutation) ResetFullName() {
+	m.full_name = nil
+	delete(m.clearedFields, workflowinstance.FieldFullName)
+}
+
 // Where appends a list predicates to the WorkflowInstanceMutation builder.
 func (m *WorkflowInstanceMutation) Where(ps ...predicate.WorkflowInstance) {
 	m.predicates = append(m.predicates, ps...)
@@ -1555,9 +1655,15 @@ func (m *WorkflowInstanceMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *WorkflowInstanceMutation) Fields() []string {
-	fields := make([]string, 0, 1)
+	fields := make([]string, 0, 3)
 	if m.status != nil {
 		fields = append(fields, workflowinstance.FieldStatus)
+	}
+	if m.email != nil {
+		fields = append(fields, workflowinstance.FieldEmail)
+	}
+	if m.full_name != nil {
+		fields = append(fields, workflowinstance.FieldFullName)
 	}
 	return fields
 }
@@ -1569,6 +1675,10 @@ func (m *WorkflowInstanceMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case workflowinstance.FieldStatus:
 		return m.Status()
+	case workflowinstance.FieldEmail:
+		return m.Email()
+	case workflowinstance.FieldFullName:
+		return m.FullName()
 	}
 	return nil, false
 }
@@ -1580,6 +1690,10 @@ func (m *WorkflowInstanceMutation) OldField(ctx context.Context, name string) (e
 	switch name {
 	case workflowinstance.FieldStatus:
 		return m.OldStatus(ctx)
+	case workflowinstance.FieldEmail:
+		return m.OldEmail(ctx)
+	case workflowinstance.FieldFullName:
+		return m.OldFullName(ctx)
 	}
 	return nil, fmt.Errorf("unknown WorkflowInstance field %s", name)
 }
@@ -1595,6 +1709,20 @@ func (m *WorkflowInstanceMutation) SetField(name string, value ent.Value) error 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case workflowinstance.FieldEmail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmail(v)
+		return nil
+	case workflowinstance.FieldFullName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFullName(v)
 		return nil
 	}
 	return fmt.Errorf("unknown WorkflowInstance field %s", name)
@@ -1629,6 +1757,12 @@ func (m *WorkflowInstanceMutation) ClearedFields() []string {
 	if m.FieldCleared(workflowinstance.FieldStatus) {
 		fields = append(fields, workflowinstance.FieldStatus)
 	}
+	if m.FieldCleared(workflowinstance.FieldEmail) {
+		fields = append(fields, workflowinstance.FieldEmail)
+	}
+	if m.FieldCleared(workflowinstance.FieldFullName) {
+		fields = append(fields, workflowinstance.FieldFullName)
+	}
 	return fields
 }
 
@@ -1646,6 +1780,12 @@ func (m *WorkflowInstanceMutation) ClearField(name string) error {
 	case workflowinstance.FieldStatus:
 		m.ClearStatus()
 		return nil
+	case workflowinstance.FieldEmail:
+		m.ClearEmail()
+		return nil
+	case workflowinstance.FieldFullName:
+		m.ClearFullName()
+		return nil
 	}
 	return fmt.Errorf("unknown WorkflowInstance nullable field %s", name)
 }
@@ -1656,6 +1796,12 @@ func (m *WorkflowInstanceMutation) ResetField(name string) error {
 	switch name {
 	case workflowinstance.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case workflowinstance.FieldEmail:
+		m.ResetEmail()
+		return nil
+	case workflowinstance.FieldFullName:
+		m.ResetFullName()
 		return nil
 	}
 	return fmt.Errorf("unknown WorkflowInstance field %s", name)

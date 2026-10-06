@@ -255,6 +255,16 @@ func (_q *WorkflowInstanceQuery) collectField(ctx context.Context, oneNode bool,
 				selectedFields = append(selectedFields, workflowinstance.FieldStatus)
 				fieldSeen[workflowinstance.FieldStatus] = struct{}{}
 			}
+		case "email":
+			if _, ok := fieldSeen[workflowinstance.FieldEmail]; !ok {
+				selectedFields = append(selectedFields, workflowinstance.FieldEmail)
+				fieldSeen[workflowinstance.FieldEmail] = struct{}{}
+			}
+		case "fullName":
+			if _, ok := fieldSeen[workflowinstance.FieldFullName]; !ok {
+				selectedFields = append(selectedFields, workflowinstance.FieldFullName)
+				fieldSeen[workflowinstance.FieldFullName] = struct{}{}
+			}
 		case "id":
 		case "__typename":
 		default:

@@ -32,6 +32,34 @@ func (_c *WorkflowInstanceCreate) SetNillableStatus(v *string) *WorkflowInstance
 	return _c
 }
 
+// SetEmail sets the "email" field.
+func (_c *WorkflowInstanceCreate) SetEmail(v string) *WorkflowInstanceCreate {
+	_c.mutation.SetEmail(v)
+	return _c
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (_c *WorkflowInstanceCreate) SetNillableEmail(v *string) *WorkflowInstanceCreate {
+	if v != nil {
+		_c.SetEmail(*v)
+	}
+	return _c
+}
+
+// SetFullName sets the "full_name" field.
+func (_c *WorkflowInstanceCreate) SetFullName(v string) *WorkflowInstanceCreate {
+	_c.mutation.SetFullName(v)
+	return _c
+}
+
+// SetNillableFullName sets the "full_name" field if the given value is not nil.
+func (_c *WorkflowInstanceCreate) SetNillableFullName(v *string) *WorkflowInstanceCreate {
+	if v != nil {
+		_c.SetFullName(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *WorkflowInstanceCreate) SetID(v string) *WorkflowInstanceCreate {
 	_c.mutation.SetID(v)
@@ -110,6 +138,14 @@ func (_c *WorkflowInstanceCreate) createSpec() (*WorkflowInstance, *sqlgraph.Cre
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(workflowinstance.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.Email(); ok {
+		_spec.SetField(workflowinstance.FieldEmail, field.TypeString, value)
+		_node.Email = value
+	}
+	if value, ok := _c.mutation.FullName(); ok {
+		_spec.SetField(workflowinstance.FieldFullName, field.TypeString, value)
+		_node.FullName = value
 	}
 	return _node, _spec
 }

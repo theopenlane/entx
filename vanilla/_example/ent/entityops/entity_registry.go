@@ -145,7 +145,7 @@ type Schema struct {
 	// integration cross-link config; workflow-eligible and match-key views are filtered from it
 	Fields []FieldDescriptor
 	// AnonymousInputFields are the graphql input field names anonymous callers may set in create and update mutations,
-	// declared via entx.AnonymousFields; empty when anonymous callers may not set any field
+	// declared via entx.AnonymousField; empty when anonymous callers may not set any field
 	AnonymousInputFields []string
 	// Edges lists every edge to an entityops schema (and workflow group edges) for this schema
 	Edges []EdgeDescriptor
@@ -1473,7 +1473,8 @@ var (
 			Lower:            "workflowinstance",
 			WorkflowEligible: true,
 		},
-		ProjectionType: reflect.TypeFor[WorkflowInstanceProjection](),
+		ProjectionType:       reflect.TypeFor[WorkflowInstanceProjection](),
+		AnonymousInputFields: []string{"email", "fullName"},
 		Load: func(ctx context.Context, client *generated.Client, entityID string) (json.RawMessage, error) {
 			ref := SchemaRef{Schema: "workflow_instance", Operation: refOpLoad, EntityID: entityID}
 
@@ -1550,6 +1551,8 @@ func init() {
 		{Name: "updated_by", Label: "UpdatedBy", Type: "string", MatchKey: true, Clearable: true, SystemControlled: true},
 	}
 	SchemaWorkflowInstance.Fields = []FieldDescriptor{
+		{Name: "email", Label: "Email", Type: "string", MatchKey: true, Clearable: true},
+		{Name: "full_name", Label: "FullName", Type: "string", MatchKey: true, Clearable: true},
 		{Name: "status", Label: "Status", Type: "string", WorkflowEligible: true, MatchKey: true, Clearable: true},
 	}
 	SchemaWorkflowObjectRef.Fields = []FieldDescriptor{

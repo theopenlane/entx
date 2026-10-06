@@ -74,6 +74,8 @@ var (
 	WorkflowInstancesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
 		{Name: "status", Type: field.TypeString, Nullable: true},
+		{Name: "email", Type: field.TypeString, Nullable: true},
+		{Name: "full_name", Type: field.TypeString, Nullable: true},
 	}
 	// WorkflowInstancesTable holds the schema information for the "workflow_instances" table.
 	WorkflowInstancesTable = &schema.Table{

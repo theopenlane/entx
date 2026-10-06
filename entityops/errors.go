@@ -8,9 +8,6 @@ var ErrProvenanceFieldsMissing = errors.New("entityops: ingest-capable schema is
 // ErrInvalidConsoleRoute indicates a console route declares both a query id parameter and a path suffix
 var ErrInvalidConsoleRoute = errors.New("entityops: console route id parameter and suffix are mutually exclusive")
 
-// ErrAnonymousFieldUnknown indicates the anonymous fields annotation references a field the schema does not have
-var ErrAnonymousFieldUnknown = errors.New("entityops: anonymous fields annotation references an unknown field")
-
 // ErrDisplayNameConflict indicates a schema marks more than one display-name field
 var ErrDisplayNameConflict = errors.New("entityops: schema declares multiple display name fields")
 

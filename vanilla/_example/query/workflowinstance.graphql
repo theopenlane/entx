@@ -9,6 +9,8 @@ query GetAllWorkflowInstances ($first: Int, $last: Int, $after: Cursor, $before:
 		}
 		edges {
 			node {
+				email
+				fullName
 				id
 				status
 			}
@@ -17,6 +19,8 @@ query GetAllWorkflowInstances ($first: Int, $last: Int, $after: Cursor, $before:
 }
 query GetWorkflowInstanceByID ($workflowInstanceId: ID!) {
 	workflowInstance(id: $workflowInstanceId) {
+		email
+		fullName
 		id
 		status
 	}
@@ -32,6 +36,8 @@ query GetWorkflowInstances ($first: Int, $last: Int, $after: Cursor, $before: Cu
 		}
 		edges {
 			node {
+				email
+				fullName
 				id
 				status
 			}

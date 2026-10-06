@@ -67,6 +67,16 @@ func Status(v string) predicate.WorkflowInstance {
 	return predicate.WorkflowInstance(sql.FieldEQ(FieldStatus, v))
 }
 
+// Email applies equality check predicate on the "email" field. It's identical to EmailEQ.
+func Email(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldEQ(FieldEmail, v))
+}
+
+// FullName applies equality check predicate on the "full_name" field. It's identical to FullNameEQ.
+func FullName(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldEQ(FieldFullName, v))
+}
+
 // StatusEQ applies the EQ predicate on the "status" field.
 func StatusEQ(v string) predicate.WorkflowInstance {
 	return predicate.WorkflowInstance(sql.FieldEQ(FieldStatus, v))
@@ -140,6 +150,156 @@ func StatusEqualFold(v string) predicate.WorkflowInstance {
 // StatusContainsFold applies the ContainsFold predicate on the "status" field.
 func StatusContainsFold(v string) predicate.WorkflowInstance {
 	return predicate.WorkflowInstance(sql.FieldContainsFold(FieldStatus, v))
+}
+
+// EmailEQ applies the EQ predicate on the "email" field.
+func EmailEQ(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldEQ(FieldEmail, v))
+}
+
+// EmailNEQ applies the NEQ predicate on the "email" field.
+func EmailNEQ(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldNEQ(FieldEmail, v))
+}
+
+// EmailIn applies the In predicate on the "email" field.
+func EmailIn(vs ...string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldIn(FieldEmail, vs...))
+}
+
+// EmailNotIn applies the NotIn predicate on the "email" field.
+func EmailNotIn(vs ...string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldNotIn(FieldEmail, vs...))
+}
+
+// EmailGT applies the GT predicate on the "email" field.
+func EmailGT(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldGT(FieldEmail, v))
+}
+
+// EmailGTE applies the GTE predicate on the "email" field.
+func EmailGTE(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldGTE(FieldEmail, v))
+}
+
+// EmailLT applies the LT predicate on the "email" field.
+func EmailLT(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldLT(FieldEmail, v))
+}
+
+// EmailLTE applies the LTE predicate on the "email" field.
+func EmailLTE(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldLTE(FieldEmail, v))
+}
+
+// EmailContains applies the Contains predicate on the "email" field.
+func EmailContains(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldContains(FieldEmail, v))
+}
+
+// EmailHasPrefix applies the HasPrefix predicate on the "email" field.
+func EmailHasPrefix(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldHasPrefix(FieldEmail, v))
+}
+
+// EmailHasSuffix applies the HasSuffix predicate on the "email" field.
+func EmailHasSuffix(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldHasSuffix(FieldEmail, v))
+}
+
+// EmailIsNil applies the IsNil predicate on the "email" field.
+func EmailIsNil() predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldIsNull(FieldEmail))
+}
+
+// EmailNotNil applies the NotNil predicate on the "email" field.
+func EmailNotNil() predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldNotNull(FieldEmail))
+}
+
+// EmailEqualFold applies the EqualFold predicate on the "email" field.
+func EmailEqualFold(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldEqualFold(FieldEmail, v))
+}
+
+// EmailContainsFold applies the ContainsFold predicate on the "email" field.
+func EmailContainsFold(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldContainsFold(FieldEmail, v))
+}
+
+// FullNameEQ applies the EQ predicate on the "full_name" field.
+func FullNameEQ(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldEQ(FieldFullName, v))
+}
+
+// FullNameNEQ applies the NEQ predicate on the "full_name" field.
+func FullNameNEQ(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldNEQ(FieldFullName, v))
+}
+
+// FullNameIn applies the In predicate on the "full_name" field.
+func FullNameIn(vs ...string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldIn(FieldFullName, vs...))
+}
+
+// FullNameNotIn applies the NotIn predicate on the "full_name" field.
+func FullNameNotIn(vs ...string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldNotIn(FieldFullName, vs...))
+}
+
+// FullNameGT applies the GT predicate on the "full_name" field.
+func FullNameGT(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldGT(FieldFullName, v))
+}
+
+// FullNameGTE applies the GTE predicate on the "full_name" field.
+func FullNameGTE(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldGTE(FieldFullName, v))
+}
+
+// FullNameLT applies the LT predicate on the "full_name" field.
+func FullNameLT(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldLT(FieldFullName, v))
+}
+
+// FullNameLTE applies the LTE predicate on the "full_name" field.
+func FullNameLTE(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldLTE(FieldFullName, v))
+}
+
+// FullNameContains applies the Contains predicate on the "full_name" field.
+func FullNameContains(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldContains(FieldFullName, v))
+}
+
+// FullNameHasPrefix applies the HasPrefix predicate on the "full_name" field.
+func FullNameHasPrefix(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldHasPrefix(FieldFullName, v))
+}
+
+// FullNameHasSuffix applies the HasSuffix predicate on the "full_name" field.
+func FullNameHasSuffix(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldHasSuffix(FieldFullName, v))
+}
+
+// FullNameIsNil applies the IsNil predicate on the "full_name" field.
+func FullNameIsNil() predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldIsNull(FieldFullName))
+}
+
+// FullNameNotNil applies the NotNil predicate on the "full_name" field.
+func FullNameNotNil() predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldNotNull(FieldFullName))
+}
+
+// FullNameEqualFold applies the EqualFold predicate on the "full_name" field.
+func FullNameEqualFold(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldEqualFold(FieldFullName, v))
+}
+
+// FullNameContainsFold applies the ContainsFold predicate on the "full_name" field.
+func FullNameContainsFold(v string) predicate.WorkflowInstance {
+	return predicate.WorkflowInstance(sql.FieldContainsFold(FieldFullName, v))
 }
 
 // And groups predicates with the AND operator between them.

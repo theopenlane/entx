@@ -395,6 +395,8 @@ input UpdateOrganizationInput {
 type WorkflowInstance implements Node {
   id: ID!
   status: String
+  email: String
+  fullName: String
 }
 """
 WorkflowInstanceWhereInput is used for filtering WorkflowInstance objects.
@@ -435,6 +437,42 @@ input WorkflowInstanceWhereInput {
   statusNotNil: Boolean
   statusEqualFold: String
   statusContainsFold: String
+  """
+  email field predicates
+  """
+  email: String
+  emailNEQ: String
+  emailIn: [String!]
+  emailNotIn: [String!]
+  emailGT: String
+  emailGTE: String
+  emailLT: String
+  emailLTE: String
+  emailContains: String
+  emailHasPrefix: String
+  emailHasSuffix: String
+  emailIsNil: Boolean
+  emailNotNil: Boolean
+  emailEqualFold: String
+  emailContainsFold: String
+  """
+  full_name field predicates
+  """
+  fullName: String
+  fullNameNEQ: String
+  fullNameIn: [String!]
+  fullNameNotIn: [String!]
+  fullNameGT: String
+  fullNameGTE: String
+  fullNameLT: String
+  fullNameLTE: String
+  fullNameContains: String
+  fullNameHasPrefix: String
+  fullNameHasSuffix: String
+  fullNameIsNil: Boolean
+  fullNameNotNil: Boolean
+  fullNameEqualFold: String
+  fullNameContainsFold: String
 }
 type WorkflowObjectRef implements Node {
   id: ID!

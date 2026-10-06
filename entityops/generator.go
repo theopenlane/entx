@@ -927,10 +927,6 @@ func collectSchemaMetadata(g *gen.Graph, data *EntityData) error {
 			return err
 		}
 
-		if err := collectAnonymousFields(node, findSchema(g, node.Name), &data.Schemas[index]); err != nil {
-			return err
-		}
-
 		markers, err := collectFieldMarkers(node)
 		if err != nil {
 			return err
@@ -969,31 +965,6 @@ func collectConsoleRoute(node *gen.Type, schema *EntitySchema) error {
 	return nil
 }
 
-// collectAnonymousFields decodes a node's anonymous fields annotation onto its schema as graphql input field names
-func collectAnonymousFields(node *gen.Type, loaded *load.Schema, schema *EntitySchema) error {
-	raw, ok := node.Annotations[entx.AnonymousFieldsAnnotationName]
-	if !ok {
-		return nil
-	}
-
-	anonAnn := &entx.AnonymousFieldsAnnotation{}
-	if err := anonAnn.Decode(raw); err != nil {
-		return fmt.Errorf("decode anonymous fields annotation on %s: %w", node.Name, err)
-	}
-
-	camel := gen.Funcs["camel"].(func(string) string)
-
-	for _, name := range anonAnn.Fields {
-		if loaded == nil || !hasField(loaded, name) {
-			return fmt.Errorf("%w: %s.%s", ErrAnonymousFieldUnknown, node.Name, name)
-		}
-
-		schema.AnonymousInputFields = append(schema.AnonymousInputFields, camel(name))
-	}
-
-	return nil
-}
-
 // schemaFieldMarkers holds the storage names resolved from a node's field-marker annotations
 type schemaFieldMarkers struct {
 	// display is the field carrying the schema's display name
@@ -1010,12 +981,15 @@ type schemaFieldMarkers struct {
 	removedAt string
 	// removedAtEpisodic reports whether removal is a recurring observation rather than a permanent tombstone
 	removedAtEpisodic bool
+	// anonymous are the graphql input names of fields anonymous callers may set
+	anonymous []string
 }
 
 // collectFieldMarkers scans a node's fields for display, mention, and approval markers,
 // rejecting duplicate markers and wrongly typed fields
 func collectFieldMarkers(node *gen.Type) (schemaFieldMarkers, error) {
 	markers := schemaFieldMarkers{}
+	camel := gen.Funcs["camel"].(func(string) string)
 
 	for _, f := range node.Fields {
 		storage := f.StorageKey()
@@ -1084,6 +1058,10 @@ func collectFieldMarkers(node *gen.Type) (schemaFieldMarkers, error) {
 			markers.removedAt = storage
 			markers.removedAtEpisodic = ann.Episodic
 		}
+
+		if _, ok := f.Annotations[entx.AnonymousFieldAnnotationName]; ok {
+			markers.anonymous = append(markers.anonymous, camel(f.Name))
+		}
 	}
 
 	return markers, nil
@@ -1133,6 +1111,8 @@ func applyFieldMarkers(schema *EntitySchema, name string, markers schemaFieldMar
 		schema.RemovedAtField = markers.removedAt
 		schema.RemovedAtEpisodic = markers.removedAtEpisodic
 	}
+
+	schema.AnonymousInputFields = markers.anonymous
 
 	return nil
 }

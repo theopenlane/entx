@@ -47,6 +47,46 @@ func (_u *WorkflowInstanceUpdate) ClearStatus() *WorkflowInstanceUpdate {
 	return _u
 }
 
+// SetEmail sets the "email" field.
+func (_u *WorkflowInstanceUpdate) SetEmail(v string) *WorkflowInstanceUpdate {
+	_u.mutation.SetEmail(v)
+	return _u
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (_u *WorkflowInstanceUpdate) SetNillableEmail(v *string) *WorkflowInstanceUpdate {
+	if v != nil {
+		_u.SetEmail(*v)
+	}
+	return _u
+}
+
+// ClearEmail clears the value of the "email" field.
+func (_u *WorkflowInstanceUpdate) ClearEmail() *WorkflowInstanceUpdate {
+	_u.mutation.ClearEmail()
+	return _u
+}
+
+// SetFullName sets the "full_name" field.
+func (_u *WorkflowInstanceUpdate) SetFullName(v string) *WorkflowInstanceUpdate {
+	_u.mutation.SetFullName(v)
+	return _u
+}
+
+// SetNillableFullName sets the "full_name" field if the given value is not nil.
+func (_u *WorkflowInstanceUpdate) SetNillableFullName(v *string) *WorkflowInstanceUpdate {
+	if v != nil {
+		_u.SetFullName(*v)
+	}
+	return _u
+}
+
+// ClearFullName clears the value of the "full_name" field.
+func (_u *WorkflowInstanceUpdate) ClearFullName() *WorkflowInstanceUpdate {
+	_u.mutation.ClearFullName()
+	return _u
+}
+
 // Mutation returns the WorkflowInstanceMutation object of the builder.
 func (_u *WorkflowInstanceUpdate) Mutation() *WorkflowInstanceMutation {
 	return _u.mutation
@@ -94,6 +134,18 @@ func (_u *WorkflowInstanceUpdate) sqlSave(ctx context.Context) (_node int, err e
 	if _u.mutation.StatusCleared() {
 		_spec.ClearField(workflowinstance.FieldStatus, field.TypeString)
 	}
+	if value, ok := _u.mutation.Email(); ok {
+		_spec.SetField(workflowinstance.FieldEmail, field.TypeString, value)
+	}
+	if _u.mutation.EmailCleared() {
+		_spec.ClearField(workflowinstance.FieldEmail, field.TypeString)
+	}
+	if value, ok := _u.mutation.FullName(); ok {
+		_spec.SetField(workflowinstance.FieldFullName, field.TypeString, value)
+	}
+	if _u.mutation.FullNameCleared() {
+		_spec.ClearField(workflowinstance.FieldFullName, field.TypeString)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{workflowinstance.Label}
@@ -131,6 +183,46 @@ func (_u *WorkflowInstanceUpdateOne) SetNillableStatus(v *string) *WorkflowInsta
 // ClearStatus clears the value of the "status" field.
 func (_u *WorkflowInstanceUpdateOne) ClearStatus() *WorkflowInstanceUpdateOne {
 	_u.mutation.ClearStatus()
+	return _u
+}
+
+// SetEmail sets the "email" field.
+func (_u *WorkflowInstanceUpdateOne) SetEmail(v string) *WorkflowInstanceUpdateOne {
+	_u.mutation.SetEmail(v)
+	return _u
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (_u *WorkflowInstanceUpdateOne) SetNillableEmail(v *string) *WorkflowInstanceUpdateOne {
+	if v != nil {
+		_u.SetEmail(*v)
+	}
+	return _u
+}
+
+// ClearEmail clears the value of the "email" field.
+func (_u *WorkflowInstanceUpdateOne) ClearEmail() *WorkflowInstanceUpdateOne {
+	_u.mutation.ClearEmail()
+	return _u
+}
+
+// SetFullName sets the "full_name" field.
+func (_u *WorkflowInstanceUpdateOne) SetFullName(v string) *WorkflowInstanceUpdateOne {
+	_u.mutation.SetFullName(v)
+	return _u
+}
+
+// SetNillableFullName sets the "full_name" field if the given value is not nil.
+func (_u *WorkflowInstanceUpdateOne) SetNillableFullName(v *string) *WorkflowInstanceUpdateOne {
+	if v != nil {
+		_u.SetFullName(*v)
+	}
+	return _u
+}
+
+// ClearFullName clears the value of the "full_name" field.
+func (_u *WorkflowInstanceUpdateOne) ClearFullName() *WorkflowInstanceUpdateOne {
+	_u.mutation.ClearFullName()
 	return _u
 }
 
@@ -210,6 +302,18 @@ func (_u *WorkflowInstanceUpdateOne) sqlSave(ctx context.Context) (_node *Workfl
 	}
 	if _u.mutation.StatusCleared() {
 		_spec.ClearField(workflowinstance.FieldStatus, field.TypeString)
+	}
+	if value, ok := _u.mutation.Email(); ok {
+		_spec.SetField(workflowinstance.FieldEmail, field.TypeString, value)
+	}
+	if _u.mutation.EmailCleared() {
+		_spec.ClearField(workflowinstance.FieldEmail, field.TypeString)
+	}
+	if value, ok := _u.mutation.FullName(); ok {
+		_spec.SetField(workflowinstance.FieldFullName, field.TypeString, value)
+	}
+	if _u.mutation.FullNameCleared() {
+		_spec.ClearField(workflowinstance.FieldFullName, field.TypeString)
 	}
 	_node = &WorkflowInstance{config: _u.config}
 	_spec.Assign = _node.assignValues

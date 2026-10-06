@@ -840,6 +840,40 @@ type WorkflowInstanceWhereInput struct {
 	StatusNotNil       bool     `json:"statusNotNil,omitempty"`
 	StatusEqualFold    *string  `json:"statusEqualFold,omitempty"`
 	StatusContainsFold *string  `json:"statusContainsFold,omitempty"`
+
+	// "email" field predicates.
+	Email             *string  `json:"email,omitempty"`
+	EmailNEQ          *string  `json:"emailNEQ,omitempty"`
+	EmailIn           []string `json:"emailIn,omitempty"`
+	EmailNotIn        []string `json:"emailNotIn,omitempty"`
+	EmailGT           *string  `json:"emailGT,omitempty"`
+	EmailGTE          *string  `json:"emailGTE,omitempty"`
+	EmailLT           *string  `json:"emailLT,omitempty"`
+	EmailLTE          *string  `json:"emailLTE,omitempty"`
+	EmailContains     *string  `json:"emailContains,omitempty"`
+	EmailHasPrefix    *string  `json:"emailHasPrefix,omitempty"`
+	EmailHasSuffix    *string  `json:"emailHasSuffix,omitempty"`
+	EmailIsNil        bool     `json:"emailIsNil,omitempty"`
+	EmailNotNil       bool     `json:"emailNotNil,omitempty"`
+	EmailEqualFold    *string  `json:"emailEqualFold,omitempty"`
+	EmailContainsFold *string  `json:"emailContainsFold,omitempty"`
+
+	// "full_name" field predicates.
+	FullName             *string  `json:"fullName,omitempty"`
+	FullNameNEQ          *string  `json:"fullNameNEQ,omitempty"`
+	FullNameIn           []string `json:"fullNameIn,omitempty"`
+	FullNameNotIn        []string `json:"fullNameNotIn,omitempty"`
+	FullNameGT           *string  `json:"fullNameGT,omitempty"`
+	FullNameGTE          *string  `json:"fullNameGTE,omitempty"`
+	FullNameLT           *string  `json:"fullNameLT,omitempty"`
+	FullNameLTE          *string  `json:"fullNameLTE,omitempty"`
+	FullNameContains     *string  `json:"fullNameContains,omitempty"`
+	FullNameHasPrefix    *string  `json:"fullNameHasPrefix,omitempty"`
+	FullNameHasSuffix    *string  `json:"fullNameHasSuffix,omitempty"`
+	FullNameIsNil        bool     `json:"fullNameIsNil,omitempty"`
+	FullNameNotNil       bool     `json:"fullNameNotNil,omitempty"`
+	FullNameEqualFold    *string  `json:"fullNameEqualFold,omitempty"`
+	FullNameContainsFold *string  `json:"fullNameContainsFold,omitempty"`
 }
 
 // AddPredicates adds custom predicates to the where input to be used during the filtering phase.
@@ -987,6 +1021,96 @@ func (i *WorkflowInstanceWhereInput) P() (predicate.WorkflowInstance, error) {
 	}
 	if i.StatusContainsFold != nil {
 		predicates = append(predicates, workflowinstance.StatusContainsFold(*i.StatusContainsFold))
+	}
+	if i.Email != nil {
+		predicates = append(predicates, workflowinstance.EmailEQ(*i.Email))
+	}
+	if i.EmailNEQ != nil {
+		predicates = append(predicates, workflowinstance.EmailNEQ(*i.EmailNEQ))
+	}
+	if len(i.EmailIn) > 0 {
+		predicates = append(predicates, workflowinstance.EmailIn(i.EmailIn...))
+	}
+	if len(i.EmailNotIn) > 0 {
+		predicates = append(predicates, workflowinstance.EmailNotIn(i.EmailNotIn...))
+	}
+	if i.EmailGT != nil {
+		predicates = append(predicates, workflowinstance.EmailGT(*i.EmailGT))
+	}
+	if i.EmailGTE != nil {
+		predicates = append(predicates, workflowinstance.EmailGTE(*i.EmailGTE))
+	}
+	if i.EmailLT != nil {
+		predicates = append(predicates, workflowinstance.EmailLT(*i.EmailLT))
+	}
+	if i.EmailLTE != nil {
+		predicates = append(predicates, workflowinstance.EmailLTE(*i.EmailLTE))
+	}
+	if i.EmailContains != nil {
+		predicates = append(predicates, workflowinstance.EmailContains(*i.EmailContains))
+	}
+	if i.EmailHasPrefix != nil {
+		predicates = append(predicates, workflowinstance.EmailHasPrefix(*i.EmailHasPrefix))
+	}
+	if i.EmailHasSuffix != nil {
+		predicates = append(predicates, workflowinstance.EmailHasSuffix(*i.EmailHasSuffix))
+	}
+	if i.EmailIsNil {
+		predicates = append(predicates, workflowinstance.EmailIsNil())
+	}
+	if i.EmailNotNil {
+		predicates = append(predicates, workflowinstance.EmailNotNil())
+	}
+	if i.EmailEqualFold != nil {
+		predicates = append(predicates, workflowinstance.EmailEqualFold(*i.EmailEqualFold))
+	}
+	if i.EmailContainsFold != nil {
+		predicates = append(predicates, workflowinstance.EmailContainsFold(*i.EmailContainsFold))
+	}
+	if i.FullName != nil {
+		predicates = append(predicates, workflowinstance.FullNameEQ(*i.FullName))
+	}
+	if i.FullNameNEQ != nil {
+		predicates = append(predicates, workflowinstance.FullNameNEQ(*i.FullNameNEQ))
+	}
+	if len(i.FullNameIn) > 0 {
+		predicates = append(predicates, workflowinstance.FullNameIn(i.FullNameIn...))
+	}
+	if len(i.FullNameNotIn) > 0 {
+		predicates = append(predicates, workflowinstance.FullNameNotIn(i.FullNameNotIn...))
+	}
+	if i.FullNameGT != nil {
+		predicates = append(predicates, workflowinstance.FullNameGT(*i.FullNameGT))
+	}
+	if i.FullNameGTE != nil {
+		predicates = append(predicates, workflowinstance.FullNameGTE(*i.FullNameGTE))
+	}
+	if i.FullNameLT != nil {
+		predicates = append(predicates, workflowinstance.FullNameLT(*i.FullNameLT))
+	}
+	if i.FullNameLTE != nil {
+		predicates = append(predicates, workflowinstance.FullNameLTE(*i.FullNameLTE))
+	}
+	if i.FullNameContains != nil {
+		predicates = append(predicates, workflowinstance.FullNameContains(*i.FullNameContains))
+	}
+	if i.FullNameHasPrefix != nil {
+		predicates = append(predicates, workflowinstance.FullNameHasPrefix(*i.FullNameHasPrefix))
+	}
+	if i.FullNameHasSuffix != nil {
+		predicates = append(predicates, workflowinstance.FullNameHasSuffix(*i.FullNameHasSuffix))
+	}
+	if i.FullNameIsNil {
+		predicates = append(predicates, workflowinstance.FullNameIsNil())
+	}
+	if i.FullNameNotNil {
+		predicates = append(predicates, workflowinstance.FullNameNotNil())
+	}
+	if i.FullNameEqualFold != nil {
+		predicates = append(predicates, workflowinstance.FullNameEqualFold(*i.FullNameEqualFold))
+	}
+	if i.FullNameContainsFold != nil {
+		predicates = append(predicates, workflowinstance.FullNameContainsFold(*i.FullNameContainsFold))
 	}
 
 	switch len(predicates) {
