@@ -17,25 +17,28 @@ import (
 )
 
 func TestCollectAnonymousFields(t *testing.T) {
+	anon := gen.Annotations{entx.AnonymousFieldAnnotationName: entx.AnonymousField()}
 	node := &gen.Type{
 		Name: "Subscriber",
-		Annotations: gen.Annotations{
-			entx.AnonymousFieldsAnnotationName: entx.AnonymousFields("email", "trust_center_id"),
+		Fields: []*gen.Field{
+			{Name: "email", Annotations: anon},
+			{Name: "trust_center_id", Annotations: anon},
+			{Name: "verified_email"},
 		},
 	}
-	loaded := &load.Schema{Name: "Subscriber", Fields: []*load.Field{{Name: "email"}, {Name: "trust_center_id"}}}
+
+	markers, err := collectFieldMarkers(node)
+	require.NoError(t, err)
 
 	schema := &EntitySchema{}
-	require.NoError(t, collectAnonymousFields(node, loaded, schema))
+	require.NoError(t, applyFieldMarkers(schema, node.Name, markers))
 	require.Equal(t, []string{"email", "trustCenterID"}, schema.AnonymousInputFields)
 
-	node.Annotations[entx.AnonymousFieldsAnnotationName] = entx.AnonymousFields("unknown")
-	require.ErrorIs(t, collectAnonymousFields(node, loaded, &EntitySchema{}), ErrAnonymousFieldUnknown)
-
-	delete(node.Annotations, entx.AnonymousFieldsAnnotationName)
+	markers, err = collectFieldMarkers(&gen.Type{Name: "Widget", Fields: []*gen.Field{{Name: "name"}}})
+	require.NoError(t, err)
 
 	schema = &EntitySchema{}
-	require.NoError(t, collectAnonymousFields(node, loaded, schema))
+	require.NoError(t, applyFieldMarkers(schema, "Widget", markers))
 	require.Empty(t, schema.AnonymousInputFields)
 }
 
@@ -851,7 +854,7 @@ func TestCatalogEmission(t *testing.T) {
 	require.Contains(t, registry, "Fields:     SchemaWidget.Catalog.Fields,")
 	require.Contains(t, registry, "Caller:     catalogListenerCaller,")
 	require.Contains(t, registry, "Handle:     catalogRefreshHandler(SchemaWidget),")
-	require.Contains(t, registry, "restored.WithCapabilities(auth.CapInternalOperation | auth.CapBypassOrgFilter | auth.CapBypassFGA)")
+	require.Contains(t, registry, "restored.WithCapabilities(auth.CapInternalOperation)")
 
 	require.Contains(t, registry, "catalogRowWidget(ctx, client, ref, catalogID)")
 	require.NotContains(t, registry, "Schema:     SchemaGadget,")

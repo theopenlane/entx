@@ -22,6 +22,16 @@ func (WorkflowInstance) Fields() []ent.Field {
 		field.String("status").
 			Optional().
 			Annotations(entx.FieldWorkflowEligible()),
+		field.String("email").
+			Optional().
+			Annotations(
+				entx.AnonymousField(),
+			),
+		field.String("full_name").
+			Optional().
+			Annotations(
+				entx.AnonymousField(),
+			),
 	}
 }
 

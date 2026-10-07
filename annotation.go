@@ -57,8 +57,8 @@ var IntegrationMappingSchemaAnnotationName = "OPENLANE_INTEGRATION_MAPPING_SCHEM
 // FileCategoryAnnotationName is the annotation name for default file categories.
 var FileCategoryAnnotationName = "OPENLANE_FILE_CATEGORY"
 
-// AnonymousFieldsAnnotationName is the annotation name for the fields anonymous callers may set in mutations
-var AnonymousFieldsAnnotationName = "OPENLANE_ANONYMOUS_FIELDS"
+// AnonymousFieldAnnotationName is the annotation name for a field anonymous callers may set in mutations
+var AnonymousFieldAnnotationName = "OPENLANE_ANONYMOUS_FIELD"
 
 // FGACrudAnnotationName is the annotation name for crud operations
 var FGACrudAnnotationName = "OPENLANE_FGA_CRUD_OPERATIONS"
@@ -235,12 +235,9 @@ type FileCategoryAnnotation struct {
 	Category string
 }
 
-// AnonymousFieldsAnnotation lists the schema fields anonymous callers may set in create and update mutations,
+// AnonymousFieldAnnotation marks a field anonymous callers may set in create and update mutations,
 // every other mutation input field is rejected for anonymous callers
-type AnonymousFieldsAnnotation struct {
-	// Fields are the ent field names anonymous callers may set
-	Fields []string
-}
+type AnonymousFieldAnnotation struct{}
 
 // ConsoleRouteAnnotation declares how console URLs are built for a schema's objects.
 // Every unset field falls back to convention: Base defaults to the schema's plural table
@@ -393,9 +390,9 @@ func (a FileCategoryAnnotation) Name() string {
 	return FileCategoryAnnotationName
 }
 
-// Name returns the name of the AnonymousFieldsAnnotation
-func (a AnonymousFieldsAnnotation) Name() string {
-	return AnonymousFieldsAnnotationName
+// Name returns the name of the AnonymousFieldAnnotation
+func (a AnonymousFieldAnnotation) Name() string {
+	return AnonymousFieldAnnotationName
 }
 
 // Name returns the name of the ConsoleRouteAnnotation
@@ -508,11 +505,9 @@ func FileCategory(category string) FileCategoryAnnotation {
 	}
 }
 
-// AnonymousFields marks the schema fields anonymous callers may set in create and update mutations
-func AnonymousFields(fields ...string) AnonymousFieldsAnnotation {
-	return AnonymousFieldsAnnotation{
-		Fields: fields,
-	}
+// AnonymousField marks a field anonymous callers may set in create and update mutations
+func AnonymousField() AnonymousFieldAnnotation {
+	return AnonymousFieldAnnotation{}
 }
 
 // ConsoleRouteOption configures a ConsoleRouteAnnotation deviation from convention
@@ -994,11 +989,6 @@ func (a *FileCategoryAnnotation) Decode(annotation any) error {
 
 // Decode unmarshals the ConsoleRouteAnnotation
 func (a *ConsoleRouteAnnotation) Decode(annotation any) error {
-	return DecodeAnnotation(annotation, a)
-}
-
-// Decode unmarshals the AnonymousFieldsAnnotation
-func (a *AnonymousFieldsAnnotation) Decode(annotation any) error {
 	return DecodeAnnotation(annotation, a)
 }
 

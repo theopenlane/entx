@@ -13,6 +13,10 @@ const (
 	FieldID = "id"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldEmail holds the string denoting the email field in the database.
+	FieldEmail = "email"
+	// FieldFullName holds the string denoting the full_name field in the database.
+	FieldFullName = "full_name"
 	// Table holds the table name of the workflowinstance in the database.
 	Table = "workflow_instances"
 )
@@ -21,6 +25,8 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldStatus,
+	FieldEmail,
+	FieldFullName,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -44,4 +50,14 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// ByEmail orders the results by the email field.
+func ByEmail(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmail, opts...).ToFunc()
+}
+
+// ByFullName orders the results by the full_name field.
+func ByFullName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFullName, opts...).ToFunc()
 }

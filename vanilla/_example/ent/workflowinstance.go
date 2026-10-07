@@ -17,7 +17,11 @@ type WorkflowInstance struct {
 	// ID of the ent.
 	ID string `json:"id,omitempty"`
 	// Status holds the value of the "status" field.
-	Status       string `json:"status,omitempty"`
+	Status string `json:"status,omitempty"`
+	// Email holds the value of the "email" field.
+	Email string `json:"email,omitempty"`
+	// FullName holds the value of the "full_name" field.
+	FullName     string `json:"full_name,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -26,7 +30,7 @@ func (*WorkflowInstance) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case workflowinstance.FieldID, workflowinstance.FieldStatus:
+		case workflowinstance.FieldID, workflowinstance.FieldStatus, workflowinstance.FieldEmail, workflowinstance.FieldFullName:
 			values[i] = new(sql.NullString)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -54,6 +58,18 @@ func (_m *WorkflowInstance) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
+			}
+		case workflowinstance.FieldEmail:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field email", values[i])
+			} else if value.Valid {
+				_m.Email = value.String
+			}
+		case workflowinstance.FieldFullName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field full_name", values[i])
+			} else if value.Valid {
+				_m.FullName = value.String
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -93,6 +109,12 @@ func (_m *WorkflowInstance) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
+	builder.WriteString(", ")
+	builder.WriteString("email=")
+	builder.WriteString(_m.Email)
+	builder.WriteString(", ")
+	builder.WriteString("full_name=")
+	builder.WriteString(_m.FullName)
 	builder.WriteByte(')')
 	return builder.String()
 }
