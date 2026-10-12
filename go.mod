@@ -19,7 +19,7 @@ require (
 	github.com/theopenlane/utils v0.7.2
 	github.com/vektah/gqlparser/v2 v2.5.58
 	go.opentelemetry.io/otel v1.46.0
-	golang.org/x/tools v0.50.0
+	golang.org/x/tools v0.51.0
 )
 
 require (
