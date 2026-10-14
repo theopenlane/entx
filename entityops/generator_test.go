@@ -510,6 +510,7 @@ func TestIngestPhaseATemplateEmission(t *testing.T) {
 				IntegrationMapped:     true,
 				InstanceScoped:        true,
 				LookupAlternatives:    [][]string{{"external_id"}},
+				LookupWhereNull:       []string{"standard_id"},
 				RemovedAtField:        "removed_at",
 				RemovedAtEpisodic:     true,
 				HasIntegrationRunID:   true,
@@ -570,6 +571,8 @@ func TestIngestPhaseATemplateEmission(t *testing.T) {
 	require.Contains(t, registry, "if errors.Is(err, ErrUpsertStaleRun) {\n\t\treturn nil\n\t}")
 	require.Contains(t, registry, "SchemaWidget.Ingest.persist = defaultIngestPersist(SchemaWidget)")
 	require.Contains(t, registry, "widget.RemovedAtIsNil()")
+	require.Contains(t, registry, "query = query.Where(widget.StandardIDIsNil())")
+	require.NotContains(t, registry, "gadget.StandardIDIsNil()")
 	require.Contains(t, registry, "SetIntegrationRunID(runID)")
 	require.Contains(t, registry, "update = update.AddIntegrationRunIDs(runID)")
 	require.Contains(t, registry, `IntegrationRunM2MEdge: "integration_runs",`)
@@ -734,6 +737,22 @@ func TestFieldMatchKey(t *testing.T) {
 	require.False(t, fieldMatchKey(&gen.Field{Name: "metadata", Type: &entfield.TypeInfo{Type: entfield.TypeJSON, Ident: "map[string]any"}}))
 	require.False(t, fieldMatchKey(&gen.Field{Name: "count", Type: &entfield.TypeInfo{Type: entfield.TypeInt}}))
 	require.False(t, fieldMatchKey(&gen.Field{Name: "untyped"}))
+}
+
+func TestValidateLookupWhereNull(t *testing.T) {
+	loaded := &load.Schema{
+		Name: "Control",
+		Fields: []*load.Field{
+			{Name: "ref_code"},
+			{Name: "standard_id", Optional: true},
+		},
+	}
+
+	require.NoError(t, validateLookupWhereNull(EntitySchema{Name: "Control"}, loaded))
+	require.NoError(t, validateLookupWhereNull(EntitySchema{Name: "Control", LookupAlternatives: [][]string{{"ref_code"}}, LookupWhereNull: []string{"standard_id"}}, loaded))
+	require.ErrorIs(t, validateLookupWhereNull(EntitySchema{Name: "Control", LookupAlternatives: [][]string{{"ref_code"}}, LookupWhereNull: []string{"ref_code"}}, loaded), ErrLookupWhereNullFieldInvalid)
+	require.ErrorIs(t, validateLookupWhereNull(EntitySchema{Name: "Control", LookupAlternatives: [][]string{{"ref_code"}}, LookupWhereNull: []string{"unknown"}}, loaded), ErrLookupWhereNullFieldInvalid)
+	require.ErrorIs(t, validateLookupWhereNull(EntitySchema{Name: "Control", LookupWhereNull: []string{"standard_id"}}, loaded), ErrLookupWhereNullFieldInvalid)
 }
 
 // TestCatalogEmission verifies the catalog capability, its adopt, refresh, relink, match, and visible

@@ -1878,6 +1878,9 @@ func init() {
 {{- if $schema.RemovedAtEpisodic }}
 			query = query.Where({{ $schema.PredicatePackage }}.{{ $schema.RemovedAtField | pascal }}IsNil())
 {{- end }}
+{{- range $schema.LookupWhereNull }}
+			query = query.Where({{ $schema.PredicatePackage }}.{{ . | pascal }}IsNil())
+{{- end }}
 
 			entities, err := query.All(ctx)
 			if err != nil {

@@ -226,6 +226,8 @@ type IntegrationMappingSchemaAnnotation struct {
 	Exclude []string
 	// LookupAlternatives declares the ordered composite ingest lookup keys as snake_case field name sets
 	LookupAlternatives [][]string
+	// LookupWhereNull limits lookup matches to rows where these snake_case fields are null, mirroring a partial unique index
+	LookupWhereNull []string
 	// InstanceScoped treats same-key records from different source instances as distinct rows
 	InstanceScoped bool
 }
@@ -770,6 +772,13 @@ func (b *IntegrationMappingSchemaBuilder) LookupAlternative(fields ...string) *I
 	return b
 }
 
+// LookupWhereNull limits lookup matches to rows where the given snake_case fields are null
+func (b *IntegrationMappingSchemaBuilder) LookupWhereNull(fields ...string) *IntegrationMappingSchemaBuilder {
+	b.annotation.LookupWhereNull = append(b.annotation.LookupWhereNull, fields...)
+
+	return b
+}
+
 // InstanceScoped marks records with the same natural key but a different source instance as distinct rows
 func (b *IntegrationMappingSchemaBuilder) InstanceScoped() *IntegrationMappingSchemaBuilder {
 	b.annotation.InstanceScoped = true
@@ -799,6 +808,7 @@ func (b *IntegrationMappingSchemaBuilder) Merge(other schema.Annotation) schema.
 	merged.annotation.InstanceScoped = b.annotation.InstanceScoped || override.annotation.InstanceScoped
 	merged.annotation.Include = lo.Union(b.annotation.Include, override.annotation.Include)
 	merged.annotation.Exclude = lo.Union(b.annotation.Exclude, override.annotation.Exclude)
+	merged.annotation.LookupWhereNull = lo.Union(b.annotation.LookupWhereNull, override.annotation.LookupWhereNull)
 	merged.annotation.LookupAlternatives = b.annotation.LookupAlternatives
 
 	if len(override.annotation.LookupAlternatives) > 0 {
