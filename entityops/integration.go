@@ -42,6 +42,8 @@ type integrationSchemaMeta struct {
 	Mapped bool
 	// LookupAlternatives are the schema's annotation-declared composite ingest lookup keys, if any
 	LookupAlternatives [][]string
+	// LookupWhereNull are the snake_case fields lookup matches must have null
+	LookupWhereNull []string
 	// InstanceScoped reports whether same-key records from different source instances are distinct rows
 	InstanceScoped bool
 }
@@ -77,6 +79,7 @@ func collectIntegrationMapping(schema *load.Schema) (map[string]integrationField
 		}
 
 		schemaMeta.LookupAlternatives = schemaAnt.LookupAlternatives
+		schemaMeta.LookupWhereNull = schemaAnt.LookupWhereNull
 		schemaMeta.InstanceScoped = schemaAnt.InstanceScoped
 	}
 
