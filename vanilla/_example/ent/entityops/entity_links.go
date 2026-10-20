@@ -10,7 +10,7 @@ import (
 	"github.com/samber/lo"
 
 	generated "github.com/theopenlane/entx/vanilla/_example/ent"
-	"github.com/theopenlane/entx/vanilla/_example/pkg/jsonx"
+	"github.com/theopenlane/utils/jsonx"
 )
 
 // InjectCreateLinks resolves each link's target entities via selectTargets and writes the matched
