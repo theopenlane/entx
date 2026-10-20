@@ -11,7 +11,7 @@ import (
 
 	generated "github.com/theopenlane/entx/vanilla/_example/ent"
 	"github.com/theopenlane/entx/vanilla/_example/pkg/gala"
-	"github.com/theopenlane/entx/vanilla/_example/pkg/logx"
+	"github.com/theopenlane/logx"
 )
 
 // --- Sentinel errors ---

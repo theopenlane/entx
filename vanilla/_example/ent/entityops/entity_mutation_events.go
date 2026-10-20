@@ -12,7 +12,7 @@ import (
 	"github.com/theopenlane/utils/contextx"
 
 	gala "github.com/theopenlane/entx/vanilla/_example/pkg/gala"
-	logx "github.com/theopenlane/entx/vanilla/_example/pkg/logx"
+	logx "github.com/theopenlane/logx"
 )
 
 // mutation operation vocabulary for listener registration and payload matching

@@ -21,8 +21,8 @@ import (
 	group "github.com/theopenlane/entx/vanilla/_example/ent/group"
 	orgmembership "github.com/theopenlane/entx/vanilla/_example/ent/orgmembership"
 	gala "github.com/theopenlane/entx/vanilla/_example/pkg/gala"
-	jsonx "github.com/theopenlane/entx/vanilla/_example/pkg/jsonx"
-	logx "github.com/theopenlane/entx/vanilla/_example/pkg/logx"
+	logx "github.com/theopenlane/logx"
+	jsonx "github.com/theopenlane/utils/jsonx"
 )
 
 // NotificationContent is the in-code notification content contract; its fields mirror the
