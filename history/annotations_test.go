@@ -17,7 +17,7 @@ func TestJsonUnmarshalAnnotations(t *testing.T) {
 	}{
 		{
 			name: "happy path",
-			data: map[string]interface{}{
+			data: map[string]any{
 				"exclude":   true,
 				"isHistory": false,
 			},

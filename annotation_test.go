@@ -286,7 +286,7 @@ func TestGetAnnotation(t *testing.T) {
 		{
 			name: "annotation exists as pointer",
 			node: &gen.Type{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					ant.Name(): &SchemaGenAnnotation{Skip: true, SkipSearch: true},
 				},
 			},
@@ -296,7 +296,7 @@ func TestGetAnnotation(t *testing.T) {
 		{
 			name: "annotation missing",
 			node: &gen.Type{
-				Annotations: map[string]interface{}{},
+				Annotations: map[string]any{},
 			},
 			expectedOk:  false,
 			expectedVal: nil,
@@ -304,7 +304,7 @@ func TestGetAnnotation(t *testing.T) {
 		{
 			name: "annotation stored as value, not pointer",
 			node: &gen.Type{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					ant.Name(): SchemaGenAnnotation{Skip: true},
 				},
 			},
@@ -333,7 +333,7 @@ func TestHasAnnotation(t *testing.T) {
 		{
 			name: "has annotation",
 			node: &gen.Type{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					ant.Name(): &OrgOwnedSchema{},
 				},
 			},
@@ -342,7 +342,7 @@ func TestHasAnnotation(t *testing.T) {
 		{
 			name: "missing annotation",
 			node: &gen.Type{
-				Annotations: map[string]interface{}{},
+				Annotations: map[string]any{},
 			},
 			expected: false,
 		},

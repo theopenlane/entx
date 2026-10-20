@@ -89,7 +89,7 @@ func TestEntSkip(t *testing.T) {
 		{
 			name: "skip update, not skipped",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					entAnt.Name(): &entgql.Annotation{
 						Skip: entgql.SkipMutationUpdateInput,
 					},
@@ -100,7 +100,7 @@ func TestEntSkip(t *testing.T) {
 		{
 			name: "skip where input, skipped",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					entAnt.Name(): &entgql.Annotation{
 						Skip: entgql.SkipWhereInput,
 					},
@@ -111,7 +111,7 @@ func TestEntSkip(t *testing.T) {
 		{
 			name: "skip all, skipped",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					entAnt.Name(): &entgql.Annotation{
 						Skip: entgql.SkipAll,
 					},
@@ -122,7 +122,7 @@ func TestEntSkip(t *testing.T) {
 		{
 			name: "skip type, skipped",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					entAnt.Name(): &entgql.Annotation{
 						Skip: entgql.SkipType,
 					},
@@ -192,7 +192,7 @@ func TestIncludeSchemaForSearch(t *testing.T) {
 		{
 			name: "do not skip search, has annotation",
 			input: &gen.Type{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					schemaGenAnt.Name(): &entx.SchemaGenAnnotation{
 						SkipSearch: false,
 					},
@@ -203,7 +203,7 @@ func TestIncludeSchemaForSearch(t *testing.T) {
 		{
 			name: "skip search, has annotation",
 			input: &gen.Type{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					schemaGenAnt.Name(): &entx.SchemaGenAnnotation{
 						SkipSearch: true,
 					},
@@ -214,7 +214,7 @@ func TestIncludeSchemaForSearch(t *testing.T) {
 		{
 			name: "skip not set on annotation",
 			input: &gen.Type{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					schemaGenAnt.Name(): &entx.SchemaGenAnnotation{},
 				},
 			},
@@ -223,7 +223,7 @@ func TestIncludeSchemaForSearch(t *testing.T) {
 		{
 			name: "no annotation",
 			input: &gen.Type{
-				Annotations: map[string]interface{}{},
+				Annotations: map[string]any{},
 			},
 			expected: true,
 		},
@@ -249,7 +249,7 @@ func TestIsFieldSearchable(t *testing.T) {
 		{
 			name: "searchable, has annotation",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					searchAnt.Name(): &entx.SearchFieldAnnotation{
 						Searchable: true,
 					},
@@ -260,7 +260,7 @@ func TestIsFieldSearchable(t *testing.T) {
 		{
 			name: "searchable false, has annotation",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					searchAnt.Name(): &entx.SearchFieldAnnotation{
 						Searchable: false,
 					},
@@ -271,7 +271,7 @@ func TestIsFieldSearchable(t *testing.T) {
 		{
 			name: "no searchable annotation, default false",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					searchAnt.Name(): &entx.SearchFieldAnnotation{},
 				},
 			},
@@ -280,7 +280,7 @@ func TestIsFieldSearchable(t *testing.T) {
 		{
 			name: "no annotation, default false",
 			input: &load.Field{
-				Annotations: map[string]interface{}{},
+				Annotations: map[string]any{},
 			},
 			expected: false,
 		},
@@ -306,7 +306,7 @@ func TestIsAdminFieldSearchable(t *testing.T) {
 		{
 			name: "not excluded, has annotation",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					searchAnt.Name(): &entx.SearchFieldAnnotation{
 						Searchable:   true,
 						ExcludeAdmin: false,
@@ -318,7 +318,7 @@ func TestIsAdminFieldSearchable(t *testing.T) {
 		{
 			name: "excluded, has annotation",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					searchAnt.Name(): &entx.SearchFieldAnnotation{
 						ExcludeAdmin: true,
 					},
@@ -329,7 +329,7 @@ func TestIsAdminFieldSearchable(t *testing.T) {
 		{
 			name: "no excluded annotation",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					searchAnt.Name(): &entx.SearchFieldAnnotation{},
 				},
 			},
@@ -338,7 +338,7 @@ func TestIsAdminFieldSearchable(t *testing.T) {
 		{
 			name: "no annotation",
 			input: &load.Field{
-				Annotations: map[string]interface{}{},
+				Annotations: map[string]any{},
 			},
 			expected: true,
 		},
@@ -364,7 +364,7 @@ func TestGetPathAnnotation(t *testing.T) {
 		{
 			name: "has path",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					searchAnt.Name(): &entx.SearchFieldAnnotation{
 						JSONPath: "path",
 					},
@@ -375,7 +375,7 @@ func TestGetPathAnnotation(t *testing.T) {
 		{
 			name: "no path",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					searchAnt.Name(): &entx.SearchFieldAnnotation{},
 				},
 			},
@@ -384,7 +384,7 @@ func TestGetPathAnnotation(t *testing.T) {
 		{
 			name: "no annotation",
 			input: &load.Field{
-				Annotations: map[string]interface{}{},
+				Annotations: map[string]any{},
 			},
 			expected: "",
 		},
@@ -410,7 +410,7 @@ func TestGetDotPathAnnotation(t *testing.T) {
 		{
 			name: "has path",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					searchAnt.Name(): &entx.SearchFieldAnnotation{
 						JSONDotPath: "path",
 					},
@@ -421,7 +421,7 @@ func TestGetDotPathAnnotation(t *testing.T) {
 		{
 			name: "no path",
 			input: &load.Field{
-				Annotations: map[string]interface{}{
+				Annotations: map[string]any{
 					searchAnt.Name(): &entx.SearchFieldAnnotation{},
 				},
 			},
@@ -430,7 +430,7 @@ func TestGetDotPathAnnotation(t *testing.T) {
 		{
 			name: "no annotation",
 			input: &load.Field{
-				Annotations: map[string]interface{}{},
+				Annotations: map[string]any{},
 			},
 			expected: "",
 		},
