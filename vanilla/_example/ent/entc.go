@@ -42,8 +42,8 @@ func main() {
 		entityops.WithPackageName("entityops"),
 		entityops.WithEntPackage("github.com/theopenlane/entx/vanilla/_example/ent"),
 		entityops.WithGalaPackage("github.com/theopenlane/entx/vanilla/_example/pkg/gala"),
-		entityops.WithJsonxPackage("github.com/theopenlane/entx/vanilla/_example/pkg/jsonx"),
-		entityops.WithLogxPackage("github.com/theopenlane/entx/vanilla/_example/pkg/logx"),
+		entityops.WithJsonxPackage("github.com/theopenlane/utils/jsonx"),
+		entityops.WithLogxPackage("github.com/theopenlane/logx"),
 		entityops.WithCelxPackage("github.com/theopenlane/entx/vanilla/_example/pkg/celx"),
 	)
 

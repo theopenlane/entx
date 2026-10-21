@@ -26,8 +26,8 @@ import (
 	generated "github.com/theopenlane/entx/vanilla/_example/ent"
 	"github.com/theopenlane/entx/vanilla/_example/pkg/celx"
 	"github.com/theopenlane/entx/vanilla/_example/pkg/gala"
-	"github.com/theopenlane/entx/vanilla/_example/pkg/jsonx"
-	"github.com/theopenlane/entx/vanilla/_example/pkg/logx"
+	"github.com/theopenlane/logx"
+	"github.com/theopenlane/utils/jsonx"
 )
 
 // entityRef is a lightweight reference to an entity

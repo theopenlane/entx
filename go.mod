@@ -1,6 +1,6 @@
 module github.com/theopenlane/entx
 
-go 1.27.1
+go 1.27.2
 
 require (
 	entgo.io/contrib v0.7.0
@@ -16,7 +16,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/theopenlane/iam v0.40.0
 	github.com/theopenlane/oscalot v0.1.0
-	github.com/theopenlane/utils v0.7.3
+	github.com/theopenlane/utils v0.7.4
 	github.com/vektah/gqlparser/v2 v2.5.62
 	go.opentelemetry.io/otel v1.47.0
 	golang.org/x/tools v0.52.0
@@ -39,9 +39,9 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/hashicorp/hcl/v2 v2.24.0 // indirect
-	github.com/labstack/echo/v5 v5.3.1 // indirect
+	github.com/labstack/echo/v5 v5.4.0 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
-	github.com/mattn/go-colorable v0.1.15 // indirect
+	github.com/mattn/go-colorable v0.1.16 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/oklog/ulid/v2 v2.1.2 // indirect
@@ -49,7 +49,7 @@ require (
 	github.com/redis/go-redis/v9 v9.22.0 // indirect
 	github.com/sosodev/duration v1.4.0 // indirect
 	github.com/theopenlane/echox v0.3.0 // indirect
-	github.com/theopenlane/logx v0.1.0 // indirect
+	github.com/theopenlane/logx v0.1.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
@@ -67,7 +67,7 @@ require (
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
