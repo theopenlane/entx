@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -51,13 +52,7 @@ func isSlice(typeString string) bool {
 
 // in checks a string slice of a given string and returns true, if found
 func in(str string, list []string) bool {
-	for _, item := range list {
-		if item == str {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(list, str)
 }
 
 // parseTemplate parses the template and sets values in the template
