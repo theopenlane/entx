@@ -158,6 +158,8 @@ type EntitySchema struct {
 	IntegrationRunM2MEdge string
 	// LookupAlternatives are the schema's ordered composite ingest lookup keys as snake_case field name sets
 	LookupAlternatives [][]string
+	// LookupWhereNull are the snake_case optional fields lookup matches must have null
+	LookupWhereNull []string
 	// InstanceScoped reports whether same-key records from different source instances are distinct rows
 	InstanceScoped bool
 	// RemovedAtField is the snake_case name of the schema's SnapshotRemoval-annotated field, if any
@@ -445,6 +447,25 @@ func validateLookupAlternatives(schema EntitySchema) error {
 			if !ok || !field.IntegrationMapped {
 				return fmt.Errorf("%w: %s.%s", ErrLookupAlternativeFieldUnknown, schema.Name, name)
 			}
+		}
+	}
+
+	return nil
+}
+
+// validateLookupWhereNull fails generation when a lookup null filter names an unknown or non-optional field
+func validateLookupWhereNull(entitySchema EntitySchema, schema *load.Schema) error {
+	if len(entitySchema.LookupWhereNull) == 0 {
+		return nil
+	}
+
+	if len(entitySchema.LookupAlternatives) == 0 {
+		return fmt.Errorf("%w: %s declares no lookup alternatives", ErrLookupWhereNullFieldInvalid, entitySchema.Name)
+	}
+
+	for _, name := range entitySchema.LookupWhereNull {
+		if !fieldOptional(schema, name) {
+			return fmt.Errorf("%w: %s.%s", ErrLookupWhereNullFieldInvalid, entitySchema.Name, name)
 		}
 	}
 
@@ -850,6 +871,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 		entitySchema.IntegrationMapped = integrationMeta.Mapped
 		entitySchema.InstanceScoped = integrationMeta.InstanceScoped
 		entitySchema.LookupAlternatives = synthesizeLookupAlternatives(integrationMeta.LookupAlternatives, lookupOrder)
+		entitySchema.LookupWhereNull = integrationMeta.LookupWhereNull
 		entitySchema.HasCatalog = entitySchema.CatalogPointer != "" && len(entitySchema.CatalogFields) > 0 && hasField(schema, systemOwnedFieldName) &&
 			entitySchema.CatalogVisibility != "" && entitySchema.CatalogKey != ""
 
@@ -858,6 +880,10 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 		}
 
 		if err := validateLookupAlternatives(entitySchema); err != nil {
+			return EntityData{}, err
+		}
+
+		if err := validateLookupWhereNull(entitySchema, schema); err != nil {
 			return EntityData{}, err
 		}
 

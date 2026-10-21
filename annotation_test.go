@@ -168,10 +168,12 @@ func TestIntegrationMappingSchemaLookupAlternativeAndInstanceScoped(t *testing.T
 	b := IntegrationMappingSchema().
 		LookupAlternative("external_id").
 		LookupAlternative("email", "tenant_id").
+		LookupWhereNull("standard_id").
 		InstanceScoped()
 
 	assert.Equal(t, IntegrationMappingSchemaAnnotationName, b.Name())
 	assert.Equal(t, [][]string{{"external_id"}, {"email", "tenant_id"}}, b.annotation.LookupAlternatives)
+	assert.Equal(t, []string{"standard_id"}, b.annotation.LookupWhereNull)
 	assert.True(t, b.annotation.InstanceScoped)
 
 	raw, err := b.MarshalJSON()
@@ -180,12 +182,13 @@ func TestIntegrationMappingSchemaLookupAlternativeAndInstanceScoped(t *testing.T
 	decoded := &IntegrationMappingSchemaAnnotation{}
 	require.NoError(t, json.Unmarshal(raw, decoded))
 	assert.Equal(t, [][]string{{"external_id"}, {"email", "tenant_id"}}, decoded.LookupAlternatives)
+	assert.Equal(t, []string{"standard_id"}, decoded.LookupWhereNull)
 	assert.True(t, decoded.InstanceScoped)
 }
 
 func TestIntegrationMappingSchemaMerge(t *testing.T) {
 	base := IntegrationMappingSchema().StockPersist()
-	override := IntegrationMappingSchema().Exclude("stakeholder_id").LookupAlternative("email").InstanceScoped()
+	override := IntegrationMappingSchema().Exclude("stakeholder_id").LookupAlternative("email").LookupWhereNull("standard_id").InstanceScoped()
 
 	merged, ok := base.Merge(override).(*IntegrationMappingSchemaBuilder)
 	require.True(t, ok)
@@ -193,6 +196,7 @@ func TestIntegrationMappingSchemaMerge(t *testing.T) {
 	assert.True(t, merged.annotation.InstanceScoped)
 	assert.Equal(t, []string{"stakeholder_id"}, merged.annotation.Exclude)
 	assert.Equal(t, [][]string{{"email"}}, merged.annotation.LookupAlternatives)
+	assert.Equal(t, []string{"standard_id"}, merged.annotation.LookupWhereNull)
 }
 
 func TestSnapshotRemovalAnnotation(t *testing.T) {

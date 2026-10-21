@@ -38,6 +38,9 @@ var ErrLookupAlternativeFieldUnknown = errors.New("entityops: lookup alternative
 // ErrLookupAlternativeWithoutMapping indicates lookup alternatives declared on an unmapped schema
 var ErrLookupAlternativeWithoutMapping = errors.New("entityops: lookup alternative declared on a schema without integration mapping")
 
+// ErrLookupWhereNullFieldInvalid indicates a lookup null filter references an unknown or non-optional field
+var ErrLookupWhereNullFieldInvalid = errors.New("entityops: lookup null filter references an unknown or non-optional field")
+
 // ErrSnapshotRemovalConflict indicates a schema marks more than one snapshot-removal field
 var ErrSnapshotRemovalConflict = errors.New("entityops: schema declares multiple snapshot removal fields")
 
