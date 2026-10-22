@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/stretchr/testify/assert"
@@ -238,28 +239,16 @@ func TestCatalogEdgeAnnotation(t *testing.T) {
 	assert.Equal(t, CatalogEdgeAnnotationName, CatalogEdgeAnnotation{}.Name())
 }
 
-func TestCatalogVisibilityFieldAnnotation(t *testing.T) {
-	b := CatalogVisibilityField()
+func TestCatalogManagedField(t *testing.T) {
+	annotations := CatalogManagedField()
+	require.Len(t, annotations, 2)
 
-	assert.Equal(t, CatalogVisibilityFieldAnnotationName, b.Name())
+	assert.Equal(t, FieldSourceManagedAnnotationName, annotations[0].Name())
 
-	raw, err := b.MarshalJSON()
-	require.NoError(t, err)
-	assert.JSONEq(t, `{}`, string(raw))
-
-	assert.Equal(t, CatalogVisibilityFieldAnnotationName, CatalogVisibilityFieldAnnotation{}.Name())
-}
-
-func TestCatalogKeyFieldAnnotation(t *testing.T) {
-	b := CatalogKeyField()
-
-	assert.Equal(t, CatalogKeyFieldAnnotationName, b.Name())
-
-	raw, err := b.MarshalJSON()
-	require.NoError(t, err)
-	assert.JSONEq(t, `{}`, string(raw))
-
-	assert.Equal(t, CatalogKeyFieldAnnotationName, CatalogKeyFieldAnnotation{}.Name())
+	gql, ok := annotations[1].(entgql.Annotation)
+	require.True(t, ok)
+	require.Len(t, gql.Directives, 1)
+	assert.Equal(t, CatalogManagedDirectiveName, gql.Directives[0].Name)
 }
 
 func TestCSVReferenceAnnotationDecode(t *testing.T) {

@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/entc/load"
+	"entgo.io/ent/schema"
 	entfield "entgo.io/ent/schema/field"
 	"github.com/stretchr/testify/require"
 
@@ -446,34 +448,22 @@ func TestValidateLookupAlternatives(t *testing.T) {
 	})
 
 	t.Run("valid composite alternative", func(t *testing.T) {
-		schema := EntitySchema{
-			Name: "Widget", IntegrationMapped: true, ObjectFields: mapped,
-			LookupAlternatives: [][]string{{"external_id", "tenant_id"}},
-		}
+		schema := EntitySchema{Name: "Widget", IntegrationMapped: true, ObjectFields: mapped, LookupAlternatives: [][]string{{"external_id", "tenant_id"}}}
 		require.NoError(t, validateLookupAlternatives(schema))
 	})
 
 	t.Run("unknown field", func(t *testing.T) {
-		schema := EntitySchema{
-			Name: "Widget", IntegrationMapped: true, ObjectFields: mapped,
-			LookupAlternatives: [][]string{{"does_not_exist"}},
-		}
+		schema := EntitySchema{Name: "Widget", IntegrationMapped: true, ObjectFields: mapped, LookupAlternatives: [][]string{{"does_not_exist"}}}
 		require.ErrorIs(t, validateLookupAlternatives(schema), ErrLookupAlternativeFieldUnknown)
 	})
 
 	t.Run("unmapped field", func(t *testing.T) {
-		schema := EntitySchema{
-			Name: "Widget", IntegrationMapped: true, ObjectFields: mapped,
-			LookupAlternatives: [][]string{{"internal_note"}},
-		}
+		schema := EntitySchema{Name: "Widget", IntegrationMapped: true, ObjectFields: mapped, LookupAlternatives: [][]string{{"internal_note"}}}
 		require.ErrorIs(t, validateLookupAlternatives(schema), ErrLookupAlternativeFieldUnknown)
 	})
 
 	t.Run("without integration mapping", func(t *testing.T) {
-		schema := EntitySchema{
-			Name: "Widget", IntegrationMapped: false, ObjectFields: mapped,
-			LookupAlternatives: [][]string{{"external_id"}},
-		}
+		schema := EntitySchema{Name: "Widget", IntegrationMapped: false, ObjectFields: mapped, LookupAlternatives: [][]string{{"external_id"}}}
 		require.ErrorIs(t, validateLookupAlternatives(schema), ErrLookupAlternativeWithoutMapping)
 	})
 }
@@ -748,26 +738,9 @@ func TestFieldMatchKey(t *testing.T) {
 	require.False(t, fieldMatchKey(&gen.Field{Name: "untyped"}))
 }
 
-func TestValidateLookupWhereNull(t *testing.T) {
-	loaded := &load.Schema{
-		Name: "Control",
-		Fields: []*load.Field{
-			{Name: "ref_code"},
-			{Name: "standard_id", Optional: true},
-		},
-	}
-
-	require.NoError(t, validateLookupWhereNull(EntitySchema{Name: "Control"}, loaded))
-	require.NoError(t, validateLookupWhereNull(EntitySchema{Name: "Control", LookupAlternatives: [][]string{{"ref_code"}}, LookupWhereNull: []string{"standard_id"}}, loaded))
-	require.ErrorIs(t, validateLookupWhereNull(EntitySchema{Name: "Control", LookupAlternatives: [][]string{{"ref_code"}}, LookupWhereNull: []string{"ref_code"}}, loaded), ErrLookupWhereNullFieldInvalid)
-	require.ErrorIs(t, validateLookupWhereNull(EntitySchema{Name: "Control", LookupAlternatives: [][]string{{"ref_code"}}, LookupWhereNull: []string{"unknown"}}, loaded), ErrLookupWhereNullFieldInvalid)
-	require.ErrorIs(t, validateLookupWhereNull(EntitySchema{Name: "Control", LookupWhereNull: []string{"standard_id"}}, loaded), ErrLookupWhereNullFieldInvalid)
-}
-
-// TestCatalogEmission verifies the catalog capability, its adopt, refresh, relink, match, and visible
-// closures, the pointer-stamping Create, and the catalog listeners are emitted only for schemas with HasCatalog
-func TestCatalogEmission(t *testing.T) {
-	data := EntityData{
+// catalogEmissionData builds the registry test data for a catalog schema (Widget) beside a plain schema (Gadget)
+func catalogEmissionData() EntityData {
+	return EntityData{
 		PackageName:  "entityops",
 		EntPackage:   "example.com/app/ent/generated",
 		GalaPackage:  "example.com/app/pkg/gala",
@@ -787,119 +760,230 @@ func TestCatalogEmission(t *testing.T) {
 				HasCreate: true, HasUpdate: true, OwnerField: "owner_id", SystemScoped: true,
 				CreateInputType: "CreateWidgetInput", UpdateInputType: "UpdateWidgetInput",
 				PredicatePackage: "widget", PredicateImport: "example.com/app/ent/generated/widget",
-				IntegrationMapped: true,
-				CatalogPointer:    "catalog_widget_id",
-				CatalogFields:     []string{"name", "description"},
-				CatalogVisibility: "externally_visible",
-				CatalogKey:        "catalog_widget_key",
-				CatalogLookupKey:  "external_id",
-				HasCatalog:        true,
+				IntegrationMapped:  true,
+				CatalogPointer:     "catalog_id",
+				CatalogFields:      []string{"name", "description"},
+				HasCatalog:         true,
+				LookupAlternatives: [][]string{{"external_id"}, {"name"}, {"domains"}},
 				ObjectFields: []EntityField{
+					{Name: "CatalogID", Snake: "catalog_id", Type: "string", MatchKey: true},
 					{Name: "Description", Snake: "description", Type: "string", SourceManaged: true},
-					{Name: "Domains", Snake: "domains", Type: "[]string", MatchKey: true, SourceManaged: true},
+					{Name: "Domains", Snake: "domains", Type: "[]string", MatchKey: true, IntegrationMapped: true, InputKey: "domains", SourceManaged: true, CaseInsensitive: true},
 					{Name: "ExternalID", Snake: "external_id", Type: "string", MatchKey: true, IntegrationMapped: true, InputKey: "external_id", LookupKey: true},
-					{Name: "Name", Snake: "name", Type: "string", IntegrationMapped: true, InputKey: "name", SourceManaged: true},
+					{Name: "ExternallyVisible", Snake: "externally_visible", Type: "bool"},
+					{Name: "Name", Snake: "name", Type: "string", IntegrationMapped: true, InputKey: "name", SourceManaged: true, CaseInsensitive: true},
+				},
+				Edges: []EntityEdge{
+					{Name: "catalog", TargetSchema: "Widget", TargetInRegistry: true, Unique: true, Field: "catalog_id"},
 				},
 			},
 		},
 	}
+}
 
-	render := func(name string) string {
-		tmpl, err := parseTemplate(name)
-		require.NoError(t, err)
+// renderTemplate renders one template for data and asserts the output parses as Go
+func renderTemplate(t *testing.T, name string, data EntityData) string {
+	t.Helper()
 
-		var buf bytes.Buffer
-		require.NoError(t, tmpl.Execute(&buf, data))
+	tmpl, err := parseTemplate(name)
+	require.NoError(t, err)
 
-		_, err = parser.ParseFile(token.NewFileSet(), name+".go", buf.Bytes(), parser.AllErrors)
-		require.NoError(t, err, buf.String())
+	var buf bytes.Buffer
+	require.NoError(t, tmpl.Execute(&buf, data))
 
-		return buf.String()
-	}
+	_, err = parser.ParseFile(token.NewFileSet(), name+".go", buf.Bytes(), parser.AllErrors)
+	require.NoError(t, err, buf.String())
 
-	registry := render("entity_registry")
+	return buf.String()
+}
 
-	require.Contains(t, registry, "func (s *Schema) Adopt(ctx context.Context, client *generated.Client, catalogID, ownerID string, overlay json.RawMessage) (id string, created bool, err error)")
+// TestCatalogEmission verifies the catalog constants, closures, Reconcile, refresh, unlink and listeners are emitted only for schemas with HasCatalog
+func TestCatalogEmission(t *testing.T) {
+	data := catalogEmissionData()
+	registry := renderTemplate(t, "entity_registry", data)
+
+	require.Contains(t, registry, `const CatalogPointerField = "catalog_id"`)
+	require.Contains(t, registry, `const CatalogVisibilityField = "externally_visible"`)
+	require.Contains(t, registry, "func (s *Schema) Reconcile(ctx context.Context, client *generated.Client, ownerID string, payload json.RawMessage, links ...LinkSpec) (string, error)")
 	require.Contains(t, registry, "func (s *Schema) RefreshAdopted(ctx context.Context, client *generated.Client, catalogID string) (int, error)")
-	require.Contains(t, registry, "func (s *Schema) RelinkAdopted(ctx context.Context, client *generated.Client, catalogID string) (int, error)")
-	require.Contains(t, registry, "func (s *Schema) Match(ctx context.Context, client *generated.Client, candidates ...MatchCandidate) (string, bool, error)")
-	require.Contains(t, registry, "type CatalogCapability struct")
-	require.Contains(t, registry, "type MatchCandidate struct")
+	require.Contains(t, registry, "func (s *Schema) Unlink(ctx context.Context, client *generated.Client, id string) error")
+	require.Contains(t, registry, "func (s *Schema) CatalogFields() []string")
+	require.Contains(t, registry, "return lo.FilterMap(s.Fields, func(f FieldDescriptor, _ int) (string, bool) { return f.Name, f.SourceManaged })")
 	require.Contains(t, registry, `"github.com/theopenlane/iam/auth"`)
 
+	for _, removed := range []string{"type MatchScope int", "type Ambiguity int", "type MatchTier struct", "type Resolution struct", "type Outcome int", "func (s *Schema) Adopt(", "func (s *Schema) Resolve(", "enrichRow", "fillEmpty(", "matchTierIDs", "matchTiers", "CatalogHandle", "MatchCandidate", "func (s *Schema) Match(", "MatchCatalog", "RelinkAdopted", "relink", "relinkCreated", "FillProvenance", "PointerField string", "VisibilityField string", "KeyField string", "SyncedField string", "TypeEdge string", ".Catalog.Fields", ".Catalog.PointerField", "CatalogPointerField()", "CatalogVisibilityField()", "CatalogSyncedField()", "CatalogKeyField", "lookupScope", "type lookupInput", "Catalog.row", "Catalog.lookup", "Catalog.pointed", "Catalog.visible", "catalogScope", "catalogRowWidget", "reconcileLookup", "alternativeInput", "catalogTypeName", "mergeNamedCatalog", "stampCatalogLink", "dropCatalogStamps", "syncedSnapshot", "refreshedValue", "snapshotEqual", "jsonEquivalent", "likeEscaper", "lookupKeyFor(", "ErrResolveAmbiguous", "ErrAdoptConflict", "ErrCatalogLinkedElsewhere", "Inferred", "Suffix: true", "CatalogSynced", "CatalogTypeEdge"} {
+		require.NotContains(t, registry, removed)
+	}
+
+	capability := registry[strings.Index(registry, "type CatalogCapability struct"):strings.Index(registry, "func (s *Schema) CatalogFields()")]
+	require.Contains(t, capability, "copies func(")
+	require.Contains(t, capability, "unlink func(")
+	require.Contains(t, capability, "unlinkAll func(")
+	require.NotContains(t, capability, "Fields []string")
+
 	widget := registry[strings.Index(registry, "SchemaWidget = &Schema{"):strings.Index(registry, "// init wires")]
-	require.Contains(t, widget, `Catalog: &CatalogCapability{PointerField: "catalog_widget_id", VisibilityField: "externally_visible", KeyField: "catalog_widget_key", Fields: []string{"name", "description"}},`)
+	require.Contains(t, widget, `Catalog: &CatalogCapability{},`)
+	require.Contains(t, registry, `{Name: "catalog_id", Label: "CatalogID", Type: "string", MatchKey: true},`)
+	require.Contains(t, registry, `{Name: "externally_visible", Label: "ExternallyVisible", Type: "bool"},`)
+	require.Contains(t, registry, `{Name: "name", Label: "Name", Type: "string", InputKey: "name", SourceManaged: true, CaseInsensitive: true},`)
+	require.Contains(t, registry, `{Name: "domains", Label: "Domains", Type: "[]string", MatchKey: true, InputKey: "domains", SourceManaged: true, CaseInsensitive: true},`)
+	require.Contains(t, registry, `{Name: "description", Label: "Description", Type: "string", SourceManaged: true},`)
+	require.NotContains(t, registry, "LookupKey: true")
+	require.Contains(t, widget, `{Fields: []string{"external_id"}},`)
+	require.Contains(t, widget, `{Fields: []string{"name"}},`)
+	require.Contains(t, widget, `{Fields: []string{"domains"}},`)
 	require.Contains(t, widget, "Create: func")
-	require.Contains(t, widget, `applyStampedFields(builder.Mutation(), input, "catalog_widget_id", "catalog_widget_key")`)
+	require.Contains(t, widget, "Update: func")
+	require.Equal(t, 1, strings.Count(widget, `applyStampedFields(builder.Mutation(), input, CatalogPointerField)`))
 
 	gadget := registry[strings.Index(registry, "SchemaGadget = &Schema{"):strings.Index(registry, "SchemaWidget = &Schema{")]
 	require.NotContains(t, gadget, "Catalog:")
 	require.NotContains(t, gadget, "Create: func")
+	require.NotContains(t, gadget, "Update: func")
 	require.NotContains(t, gadget, "applyStampedFields")
 
-	require.Contains(t, registry, "func catalogRowWidget(ctx context.Context, client *generated.Client, ref SchemaRef, catalogID string) (json.RawMessage, string, error)")
-	require.Contains(t, registry, "Where(widget.ID(catalogID), widget.SystemOwned(true)).Only(ctx)")
-	require.Contains(t, registry, "case !row.ExternallyVisible:")
-	require.Contains(t, registry, "logError(ctx, ref, ErrCatalogRowNotVisible,")
-	require.Contains(t, registry, `lookupValue(raw, "external_id")`)
-
-	require.Contains(t, registry, "SchemaWidget.Catalog.adopt = func")
-	require.Contains(t, registry, "Where(widget.OwnerID(ownerID), widget.CatalogWidgetID(catalogID)).OnlyID(ctx)")
-	require.Contains(t, registry, "Where(widget.OwnerID(ownerID), widget.CatalogWidgetKey(key)).OnlyID(ctx)")
-	require.Contains(t, registry, "client.Widget.UpdateOneID(id).SetCatalogWidgetID(catalogID).Exec(ctx)")
-	require.Contains(t, registry, "jsonx.SetObjectKey(payload, widget.FieldOwnerID, ownerID)")
-	require.Contains(t, registry, "jsonx.SetObjectKey(payload, SchemaWidget.Catalog.KeyField, key)")
-	require.Contains(t, registry, "id, err = SchemaWidget.Create(ctx, client, payload)")
-
-	require.Contains(t, registry, "SchemaWidget.Catalog.refresh = func")
-	require.Contains(t, registry, "client.Widget.Update().Where(widget.CatalogWidgetID(catalogID)).SetInput(input).Save(ctx)")
-	require.Contains(t, registry, "jsonx.Decode[generated.UpdateWidgetInput](payload)")
-
-	require.Contains(t, registry, "SchemaWidget.Catalog.relink = func")
-	require.Contains(t, registry, "Where(widget.CatalogWidgetKey(key), widget.CatalogWidgetIDNotNil()).Select(widget.FieldCatalogWidgetID).Strings(ctx)")
-	require.Contains(t, registry, "Where(widget.IDIn(lo.Uniq(pointers)...)).IDs(ctx)")
-	require.Contains(t, registry, "Where(widget.IDNEQ(catalogID), widget.CatalogWidgetKey(key), widget.Or(widget.CatalogWidgetIDIsNil(), widget.CatalogWidgetIDNotIn(live...))).")
-	require.Contains(t, registry, "SetCatalogWidgetID(catalogID).")
-
-	require.Contains(t, registry, "SchemaWidget.Catalog.match = func")
-	require.Contains(t, registry, "case \"domains\":")
-	require.Contains(t, registry, "s.Where(sqljson.ValueContains(widget.FieldDomains, candidate.Value))")
-	require.Contains(t, registry, "case \"external_id\":")
-	require.Contains(t, registry, "where = widget.ExternalIDEqualFold(candidate.Value)")
-	require.Contains(t, registry, "case \"name\":")
-	require.NotContains(t, registry, "case \"externally_visible\":")
-	require.Contains(t, registry, "Where(widget.SystemOwned(true), widget.ExternallyVisible(true), where).FirstID(ctx)")
-	require.Contains(t, registry, "ErrCatalogMatchFieldUnsupported")
-
-	require.Contains(t, registry, "SchemaWidget.Catalog.visible = func")
-	require.Contains(t, registry, "Where(widget.ID(catalogID), widget.SystemOwned(true), widget.ExternallyVisible(true)).Exist(ctx)")
-	require.Contains(t, registry, "if s.Catalog != nil && ownerID == \"\" {")
-	require.Contains(t, registry, "s.relinkCreated(ctx, client, id)")
-
-	require.Contains(t, registry, "func CatalogListeners() []gala.Registration")
-	require.Contains(t, registry, "Schema:     SchemaWidget,")
-	require.Contains(t, registry, "Operations: []string{OpUpdate, OpUpdateOne},")
-	require.Contains(t, registry, "Fields:     SchemaWidget.Catalog.Fields,")
-	require.Contains(t, registry, "Caller:     catalogListenerCaller,")
-	require.Contains(t, registry, "Handle:     catalogRefreshHandler(SchemaWidget),")
-	require.Contains(t, registry, "restored.WithCapabilities(auth.CapInternalOperation)")
-
-	require.Contains(t, registry, "catalogRowWidget(ctx, client, ref, catalogID)")
-	require.NotContains(t, registry, "Schema:     SchemaGadget,")
+	require.Contains(t, registry, "SchemaWidget.QueryByLookup = func")
+	require.Contains(t, registry, "return filterByAlternativeFields(SchemaWidget, results, fields, keys), nil")
+	require.Contains(t, registry, "SchemaWidget.Catalog.copies = func(ctx context.Context, client *generated.Client, catalogID string) ([]json.RawMessage, error)")
+	require.Contains(t, registry, "client.Widget.Query().Where(widget.CatalogID(catalogID)).All(ctx)")
+	require.Contains(t, registry, "SchemaWidget.Catalog.unlink = func(ctx context.Context, client *generated.Client, id string) error")
+	require.Contains(t, registry, "client.Widget.UpdateOneID(id).ClearCatalogID().Exec(ctx)")
+	require.Contains(t, registry, "SchemaWidget.Catalog.unlinkAll = func")
+	require.Contains(t, registry, "client.Widget.Update().Where(widget.CatalogID(catalogID)).ClearCatalogID().Save(ctx)")
 	require.NotContains(t, registry, "SchemaGadget.Catalog")
 
-	require.Contains(t, registry, `{Name: "name", Label: "Name", Type: "string", InputKey: "name", SourceManaged: true},`)
-	require.Contains(t, registry, `{Name: "description", Label: "Description", Type: "string", SourceManaged: true},`)
+	require.Contains(t, registry, "func CatalogListeners() []gala.Registration")
+	require.Contains(t, registry, "Operations: []string{OpUpdate, OpUpdateOne},")
+	require.Contains(t, registry, `Fields:     []string{"name", "description"},`)
+	require.Contains(t, registry, "Handle:     catalogRefreshHandler(SchemaWidget),")
+	require.Contains(t, registry, "Operations: []string{OpUpdate, OpUpdateOne, OpSoftDelete},")
+	require.Contains(t, registry, "Fields:     []string{CatalogVisibilityField},")
+	require.Contains(t, registry, "Handle:     catalogUnlinkHandler(SchemaWidget),")
+	require.Contains(t, registry, "restored.WithCapabilities(auth.CapInternalOperation)")
+	require.Contains(t, registry, "updated, err := s.RefreshAdopted(inv.Context, inv.Client, inv.EntityID)")
+	require.Contains(t, registry, "if payload.Operation != OpSoftDelete {")
+	require.Contains(t, registry, "visible, ok := payload.StringValue(CatalogVisibilityField)")
+	require.Contains(t, registry, "unlinked, err := s.Catalog.unlinkAll(inv.Context, inv.Client, inv.EntityID)")
+	require.NotContains(t, registry, "Schema:     SchemaGadget,")
 
-	index := render("entity_integration")
-	require.Contains(t, index, `Name: FieldDescriptor{Name: "name", Label: "Name", Type: "string", InputKey: "name", SourceManaged: true},`)
+	edges := registry[strings.Index(registry, "SchemaWidget.Edges = []EdgeDescriptor{"):strings.Index(registry, "SchemaWidget.Catalog.copies = ")]
+	require.Contains(t, edges, "Name: \"catalog\",")
+
+	index := renderTemplate(t, "entity_integration", data)
+	require.Contains(t, index, `Name: FieldDescriptor{Name: "name", Label: "Name", Type: "string", InputKey: "name", SourceManaged: true, CaseInsensitive: true},`)
 	require.NotContains(t, index, "Description")
 
-	errorsGo := render("entity_errors")
+	errorsGo := renderTemplate(t, "entity_errors", data)
 	require.Contains(t, errorsGo, "ErrCatalogUnsupported")
-	require.Contains(t, errorsGo, "ErrCatalogRowNotSystemOwned")
-	require.Contains(t, errorsGo, "ErrCatalogRowNotVisible")
-	require.Contains(t, errorsGo, "ErrCatalogMatchFieldUnsupported")
+	require.Contains(t, errorsGo, "ErrCatalogRowNotFound")
+	require.Contains(t, errorsGo, `refOpReconcile = "reconcile"`)
+
+	for _, removed := range []string{"ErrCatalogRowNotSystemOwned", "ErrCatalogRowNotVisible", "ErrResolveAmbiguous", "ErrAdoptConflict", "ErrCatalogLinkedElsewhere", "ErrResolveFieldUnsupported", "ErrCatalogMatchFieldUnsupported"} {
+		require.NotContains(t, errorsGo, removed)
+	}
+
+	schemaGo := renderTemplate(t, "entity_schema", data)
+
+	for _, removed := range []string{"Inferred bool", "Suffix bool", "CatalogPointer bool", "CatalogVisibility bool", "CatalogSynced bool", "CatalogTypeEdge bool"} {
+		require.NotContains(t, schemaGo, removed)
+	}
+
+	plainData := catalogEmissionData()
+	plainData.Schemas = plainData.Schemas[:1]
+	plain := renderTemplate(t, "entity_registry", plainData)
+	require.NotContains(t, plain, "func (s *Schema) Reconcile(")
+	require.NotContains(t, plain, "iam/auth")
+}
+
+// TestReconcileEmission verifies the shared lookup resolution, the catalog merge, fill-only hits, adoption on create and the unconditional refresh
+func TestReconcileEmission(t *testing.T) {
+	registry := renderTemplate(t, "entity_registry", catalogEmissionData())
+
+	require.Contains(t, registry, "catalogID := lookupValue(payload, CatalogPointerField)\n\tadopting := catalogID != \"\"")
+	require.Contains(t, registry, "catalogRow, err := s.catalogRow(ctx, client, ref, catalogID)")
+	require.Contains(t, registry, "if payload, err = s.mergeCatalogRow(ctx, ref, payload, catalogRow); err != nil {")
+	require.Contains(t, registry, "row, err := s.resolveLookup(ctx, client, ownerID, payload)")
+	require.Contains(t, registry, "if row == nil && !adopting {")
+	require.Contains(t, registry, "catalogRow, err := s.resolveLookup(ctx, client, \"\", payload)")
+	require.Contains(t, registry, "if row, err = s.resolveLookup(ctx, client, ownerID, payload); err != nil {")
+	require.Contains(t, registry, "return entityID(row), s.reconcileHit(ctx, client, ownerID, row, payload, links)")
+	require.Contains(t, registry, "return s.reconcileCreate(ctx, client, ref, ownerID, payload, adopting, links)")
+
+	require.Contains(t, registry, "func (s *Schema) resolveLookup(ctx context.Context, client *generated.Client, ownerID string, payload json.RawMessage) (json.RawMessage, error)")
+	require.Contains(t, registry, "for _, key := range lookupKeysFor(s, payload) {")
+	require.Contains(t, registry, "rows, err := s.QueryByLookup(ctx, client, ownerID, key.alternative, key.values)")
+	require.Contains(t, registry, "rows = lo.Filter(rows, func(row json.RawMessage, _ int) bool { return catalogVisible(row) })")
+	require.Contains(t, registry, "case len(rows) > 1:")
+	require.Contains(t, registry, "func (s *Schema) catalogRow(ctx context.Context, client *generated.Client, ref SchemaRef, catalogID string) (json.RawMessage, error)")
+	require.Contains(t, registry, "case generated.IsNotFound(err), err == nil && !catalogVisible(row):")
+	require.Contains(t, registry, "logError(ctx, ref, ErrCatalogRowNotFound,")
+	require.Contains(t, registry, "func catalogVisible(row json.RawMessage) bool")
+	require.Contains(t, registry, "if merged[CatalogPointerField], err = json.Marshal(entityID(catalogRow)); err != nil {")
+
+	require.Contains(t, registry, "mutation, save, err := s.Ingest.buildUpdate(ctx, client, row, s.rekeyEdgesForUpdate(dropCatalogPointer(linked)))")
+	require.Contains(t, registry, "if err := s.fillMutation(ctx, mutation); err != nil {")
+	require.Contains(t, registry, "if ChangeSetFromMutation(mutation).Empty() {")
+	require.Contains(t, registry, "if !adopting {\n\t\tlinked = dropCatalogPointer(linked)\n\t}")
+	require.Contains(t, registry, "return s.Create(ctx, client, created)")
+
+	require.Contains(t, registry, "func (s *Schema) fillMutation(ctx context.Context, mutation ent.Mutation) error")
+	require.Contains(t, registry, `if !ok || field.Type == "bool" {`)
+	require.Contains(t, registry, "old, err := mutation.OldField(ctx, name)")
+	require.Contains(t, registry, "merged, grew := unionStringValues(old, proposed)")
+	require.Contains(t, registry, "for _, name := range mutation.ClearedFields() {")
+
+	require.Contains(t, registry, "func lookupPredicate(schema *Schema, field string, values []string) func(*sql.Selector)")
+	require.Contains(t, registry, "case descriptor.CaseInsensitive && array:")
+	require.Contains(t, registry, "return sql.EqualFold(s.C(field), value)")
+	require.Contains(t, registry, "jsonArrayMatch(field, lo.Map(values, func(value string, _ int) string { return strings.ToLower(value) }))(s)")
+	require.Contains(t, registry, "return lookupPredicate(schema, field, values)")
+	require.Contains(t, registry, `WriteString(") AS v WHERE LOWER(v) IN (").Args(lo.ToAnySlice(values)...).WriteString("))")`)
+	require.NotContains(t, registry, "LIKE")
+
+	require.Contains(t, registry, "func lookupKeysFor(s *Schema, payload json.RawMessage) []lookupKey")
+	require.Contains(t, registry, "func lookupFieldValues(payload json.RawMessage, field FieldDescriptor) []string")
+	require.Contains(t, registry, "func lookupFieldMatches(s *Schema, row json.RawMessage, field, value string) bool")
+	require.Contains(t, registry, "candidates := lookupKeysFor(s, payload)")
+	require.Contains(t, registry, "if rows, err = s.lookupRows(ctx, client, ownerID, key, cache); err != nil {")
+	require.Contains(t, registry, "cacheKey := candidates[0].cacheKey(s)")
+
+	require.Contains(t, registry, "if !catalogVisible(row) {\n\t\treturn 0, nil\n\t}")
+	require.Contains(t, registry, "payload, err := catalogPayload(row, s.CatalogFields())")
+	require.Contains(t, registry, "if err := s.Update(ctx, client, entityID(adopted), payload); err != nil {")
+
+	require.Contains(t, registry, "func (s *Schema) applyIngestFill(ctx context.Context, client *generated.Client, row json.RawMessage, payload json.RawMessage) (changed bool, managed bool, err error)")
+	require.Contains(t, registry, `if ownerID != "" && lookupValue(row, FieldManagedBy) == "" && lookupValue(payload, FieldManagedBy) != "" {`)
+	require.Contains(t, registry, "changed, managed, err = s.applyIngestUpdate(ctx, client, ownerID, candidate, payload)")
+	require.Contains(t, registry, "return !changes.Empty() || len(throughIDs) > 0, false, nil")
+}
+
+// fieldAnnotations keys schema annotations by name the way ent loads them onto a gen.Field
+func fieldAnnotations(annotations ...schema.Annotation) gen.Annotations {
+	result := gen.Annotations{}
+
+	for _, annotation := range annotations {
+		result[annotation.Name()] = annotation
+	}
+
+	return result
+}
+
+// TestFieldCatalogManagedDirective verifies the directive probe reads the merged entgql annotation
+func TestFieldCatalogManagedDirective(t *testing.T) {
+	require.True(t, fieldCatalogManagedDirective(&gen.Field{Name: "name", Annotations: fieldAnnotations(entx.CatalogManagedField()...)}))
+	require.False(t, fieldCatalogManagedDirective(&gen.Field{Name: "name", Annotations: fieldAnnotations(entx.FieldSourceManaged())}))
+	require.False(t, fieldCatalogManagedDirective(&gen.Field{Name: "name", Annotations: fieldAnnotations(entgql.Directives(entgql.NewDirective("other")))}))
+	require.False(t, fieldCatalogManagedDirective(&gen.Field{Name: "name"}))
+}
+
+// TestValidateCatalogManaged verifies source-managed fields on a catalog schema must carry the catalogManaged directive
+func TestValidateCatalogManaged(t *testing.T) {
+	require.NoError(t, validateCatalogManaged(EntitySchema{Name: "Widget"}, []string{"name"}))
+	require.NoError(t, validateCatalogManaged(EntitySchema{Name: "Widget", CatalogPointer: "catalog_widget_id"}, nil))
+
+	err := validateCatalogManaged(EntitySchema{Name: "Widget", CatalogPointer: "catalog_widget_id"}, []string{"name", "domains"})
+	require.ErrorIs(t, err, ErrCatalogManagedDirectiveMissing)
+	require.ErrorContains(t, err, "Widget.name, Widget.domains")
 }
 
 // TestEdgeCatalogPointer verifies the catalog edge must be a unique self edge owning its foreign key
@@ -940,107 +1024,41 @@ func TestEdgeCatalogPointer(t *testing.T) {
 	})
 }
 
-// TestValidateCatalog verifies schemas with a catalog edge must carry both mutation inputs, the visibility
-// and key markers, a lookup key, and an owner
+// TestValidateCatalog verifies a catalog schema must carry both inputs, the visibility and system_owned columns, a nullable owner, copied fields and a lookup alternative
 func TestValidateCatalog(t *testing.T) {
 	complete := EntitySchema{
-		Name: "Widget", CatalogPointer: "catalog_widget_id", HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
-		CatalogVisibility: "externally_visible", CatalogKey: "catalog_widget_key", CatalogLookupKey: "external_id",
+		Name: "Widget", CatalogPointer: "catalog_id", HasCatalog: true, HasCreate: true, HasUpdate: true,
+		OwnerField: "owner_id", SystemScoped: true, CatalogFields: []string{"name"}, LookupAlternatives: [][]string{{"external_id"}},
 	}
 
-	require.NoError(t, validateCatalog(complete))
-	require.NoError(t, validateCatalog(EntitySchema{Name: "Widget"}))
+	require.NoError(t, validateCatalog(complete, true, true))
+	require.NoError(t, validateCatalog(EntitySchema{Name: "Widget"}, false, false))
 
-	missingCreate := complete
-	missingCreate.HasCreate = false
-	require.ErrorIs(t, validateCatalog(missingCreate), ErrCatalogInputsMissing)
-
-	missingUpdate := complete
-	missingUpdate.HasUpdate = false
-	require.ErrorIs(t, validateCatalog(missingUpdate), ErrCatalogInputsMissing)
-
-	missingVisibility := complete
-	missingVisibility.CatalogVisibility = ""
-	require.ErrorIs(t, validateCatalog(missingVisibility), ErrCatalogVisibilityMissing)
-
-	missingKey := complete
-	missingKey.CatalogKey = ""
-	require.ErrorIs(t, validateCatalog(missingKey), ErrCatalogKeyMissing)
-
-	missingLookup := complete
-	missingLookup.CatalogLookupKey = ""
-	require.ErrorIs(t, validateCatalog(missingLookup), ErrCatalogLookupKeyMissing)
-
-	missingOwner := complete
-	missingOwner.OwnerField = ""
-	require.ErrorIs(t, validateCatalog(missingOwner), ErrCatalogOwnerMissing)
-}
-
-// TestFillProvenanceTemplateEmission verifies FillProvenance emission per link kind
-func TestFillProvenanceTemplateEmission(t *testing.T) {
-	data := EntityData{
-		PackageName:  "entityops",
-		EntPackage:   "example.com/app/ent/generated",
-		GalaPackage:  "example.com/app/pkg/gala",
-		JsonxPackage: "example.com/app/pkg/jsonx",
-		LogxPackage:  "example.com/app/pkg/logx",
-		CelxPackage:  "example.com/app/pkg/celx",
-		MapxPackage:  "example.com/app/pkg/mapx",
-		Schemas: []EntitySchema{
-			{
-				Name: "Widget", Snake: "widget", Lower: "widget",
-				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
-				CreateInputType: "CreateWidgetInput", UpdateInputType: "UpdateWidgetInput",
-				PredicatePackage: "widget", PredicateImport: "example.com/app/ent/generated/widget",
-				IntegrationMapped:  true,
-				HasIntegrationID:   true,
-				IntegrationFKField: "integration_id",
-			},
-			{
-				Name: "Gizmo", Snake: "gizmo", Lower: "gizmo",
-				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
-				CreateInputType: "CreateGizmoInput", UpdateInputType: "UpdateGizmoInput",
-				PredicatePackage: "gizmo", PredicateImport: "example.com/app/ent/generated/gizmo",
-				IntegrationMapped:  true,
-				IntegrationM2MEdge: "integrations",
-			},
-			{
-				Name: "Gadget", Snake: "gadget", Lower: "gadget",
-				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
-				CreateInputType: "CreateGadgetInput", UpdateInputType: "UpdateGadgetInput",
-				PredicatePackage: "gadget", PredicateImport: "example.com/app/ent/generated/gadget",
-				IntegrationMapped: true,
-			},
-		},
+	cases := []struct {
+		name        string
+		part        string
+		mutate      func(*EntitySchema)
+		systemOwned bool
+		visible     bool
+	}{
+		{"missing create", "needs create and update inputs", func(s *EntitySchema) { s.HasCreate = false }, true, true},
+		{"missing update", "needs create and update inputs", func(s *EntitySchema) { s.HasUpdate = false }, true, true},
+		{"missing visibility", "needs the externally_visible field", func(*EntitySchema) {}, true, false},
+		{"missing system_owned", "needs the system_owned field", func(*EntitySchema) {}, false, true},
+		{"missing owner", "needs an org owner edge", func(s *EntitySchema) { s.OwnerField = "" }, true, true},
+		{"non-nullable owner", "needs a nullable owner field", func(s *EntitySchema) { s.SystemScoped = false }, true, true},
+		{"missing fields", "needs a source-managed field", func(s *EntitySchema) { s.CatalogFields = nil }, true, true},
+		{"missing lookup", "needs a lookup alternative", func(s *EntitySchema) { s.LookupAlternatives = nil }, true, true},
 	}
 
-	tmpl, err := parseTemplate("entity_registry")
-	require.NoError(t, err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			schema := complete
+			tc.mutate(&schema)
 
-	var buf bytes.Buffer
-	require.NoError(t, tmpl.Execute(&buf, data))
-
-	_, err = parser.ParseFile(token.NewFileSet(), "entity_registry.go", buf.Bytes(), parser.AllErrors)
-	require.NoError(t, err, buf.String())
-
-	registry := buf.String()
-
-	require.Contains(t, registry, "FillProvenance func(ctx context.Context, client *generated.Client, installation *generated.Integration) (int, error)")
-
-	require.Contains(t, registry, "SchemaWidget.FillProvenance = func")
-	require.Contains(t, registry, "widget.IntegrationID(installation.ID),")
-	require.Contains(t, registry, "widget.Or(widget.SourceDefinitionIDIsNil(), widget.SourceDefinitionID(\"\"), widget.SourceInstanceIDIsNil(), widget.SourceInstanceID(\"\"))")
-	require.Contains(t, registry, "widget.Or(widget.ManagedByIsNil(), widget.ManagedBy(\"\"), widget.ManagedBy(installation.ID))")
-	require.Contains(t, registry, "widget.Or(widget.SourceInstanceIDIsNil(), widget.SourceInstanceIDNEQ(instanceID))")
-	require.Contains(t, registry, "update = update.SetSourceDefinitionVersion(installation.DefinitionVersion)")
-	require.Contains(t, registry, "update = update.SetSourceInstanceID(instanceID)")
-
-	require.NotContains(t, registry, "widget.HasIntegrationsWith")
-
-	require.Contains(t, registry, "SchemaGizmo.FillProvenance = func")
-	require.Contains(t, registry, "gizmo.HasIntegrationsWith(integration.ID(installation.ID)),")
-	require.Contains(t, registry, "gizmo.Not(gizmo.HasIntegrationsWith(integration.IDNEQ(installation.ID))),")
-	require.NotContains(t, registry, "gizmo.IntegrationID(")
-
-	require.NotContains(t, registry, "SchemaGadget.FillProvenance")
+			err := validateCatalog(schema, tc.systemOwned, tc.visible)
+			require.ErrorIs(t, err, ErrCatalogIncomplete)
+			require.ErrorContains(t, err, tc.part)
+		})
+	}
 }

@@ -160,7 +160,7 @@ type EntitySchema struct {
 	HasUpdatedAt bool
 	// IntegrationRunM2MEdge is the name of the schema's to-many mutable edge to IntegrationRun, if any
 	IntegrationRunM2MEdge string
-	// LookupAlternatives are the schema's ordered composite ingest lookup keys as snake_case field name sets
+	// LookupAlternatives are the schema's ordered composite lookup keys as snake_case field name sets
 	LookupAlternatives [][]string
 	// LookupWhereNull are the snake_case optional fields lookup matches must have null
 	LookupWhereNull []string
@@ -174,13 +174,7 @@ type EntitySchema struct {
 	CatalogPointer string
 	// CatalogFields lists the snake_case fields copied from a catalog row on adopt and refresh
 	CatalogFields []string
-	// CatalogVisibility is the snake_case bool field marking a catalog row as visible to organizations, empty when absent
-	CatalogVisibility string
-	// CatalogKey is the snake_case field on adopted rows holding the catalog row's lookup key, empty when absent
-	CatalogKey string
-	// CatalogLookupKey is the snake_case lookup-key field whose value identifies a catalog row, empty when absent
-	CatalogLookupKey string
-	// HasCatalog reports whether the schema supports catalog adoption: a pointer, copied fields, the system_owned marker, and the visibility and key fields
+	// HasCatalog reports whether the schema declares a catalog edge
 	HasCatalog bool
 }
 
@@ -202,7 +196,7 @@ type EntityField struct {
 	InputKey string
 	// InputGoField is the exported Go struct field name for the input key on ent create inputs
 	InputGoField string
-	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
+	// LookupKey reports whether the field carries LookupKey(); generator input only, not emitted
 	LookupKey bool
 	// Sanitizable reports whether ingest preparation pre-validates this mapped field and drops invalid values
 	Sanitizable bool
@@ -220,7 +214,7 @@ type EntityField struct {
 	TaskRules []entx.TaskRuleSpec
 	// SystemControlled excludes the field from provider mappings
 	SystemControlled bool
-	// SourceManaged reports whether the upstream source owns the value and overwrites it on refresh or reconcile
+	// SourceManaged reports whether the field is copied from the catalog row and kept in sync by refresh
 	SourceManaged bool
 	// Volatile excludes the field from triggering an ingest change
 	Volatile bool
@@ -397,26 +391,45 @@ func schemaOwnerField(node *gen.Type) (string, error) {
 // systemOwnedFieldName is the marker column distinguishing catalog rows from organization-owned rows
 const systemOwnedFieldName = "system_owned"
 
-// validateCatalog fails generation when a schema with a catalog edge lacks the inputs, markers, or lookup key adoption uses
-func validateCatalog(schema EntitySchema) error {
-	if schema.CatalogPointer == "" {
+// catalogVisibilityFieldName is the bool column marking a catalog row as visible to organizations
+const catalogVisibilityFieldName = "externally_visible"
+
+// catalogPointerFieldName is the foreign-key column of the catalog edge
+const catalogPointerFieldName = "catalog_id"
+
+// validateCatalog rejects a catalog schema missing a part adoption and refresh require
+func validateCatalog(schema EntitySchema, systemOwned, visible bool) error {
+	if !schema.HasCatalog {
 		return nil
 	}
 
 	switch {
 	case !schema.HasCreate || !schema.HasUpdate:
-		return fmt.Errorf("%w: %s", ErrCatalogInputsMissing, schema.Name)
-	case schema.CatalogVisibility == "":
-		return fmt.Errorf("%w: %s", ErrCatalogVisibilityMissing, schema.Name)
-	case schema.CatalogKey == "":
-		return fmt.Errorf("%w: %s", ErrCatalogKeyMissing, schema.Name)
-	case schema.CatalogLookupKey == "":
-		return fmt.Errorf("%w: %s", ErrCatalogLookupKeyMissing, schema.Name)
+		return fmt.Errorf("%w: %s needs create and update inputs", ErrCatalogIncomplete, schema.Name)
+	case !visible:
+		return fmt.Errorf("%w: %s needs the externally_visible field", ErrCatalogIncomplete, schema.Name)
+	case !systemOwned:
+		return fmt.Errorf("%w: %s needs the system_owned field", ErrCatalogIncomplete, schema.Name)
 	case schema.OwnerField == "":
-		return fmt.Errorf("%w: %s", ErrCatalogOwnerMissing, schema.Name)
+		return fmt.Errorf("%w: %s needs an org owner edge", ErrCatalogIncomplete, schema.Name)
+	case !schema.SystemScoped:
+		return fmt.Errorf("%w: %s needs a nullable owner field", ErrCatalogIncomplete, schema.Name)
+	case len(schema.CatalogFields) == 0:
+		return fmt.Errorf("%w: %s needs a source-managed field", ErrCatalogIncomplete, schema.Name)
+	case len(schema.LookupAlternatives) == 0:
+		return fmt.Errorf("%w: %s needs a lookup alternative", ErrCatalogIncomplete, schema.Name)
 	}
 
 	return nil
+}
+
+// validateCatalogManaged rejects source-managed fields lacking the catalogManaged directive
+func validateCatalogManaged(schema EntitySchema, undirected []string) error {
+	if schema.CatalogPointer == "" || len(undirected) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("%w: %s.%s", ErrCatalogManagedDirectiveMissing, schema.Name, strings.Join(undirected, ", "+schema.Name+"."))
 }
 
 // provenanceFieldNames are the record provenance columns every ingest-capable schema must carry
@@ -512,18 +525,11 @@ func fieldSourceManaged(field *gen.Field) bool {
 	return ok
 }
 
-// fieldCatalogVisibility reports whether the field carries entx.CatalogVisibilityField
-func fieldCatalogVisibility(field *gen.Field) bool {
-	_, ok := field.Annotations[entx.CatalogVisibilityFieldAnnotationName]
+// fieldCatalogManagedDirective reports whether the field's entgql annotation carries the catalogManaged directive
+func fieldCatalogManagedDirective(field *gen.Field) bool {
+	ant, ok := entx.GetAnnotation[*entgql.Annotation](field)
 
-	return ok
-}
-
-// fieldCatalogKey reports whether the field carries entx.CatalogKeyField
-func fieldCatalogKey(field *gen.Field) bool {
-	_, ok := field.Annotations[entx.CatalogKeyFieldAnnotationName]
-
-	return ok
+	return ok && slices.ContainsFunc(ant.Directives, func(d entgql.Directive) bool { return d.Name == entx.CatalogManagedDirectiveName })
 }
 
 // fieldMatchKey reports whether the field is a plain string column usable as a match key
@@ -748,6 +754,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 		var (
 			workflowMarker bool
 			lookupOrder    []string
+			undirected     []string
 		)
 
 		// integrationFields carries the per-field integration mapping metadata (keyed by ent field
@@ -775,18 +782,12 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 				entitySchema.CatalogFields = append(entitySchema.CatalogFields, entityField.Snake)
 			}
 
-			if fieldCatalogVisibility(field) {
-				entitySchema.CatalogVisibility = entityField.Snake
-			}
-
-			if fieldCatalogKey(field) {
-				entitySchema.CatalogKey = entityField.Snake
+			if entityField.SourceManaged && !fieldCatalogManagedDirective(field) {
+				undirected = append(undirected, entityField.Snake)
 			}
 
 			entitySchema.ObjectFields = append(entitySchema.ObjectFields, entityField)
 		}
-
-		entitySchema.CatalogLookupKey = lo.FirstOr(lookupOrder, "")
 
 		slices.SortFunc(entitySchema.ObjectFields, func(a, b EntityField) int {
 			return cmp.Compare(a.Snake, b.Snake)
@@ -820,8 +821,8 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 			}
 
 			if catalogPointer != "" {
-				if entitySchema.CatalogPointer != "" {
-					return EntityData{}, fmt.Errorf("%w: %s.%s and %s.%s", ErrCatalogEdgeConflict, node.Name, entitySchema.CatalogPointer, node.Name, catalogPointer)
+				if entitySchema.CatalogPointer != "" || catalogPointer != catalogPointerFieldName {
+					return EntityData{}, fmt.Errorf("%w: %s.%s", ErrCatalogEdgeInvalid, node.Name, edge.Name)
 				}
 
 				entitySchema.CatalogPointer = catalogPointer
@@ -875,6 +876,10 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 
 		detectIntegrationEdges(&entitySchema)
 
+		if entitySchema.CatalogPointer != "" && !slices.ContainsFunc(entitySchema.ObjectFields, func(f EntityField) bool { return f.Snake == entitySchema.CatalogPointer }) {
+			return EntityData{}, fmt.Errorf("%w: %s.%s", ErrCatalogEdgeInvalid, node.Name, entitySchema.CatalogPointer)
+		}
+
 		// workflow eligibility is derived from the unified catalog: any workflow-eligible field or
 		// edge, or the schema-level marker
 		entitySchema.WorkflowEligible = workflowMarker ||
@@ -891,12 +896,14 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 
 		entitySchema.IntegrationMapped = integrationMeta.Mapped
 		entitySchema.InstanceScoped = integrationMeta.InstanceScoped
+		entitySchema.HasCatalog = entitySchema.CatalogPointer != ""
 		entitySchema.LookupAlternatives = synthesizeLookupAlternatives(integrationMeta.LookupAlternatives, lookupOrder)
-		entitySchema.LookupWhereNull = integrationMeta.LookupWhereNull
-		entitySchema.HasCatalog = entitySchema.CatalogPointer != "" && len(entitySchema.CatalogFields) > 0 && hasField(schema, systemOwnedFieldName) &&
-			entitySchema.CatalogVisibility != "" && entitySchema.CatalogKey != ""
 
-		if err := validateCatalog(entitySchema); err != nil {
+		if err := validateCatalog(entitySchema, hasField(schema, systemOwnedFieldName), hasField(schema, catalogVisibilityFieldName)); err != nil {
+			return EntityData{}, err
+		}
+
+		if err := validateCatalogManaged(entitySchema, undirected); err != nil {
 			return EntityData{}, err
 		}
 

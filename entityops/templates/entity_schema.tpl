@@ -104,8 +104,6 @@ type FieldDescriptor struct {
 	MatchKey bool `json:"matchKey,omitempty"`
 	// InputKey is the integration mapping create-input key (lowerCamel); empty for non-mapped fields
 	InputKey string `json:"inputKey,omitempty"`
-	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
-	LookupKey bool `json:"lookupKey,omitempty"`
 	// DisplayKey reports whether the field is the schema's display-name source
 	DisplayKey bool `json:"displayKey,omitempty"`
 	// Clearable reports whether update inputs support explicitly clearing this field
@@ -114,7 +112,7 @@ type FieldDescriptor struct {
 	WebhookPayload bool `json:"webhookPayload,omitempty"`
 	// SystemControlled excludes the field from provider mappings
 	SystemControlled bool `json:"systemControlled,omitempty"`
-	// SourceManaged reports whether the upstream source owns the value and overwrites it on refresh or reconcile
+	// SourceManaged reports whether the field is copied from the catalog row and kept in sync by refresh
 	SourceManaged bool `json:"sourceManaged,omitempty"`
 	// Volatile excludes the field from triggering an ingest change
 	Volatile bool `json:"volatile,omitempty"`
@@ -287,7 +285,7 @@ type LinkSpec struct {
 	Target TargetSelector `json:"target"`
 }
 
-// LookupAlternative is one ordered composite ingest lookup key of snake_case field names
+// LookupAlternative is one ordered lookup alternative of snake_case field names
 type LookupAlternative struct {
 	// Fields is the ordered snake_case field names forming this alternative's composite key
 	Fields []string
