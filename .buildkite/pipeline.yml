@@ -1,27 +1,78 @@
 env:
-  APP_NAME: ${BUILDKITE_PIPELINE_SLUG}
-  IMAGE_REPO: ghcr.io/theopenlane/${APP_NAME}
   SONAR_HOST: "https://sonarcloud.io"
+
+  # build settings
+  BK_HOME: /var/lib/buildkite-agent
+  GOCACHE: $BK_HOME/.cache/go-build
+  GOMODCACHE: $BK_HOME/.cache/go/pkg/mod
+  GOLANGCI_LINT_CACHE: $BK_HOME/.cache/golangci-lint
+  HOME: /tmp
+  GIT_CONFIG_GLOBAL: $HOME/.gitconfig
+  APOLLO_CONFIG_HOME: $HOME
+  SONAR_USER_HOME: $HOME/.sonar"
+  SCANNER_WORKDIR_PATH: $HOME/sonar-scanner-work
+
+  # runner vars
+  LARGE_RUNNER_QUEUE: ${LARGE_RUNNER_QUEUE:-self-hosted-garage-vms}
+  SMALL_RUNNER_QUEUE: ${SMALL_RUNNER_QUEUE:-self-hosted-garage-vms}
+  RUNNER_WORKLOAD_LIGHTWEIGHT: "lightweight"
+  RUNNER_WORKLOAD_STANDARD: "standard"
+
+# defaults
+agents:
+  queue: $SMALL_RUNNER_QUEUE
+  workload: $RUNNER_WORKLOAD_LIGHTWEIGHT
+
+# cache for hosted runners
+cache:
+  name: go-cache
+  size: 100g
+  paths:
+    - $GOCACHE
+    - $GOMODCACHE
+    - $GOLANGCI_LINT_CACHE
+
 steps:
   - group: ":test_tube: Tests"
     key: "tests"
+    if_changed:
+      - go.{mod,sum}
+      - "**.go"
     steps:
       - label: ":golangci-lint: lint :lint-roller:"
         key: "lint"
+        agents:
+          queue: $LARGE_RUNNER_QUEUE
+          workload: $RUNNER_WORKLOAD_STANDARD
         plugins:
           - docker#v5.14.0:
               image: "golangci/golangci-lint:latest-alpine"
               cancel_on_build_failing: true
               command: ["golangci-lint", "run", "-v"]
               always-pull: true
+              propagate-environment: true
+              propagate-uid-gid: true
+              volumes:
+                - $GOCACHE:$GOCACHE
+                - $GOMODCACHE:$GOMODCACHE
+                - $GOLANGCI_LINT_CACHE:$GOLANGCI_LINT_CACHE
               environment:
                 - "GOTOOLCHAIN=auto"
       - label: ":golang: go test"
         key: "go_test"
+        agents:
+          queue: $LARGE_RUNNER_QUEUE
+          workload: $RUNNER_WORKLOAD_STANDARD
         plugins:
           - docker#v5.14.0:
-              image: golang:1.27.2
+              image: golang:1.27.3
               command: ["go", "test", "-coverprofile=coverage.out", "./..."]
+              propagate-environment: true
+              propagate-uid-gid: true
+              volumes:
+                - $GOCACHE:$GOCACHE
+                - $GOMODCACHE:$GOMODCACHE
+                - $GOLANGCI_LINT_CACHE:$GOLANGCI_LINT_CACHE
         artifact_paths: ["coverage.out"]
       - label: ":github: upload PR reports"
         key: "scan-upload-pr"
@@ -36,6 +87,8 @@ steps:
               step: "go_test"
           - docker#v5.14.0:
               image: "sonarsource/sonar-scanner-cli:12.1"
+              propagate-environment: true
+              propagate-uid-gid: true
               environment:
                 - "SONAR_TOKEN"
                 - "SONAR_HOST_URL=$SONAR_HOST"
@@ -53,6 +106,8 @@ steps:
               step: "go_test"
           - docker#v5.14.0:
               image: "sonarsource/sonar-scanner-cli:12.1"
+              propagate-environment: true
+              propagate-uid-gid: true
               environment:
                 - "SONAR_TOKEN"
                 - "SONAR_HOST_URL=$SONAR_HOST"
