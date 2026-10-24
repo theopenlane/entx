@@ -35,6 +35,9 @@ cache:
 steps:
   - group: ":test_tube: Tests"
     key: "tests"
+    if_changed:
+      - go.{mod,sum}
+      - "**.go"
     steps:
       - label: ":golangci-lint: lint :lint-roller:"
         key: "lint"
