@@ -515,6 +515,8 @@ func TestIngestPhaseATemplateEmission(t *testing.T) {
 				RemovedAtEpisodic:     true,
 				HasIntegrationRunID:   true,
 				IntegrationRunM2MEdge: "integration_runs",
+				HasSourceProvenance:   true,
+				HasUpdatedAt:          true,
 				ObjectFields: []EntityField{
 					{Name: "ExternalID", Snake: "external_id", Type: "string", IntegrationMapped: true, InputKey: "external_id", LookupKey: true},
 				},
@@ -582,9 +584,16 @@ func TestIngestPhaseATemplateEmission(t *testing.T) {
 	require.Contains(t, registry, `InstanceScoped: true,`)
 	require.Contains(t, registry, `Fields: []string{"external_id"`)
 
+	require.Contains(t, registry, "type SourceFilter struct")
+	require.Contains(t, registry, "SchemaWidget.DeleteBySource = func(ctx context.Context, client *generated.Client, filter SourceFilter, cleanup RowCleanup) ([]string, error)")
+	require.Contains(t, registry, "widget.SourceInstanceID(filter.InstanceID)")
+	require.Contains(t, registry, "query = query.Where(widget.UpdatedAtLTE(*filter.NotUpdatedAfter))")
+	require.Contains(t, registry, "client.Widget.Delete().Where(widget.IDIn(chunk...)).Exec(ctx)")
+
 	require.NotContains(t, registry, "SchemaGadget.QueryByLookup")
 	require.NotContains(t, registry, "SchemaGadget.SnapshotScope")
 	require.NotContains(t, registry, "SchemaGadget.MarkRemoved")
+	require.NotContains(t, registry, "SchemaGadget.DeleteBySource")
 
 	gadget := registry[strings.Index(registry, "SchemaGadget = &Schema{"):strings.Index(registry, "// init wires")]
 	require.NotContains(t, gadget, "Lookup: []LookupAlternative")
