@@ -160,7 +160,7 @@ type EntitySchema struct {
 	HasUpdatedAt bool
 	// IntegrationRunM2MEdge is the name of the schema's to-many mutable edge to IntegrationRun, if any
 	IntegrationRunM2MEdge string
-	// LookupAlternatives are the schema's ordered composite lookup keys as snake_case field name sets
+	// LookupAlternatives are the schema's ordered composite ingest lookup keys as snake_case field name sets
 	LookupAlternatives [][]string
 	// LookupWhereNull are the snake_case optional fields lookup matches must have null
 	LookupWhereNull []string
@@ -196,7 +196,7 @@ type EntityField struct {
 	InputKey string
 	// InputGoField is the exported Go struct field name for the input key on ent create inputs
 	InputGoField string
-	// LookupKey reports whether the field carries LookupKey(); generator input only, not emitted
+	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
 	LookupKey bool
 	// Sanitizable reports whether ingest preparation pre-validates this mapped field and drops invalid values
 	Sanitizable bool
@@ -214,7 +214,7 @@ type EntityField struct {
 	TaskRules []entx.TaskRuleSpec
 	// SystemControlled excludes the field from provider mappings
 	SystemControlled bool
-	// SourceManaged reports whether the field is copied from the catalog row and kept in sync by refresh
+	// SourceManaged reports whether the upstream source owns the value and overwrites it on refresh or reconcile
 	SourceManaged bool
 	// Volatile excludes the field from triggering an ingest change
 	Volatile bool
@@ -452,7 +452,7 @@ func validateProvenanceFields(schema EntitySchema) error {
 	return nil
 }
 
-// synthesizeLookupAlternatives returns the LookupKey tuple first, followed by the declared alternatives in order, skipping any equal to the tuple
+// synthesizeLookupAlternatives returns the declared alternatives or one synthesized from the LookupKey fields
 func synthesizeLookupAlternatives(declared [][]string, lookupOrder []string) [][]string {
 	if len(lookupOrder) == 0 {
 		return declared
