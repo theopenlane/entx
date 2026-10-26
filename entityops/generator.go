@@ -406,6 +406,8 @@ func validateCatalog(schema EntitySchema, systemOwned, visible bool) error {
 	switch {
 	case !schema.HasCreate || !schema.HasUpdate:
 		return fmt.Errorf("%w: %s needs create and update inputs", ErrCatalogIncomplete, schema.Name)
+	case !schema.IntegrationMapped:
+		return fmt.Errorf("%w: %s needs integration mapping", ErrCatalogIncomplete, schema.Name)
 	case !visible:
 		return fmt.Errorf("%w: %s needs the externally_visible field", ErrCatalogIncomplete, schema.Name)
 	case !systemOwned:
@@ -450,17 +452,15 @@ func validateProvenanceFields(schema EntitySchema) error {
 	return nil
 }
 
-// synthesizeLookupAlternatives returns the declared alternatives or one synthesized from the LookupKey fields
+// synthesizeLookupAlternatives returns the LookupKey tuple first, followed by the declared alternatives in order, skipping any equal to the tuple
 func synthesizeLookupAlternatives(declared [][]string, lookupOrder []string) [][]string {
-	if len(declared) > 0 {
+	if len(lookupOrder) == 0 {
 		return declared
 	}
 
-	if len(lookupOrder) == 0 {
-		return nil
-	}
-
-	return [][]string{lookupOrder}
+	return append([][]string{lookupOrder}, lo.Reject(declared, func(alternative []string, _ int) bool {
+		return slices.Equal(alternative, lookupOrder)
+	})...)
 }
 
 // validateLookupAlternatives fails generation when a lookup alternative names an unknown or unmapped field
@@ -897,6 +897,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 		entitySchema.IntegrationMapped = integrationMeta.Mapped
 		entitySchema.InstanceScoped = integrationMeta.InstanceScoped
 		entitySchema.HasCatalog = entitySchema.CatalogPointer != ""
+		entitySchema.LookupWhereNull = integrationMeta.LookupWhereNull
 		entitySchema.LookupAlternatives = synthesizeLookupAlternatives(integrationMeta.LookupAlternatives, lookupOrder)
 
 		if err := validateCatalog(entitySchema, hasField(schema, systemOwnedFieldName), hasField(schema, catalogVisibilityFieldName)); err != nil {

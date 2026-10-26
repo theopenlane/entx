@@ -678,12 +678,6 @@ func coerceTime(value any) (time.Time, error) {
 	}
 }
 
-// matchKeyIn returns a selector predicate matching the given match-key column against any of values,
-// testing JSON string arrays for membership and every other column for equality
-func matchKeyIn(schema *Schema, field string, values []string) func(*sql.Selector) {
-	return lookupPredicate(schema, field, values)
-}
-
 // lookupPredicate builds one column's lookup predicate: equality, array membership, or their case-folded forms for CaseInsensitive fields
 func lookupPredicate(schema *Schema, field string, values []string) func(*sql.Selector) {
 	descriptor, _ := schema.FieldByName(field)
@@ -944,15 +938,17 @@ type lookupKey struct {
 	values      []LookupValues
 }
 
-// cacheKey renders the lookup key's first tuple into its prefetch cache key
-func (k lookupKey) cacheKey(s *Schema) lookupMatchKey {
-	return lookupMatchKey{schema: s.Snake, alternative: k.alternative, keys: EncodeLookupKey(s.Lookup[k.alternative], k.values[0])}
+// cacheKeys renders every tuple of the lookup key into its prefetch cache key
+func (k lookupKey) cacheKeys(s *Schema) []lookupMatchKey {
+	return lo.Map(k.values, func(tuple LookupValues, _ int) lookupMatchKey {
+		return lookupMatchKey{schema: s.Snake, alternative: k.alternative, keys: EncodeLookupKey(s, s.Lookup[k.alternative], tuple)}
+	})
 }
 
 // lookupKeysFor returns every lookup alternative the payload fully carries, in declared order; a string-array field contributes one tuple per element
 func lookupKeysFor(s *Schema, payload json.RawMessage) []lookupKey {
 	return lo.FilterMap(s.Lookup, func(alt LookupAlternative, i int) (lookupKey, bool) {
-		tuples := []LookupValues{LookupValues{}}
+		tuples := []LookupValues{{}}
 
 		for _, name := range alt.Fields {
 			field, found := s.FieldByName(name)
@@ -989,12 +985,16 @@ func lookupFieldValues(payload json.RawMessage, field FieldDescriptor) []string 
 	return nil
 }
 
-// EncodeLookupKey renders a lookup alternative's key values into the lookup cache key
-func EncodeLookupKey(alternative LookupAlternative, keys LookupValues) string {
-	parts := make([]string, len(alternative.Fields))
-	for i, field := range alternative.Fields {
-		parts[i] = keys[field]
-	}
+// EncodeLookupKey renders a lookup alternative's key values into the lookup cache key, lowering CaseInsensitive fields
+func EncodeLookupKey(schema *Schema, alternative LookupAlternative, keys LookupValues) string {
+	parts := lo.Map(alternative.Fields, func(field string, _ int) string {
+		descriptor, _ := schema.FieldByName(field)
+		if descriptor.CaseInsensitive {
+			return strings.ToLower(keys[field])
+		}
+
+		return keys[field]
+	})
 
 	return strings.Join(parts, "\x1f")
 }
@@ -1170,10 +1170,13 @@ func (s *Schema) Upsert(ctx context.Context, client *generated.Client, ownerID s
 		}
 
 		if cacheable {
-			cacheKey := candidates[0].cacheKey(s)
-			entry := cache[cacheKey]
-			entry.createdIDs = append(entry.createdIDs, id)
-			cache[cacheKey] = entry
+			for _, candidate := range candidates {
+				for _, cacheKey := range candidate.cacheKeys(s) {
+					entry := cache[cacheKey]
+					entry.createdIDs = append(entry.createdIDs, id)
+					cache[cacheKey] = entry
+				}
+			}
 		}
 
 		return id, true, true, nil
@@ -1190,28 +1193,37 @@ func (s *Schema) Upsert(ctx context.Context, client *generated.Client, ownerID s
 	return id, changed, managed, err
 }
 
-// lookupRows returns the rows one lookup key matches, served from the prefetch cache when it holds the key
+// lookupRows returns the rows one lookup key matches, served from the prefetch cache when it holds every tuple of the key
 func (s *Schema) lookupRows(ctx context.Context, client *generated.Client, ownerID string, key lookupKey, cache lookupMatchCache) ([]json.RawMessage, error) {
-	entry, present := cache[key.cacheKey(s)]
-	if !present {
+	keys := key.cacheKeys(s)
+
+	if !lo.EveryBy(keys, func(k lookupMatchKey) bool { return lo.HasKey(cache, k) }) {
 		return s.QueryByLookup(ctx, client, ownerID, key.alternative, key.values)
 	}
 
-	for _, createdID := range entry.createdIDs {
-		row, err := s.Load(ctx, client, createdID)
-		if err != nil {
-			return nil, err
+	var rows []json.RawMessage
+
+	for _, k := range keys {
+		entry := cache[k]
+
+		for _, createdID := range entry.createdIDs {
+			row, err := s.Load(ctx, client, createdID)
+			if err != nil {
+				return nil, err
+			}
+
+			entry.rows = append(entry.rows, row)
 		}
 
-		entry.rows = append(entry.rows, row)
+		if len(entry.createdIDs) > 0 {
+			entry.createdIDs = nil
+			cache[k] = entry
+		}
+
+		rows = append(rows, entry.rows...)
 	}
 
-	if len(entry.createdIDs) > 0 {
-		entry.createdIDs = nil
-		cache[key.cacheKey(s)] = entry
-	}
-
-	return entry.rows, nil
+	return lo.UniqBy(rows, entityID), nil
 }
 
 // pruneIngestFields drops unchanged and volatile-only assignments from the mutation
@@ -1403,7 +1415,7 @@ func (s *Schema) applyIngestFill(ctx context.Context, client *generated.Client, 
 
 // applyIngestUpdate fills an unmanaged organization row and otherwise applies the writing installation's claim
 func (s *Schema) applyIngestUpdate(ctx context.Context, client *generated.Client, ownerID string, row json.RawMessage, payload json.RawMessage) (changed bool, managed bool, err error) {
-	if ownerID != "" && lookupValue(row, FieldManagedBy) == "" && lookupValue(payload, FieldManagedBy) != "" {
+	if ownerID != "" && lookupValue(row, FieldManagedBy) == "" {
 		return s.applyIngestFill(ctx, client, row, payload)
 	}
 
@@ -1505,7 +1517,7 @@ func entityID(row json.RawMessage) string {
 
 // Reconcile returns the organization's row for payload: an existing row is enriched, a catalog match is adopted as a new linked copy, otherwise the row is created
 func (s *Schema) Reconcile(ctx context.Context, client *generated.Client, ownerID string, payload json.RawMessage, links ...LinkSpec) (string, error) {
-	if s.Catalog == nil || s.QueryByLookup == nil || s.Create == nil || s.Ingest == nil || s.Ingest.buildUpdate == nil {
+	if s.Catalog == nil {
 		return "", ErrCatalogUnsupported
 	}
 
@@ -1513,20 +1525,25 @@ func (s *Schema) Reconcile(ctx context.Context, client *generated.Client, ownerI
 	catalogID := lookupValue(payload, CatalogPointerField)
 	adopting := catalogID != ""
 
+	var row json.RawMessage
+
 	if adopting {
 		catalogRow, err := s.catalogRow(ctx, client, ref, catalogID)
 		if err != nil {
 			return "", err
 		}
 
-		if payload, err = s.mergeCatalogRow(ctx, ref, payload, catalogRow); err != nil {
+		if payload, row, err = s.adoptCatalogRow(ctx, client, ref, ownerID, payload, catalogRow); err != nil {
 			return "", err
 		}
 	}
 
-	row, err := s.resolveLookup(ctx, client, ownerID, payload)
-	if err != nil {
-		return "", err
+	if row == nil {
+		var err error
+
+		if row, err = s.resolveLookup(ctx, client, ownerID, payload); err != nil {
+			return "", err
+		}
 	}
 
 	if row == nil && !adopting {
@@ -1538,12 +1555,14 @@ func (s *Schema) Reconcile(ctx context.Context, client *generated.Client, ownerI
 		if catalogRow != nil {
 			adopting = true
 
-			if payload, err = s.mergeCatalogRow(ctx, ref, payload, catalogRow); err != nil {
+			if payload, row, err = s.adoptCatalogRow(ctx, client, ref, ownerID, payload, catalogRow); err != nil {
 				return "", err
 			}
 
-			if row, err = s.resolveLookup(ctx, client, ownerID, payload); err != nil {
-				return "", err
+			if row == nil {
+				if row, err = s.resolveLookup(ctx, client, ownerID, payload); err != nil {
+					return "", err
+				}
 			}
 		}
 	}
@@ -1555,15 +1574,32 @@ func (s *Schema) Reconcile(ctx context.Context, client *generated.Client, ownerI
 	return s.reconcileCreate(ctx, client, ref, ownerID, payload, adopting, links)
 }
 
-// RefreshAdopted rewrites the catalog row's source-managed fields onto every row pointing at it and returns how many rows were written
+// adoptCatalogRow merges the catalog row into payload and returns the organization's existing copy of it, nil when none
+func (s *Schema) adoptCatalogRow(ctx context.Context, client *generated.Client, ref SchemaRef, ownerID string, payload, catalogRow json.RawMessage) (json.RawMessage, json.RawMessage, error) {
+	merged, err := s.mergeCatalogRow(ctx, ref, payload, catalogRow)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	copies, err := s.Catalog.copies(ctx, client, entityID(catalogRow))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	existing, _ := lo.Find(copies, func(row json.RawMessage) bool { return lookupValue(row, s.OwnerField) == ownerID })
+
+	return merged, existing, nil
+}
+
+// RefreshAdopted rewrites the catalog row's source-managed fields onto every row pointing at it, each write running as the organization owning the copy, and returns how many rows were written
 func (s *Schema) RefreshAdopted(ctx context.Context, client *generated.Client, catalogID string) (int, error) {
-	if s.Catalog == nil || s.Update == nil {
+	if s.Catalog == nil {
 		return 0, ErrCatalogUnsupported
 	}
 
 	ref := SchemaRef{Schema: s.Snake, Operation: refOpUpdate, EntityID: catalogID}
 
-	row, err := s.Load(auth.WithInternalReadCrossOrgContext(ctx), client, catalogID)
+	row, err := s.Load(ctx, client, catalogID)
 	if err != nil {
 		return 0, err
 	}
@@ -1583,7 +1619,7 @@ func (s *Schema) RefreshAdopted(ctx context.Context, client *generated.Client, c
 	}
 
 	for written, adopted := range copies {
-		if err := s.Update(ctx, client, entityID(adopted), payload); err != nil {
+		if err := s.Update(auth.WithOrgInternalCaller(ctx, lookupValue(adopted, s.OwnerField)), client, entityID(adopted), payload); err != nil {
 			return written, err
 		}
 	}
@@ -1650,7 +1686,7 @@ func catalogVisible(row json.RawMessage) bool {
 	return systemOwned && visible
 }
 
-// mergeCatalogRow lays payload over the catalog row's source-managed fields and sets the pointer; an empty payload value never overrides
+// mergeCatalogRow lays payload over the catalog row's populated source-managed fields and sets the pointer; an empty payload value never overrides
 func (s *Schema) mergeCatalogRow(ctx context.Context, ref SchemaRef, payload, catalogRow json.RawMessage) (json.RawMessage, error) {
 	base, err := catalogPayload(catalogRow, s.CatalogFields())
 	if err != nil {
@@ -1661,6 +1697,8 @@ func (s *Schema) mergeCatalogRow(ctx context.Context, ref SchemaRef, payload, ca
 	if err != nil {
 		return nil, logError(ctx, ref, ErrDecodeFailed, err)
 	}
+
+	merged = lo.OmitBy(merged, func(_ string, value json.RawMessage) bool { return jsonx.IsEmptyRawMessage(value) })
 
 	overlay, err := jsonx.ToRawMap(payload)
 	if err != nil {
@@ -1694,7 +1732,9 @@ func (s *Schema) reconcileHit(ctx context.Context, client *generated.Client, own
 		return err
 	}
 
-	mutation, save, err := s.Ingest.buildUpdate(ctx, client, row, s.rekeyEdgesForUpdate(dropCatalogPointer(linked)))
+	rekeyed, throughIDs := splitThroughEdgeIDs(s, s.rekeyEdgesForUpdate(dropCatalogPointer(linked)))
+
+	mutation, save, err := s.Ingest.buildUpdate(ctx, client, row, rekeyed)
 	if err != nil {
 		return err
 	}
@@ -1703,11 +1743,13 @@ func (s *Schema) reconcileHit(ctx context.Context, client *generated.Client, own
 		return err
 	}
 
-	if ChangeSetFromMutation(mutation).Empty() {
-		return nil
+	if !ChangeSetFromMutation(mutation).Empty() {
+		if err := save(ctx); err != nil {
+			return err
+		}
 	}
 
-	return save(ctx)
+	return applyThroughEdgeIDs(ctx, client, s, entityID(row), throughIDs)
 }
 
 // reconcileCreate creates the organization's row from payload and links; an adoption keeps the catalog pointer
@@ -1794,7 +1836,7 @@ func (s *Schema) fillMutation(ctx context.Context, mutation ent.Mutation) error 
 	return nil
 }
 
-// isEmptyValue reports whether a stored value is nil, an empty string, slice or map, or a zero time
+// isEmptyValue reports whether a stored value is nil, an empty string, slice or map, a zero number, or a zero time
 func isEmptyValue(value any) bool {
 	v := reflect.ValueOf(value)
 	for v.IsValid() && (v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface) {
@@ -1814,6 +1856,10 @@ func isEmptyValue(value any) bool {
 		return strings.TrimSpace(v.String()) == ""
 	case reflect.Slice, reflect.Map:
 		return v.Len() == 0
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return v.IsZero()
 	}
 
 	if t, ok := v.Interface().(time.Time); ok {
@@ -1915,20 +1961,16 @@ func CatalogListeners() []gala.Registration {
 }
 {{- end }}
 
-// catalogPayload keeps only the keys copied onto adopted rows from a marshaled catalog row
+// catalogPayload renders the fields copied onto adopted rows from a marshaled catalog row, null for a field the row does not hold
 func catalogPayload(row json.RawMessage, fields []string) (json.RawMessage, error) {
 	document, err := jsonx.ToRawMap(row)
 	if err != nil {
 		return nil, err
 	}
 
-	kept := make(map[string]json.RawMessage, len(fields))
-
-	for _, field := range fields {
-		if value, ok := document[field]; ok {
-			kept[field] = value
-		}
-	}
+	kept := lo.SliceToMap(fields, func(field string) (string, json.RawMessage) {
+		return field, lo.ValueOr(document, field, json.RawMessage("null"))
+	})
 
 	payload, err := json.Marshal(kept)
 	if err != nil {
@@ -1938,11 +1980,11 @@ func catalogPayload(row json.RawMessage, fields []string) (json.RawMessage, erro
 	return payload, nil
 }
 
-// jsonArrayMatch matches a JSON string-array column when any lowered element equals one of values, which arrive lowered
+// jsonArrayMatch matches a JSON string-array column when any lowered element equals one of values, which arrive lowered; a column holding anything but an array matches nothing
 func jsonArrayMatch(column string, values []string) func(*sql.Selector) {
 	return func(s *sql.Selector) {
 		s.Where(sql.P(func(b *sql.Builder) {
-			b.WriteString("EXISTS (SELECT 1 FROM jsonb_array_elements_text(").Ident(s.C(column)).WriteString(") AS v WHERE LOWER(v) IN (").Args(lo.ToAnySlice(values)...).WriteString("))")
+			b.WriteString("EXISTS (SELECT 1 FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(").Ident(s.C(column)).WriteString(") = 'array' THEN ").Ident(s.C(column)).WriteString(" ELSE '[]'::jsonb END) AS v WHERE LOWER(v) IN (").Args(lo.ToAnySlice(values)...).WriteString("))")
 		}))
 	}
 }
@@ -2212,7 +2254,7 @@ func init() {
 {{- else }}
 			Where({{ $schema.PredicatePackage }}.{{ $schema.OwnerField | pascal }}(orgID)).
 {{- end }}
-			Where(predicate.{{ $schema.Name }}(matchKeyIn(Schema{{ $schema.Name }}, field, values))).
+			Where(predicate.{{ $schema.Name }}(lookupPredicate(Schema{{ $schema.Name }}, field, values))).
 			All(ctx)
 		if err != nil {
 			return nil, logError(ctx, ref, ErrQueryFailed, err)
@@ -2345,7 +2387,7 @@ func init() {
 {{- else if $schema.OwnerField }}
 			query = query.Where({{ $schema.PredicatePackage }}.{{ $schema.OwnerField | pascal }}(ownerID))
 {{- end }}
-			query = query.Where(predicate.{{ $schema.Name }}(matchKeyIn(Schema{{ $schema.Name }}, primary, chunk)))
+			query = query.Where(predicate.{{ $schema.Name }}(lookupPredicate(Schema{{ $schema.Name }}, primary, chunk)))
 {{- if $schema.RemovedAtEpisodic }}
 			query = query.Where({{ $schema.PredicatePackage }}.{{ $schema.RemovedAtField | pascal }}IsNil())
 {{- end }}
@@ -2562,12 +2604,18 @@ func init() {
 		return nil
 	}
 	Schema{{ $schema.Name }}.Catalog.unlinkAll = func(ctx context.Context, client *generated.Client, catalogID string) (int, error) {
-		unlinked, err := client.{{ $schema.Name }}.Update().Where({{ $pkg }}.{{ $pointer }}(catalogID)).Clear{{ $pointer }}().Save(ctx)
+		copies, err := Schema{{ $schema.Name }}.Catalog.copies(ctx, client, catalogID)
 		if err != nil {
-			return 0, logPersistError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpUpdate, EntityID: catalogID}, ErrUpdateFailed, err)
+			return 0, err
 		}
 
-		return unlinked, nil
+		for unlinked, adopted := range copies {
+			if err := Schema{{ $schema.Name }}.Catalog.unlink(auth.WithOrgInternalCaller(ctx, lookupValue(adopted, Schema{{ $schema.Name }}.OwnerField)), client, entityID(adopted)); err != nil {
+				return unlinked, err
+			}
+		}
+
+		return len(copies), nil
 	}
 {{- end }}
 {{- end }}

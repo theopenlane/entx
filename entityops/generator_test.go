@@ -425,14 +425,29 @@ func TestEntityMetadataTemplateEmpty(t *testing.T) {
 	require.Contains(t, buf.String(), "schema, ok := LookupSchema(schemaType)")
 }
 
-// TestSynthesizeLookupAlternatives verifies declared alternatives win over the synthesized LookupKey default
+// TestSynthesizeLookupAlternatives verifies the LookupKey tuple leads the declared alternatives and a duplicate declaration is dropped
 func TestSynthesizeLookupAlternatives(t *testing.T) {
 	require.Nil(t, synthesizeLookupAlternatives(nil, nil))
 	require.Equal(t, [][]string{{"external_id"}}, synthesizeLookupAlternatives(nil, []string{"external_id"}))
 	require.Equal(t, [][]string{{"external_id", "tenant_id"}}, synthesizeLookupAlternatives(nil, []string{"external_id", "tenant_id"}))
 
 	declared := [][]string{{"email"}, {"external_id", "tenant_id"}}
-	require.Equal(t, declared, synthesizeLookupAlternatives(declared, []string{"external_id"}))
+	require.Equal(t, declared, synthesizeLookupAlternatives(declared, nil))
+
+	require.Equal(t,
+		[][]string{{"external_id"}, {"email"}, {"external_id", "tenant_id"}},
+		synthesizeLookupAlternatives(declared, []string{"external_id"}),
+	)
+
+	require.Equal(t,
+		[][]string{{"external_id", "tenant_id"}, {"email"}},
+		synthesizeLookupAlternatives(declared, []string{"external_id", "tenant_id"}),
+	)
+
+	require.Equal(t,
+		[][]string{{"tenant_id", "external_id"}, {"email"}, {"external_id", "tenant_id"}},
+		synthesizeLookupAlternatives(declared, []string{"tenant_id", "external_id"}),
+	)
 }
 
 // TestValidateLookupAlternatives verifies lookup alternatives over unknown or unmapped fields are rejected
@@ -466,6 +481,23 @@ func TestValidateLookupAlternatives(t *testing.T) {
 		schema := EntitySchema{Name: "Widget", IntegrationMapped: false, ObjectFields: mapped, LookupAlternatives: [][]string{{"external_id"}}}
 		require.ErrorIs(t, validateLookupAlternatives(schema), ErrLookupAlternativeWithoutMapping)
 	})
+}
+
+// TestValidateLookupWhereNull verifies lookup null filters over unknown, required, or alternative-less schemas are rejected
+func TestValidateLookupWhereNull(t *testing.T) {
+	loaded := &load.Schema{
+		Name: "Control",
+		Fields: []*load.Field{
+			{Name: "ref_code"},
+			{Name: "standard_id", Optional: true},
+		},
+	}
+
+	require.NoError(t, validateLookupWhereNull(EntitySchema{Name: "Control"}, loaded))
+	require.NoError(t, validateLookupWhereNull(EntitySchema{Name: "Control", LookupAlternatives: [][]string{{"ref_code"}}, LookupWhereNull: []string{"standard_id"}}, loaded))
+	require.ErrorIs(t, validateLookupWhereNull(EntitySchema{Name: "Control", LookupAlternatives: [][]string{{"ref_code"}}, LookupWhereNull: []string{"ref_code"}}, loaded), ErrLookupWhereNullFieldInvalid)
+	require.ErrorIs(t, validateLookupWhereNull(EntitySchema{Name: "Control", LookupAlternatives: [][]string{{"ref_code"}}, LookupWhereNull: []string{"unknown"}}, loaded), ErrLookupWhereNullFieldInvalid)
+	require.ErrorIs(t, validateLookupWhereNull(EntitySchema{Name: "Control", LookupWhereNull: []string{"standard_id"}}, loaded), ErrLookupWhereNullFieldInvalid)
 }
 
 // TestApplyFieldMarkersSnapshotRemoval verifies snapshot-removal field markers fold onto the schema
@@ -547,7 +579,7 @@ func TestIngestPhaseATemplateEmission(t *testing.T) {
 	require.NotContains(t, registry, "TypedIngestPersist")
 	require.NotContains(t, registry, "IngestManagesRecord")
 	require.Contains(t, registry, "func WithLookupMatches(ctx context.Context, schema *Schema, matches map[int]map[string][]json.RawMessage) context.Context")
-	require.Contains(t, registry, "func EncodeLookupKey(alternative LookupAlternative, keys LookupValues) string")
+	require.Contains(t, registry, "func EncodeLookupKey(schema *Schema, alternative LookupAlternative, keys LookupValues) string")
 
 	require.Contains(t, registry, "me := lookupValue(payload, FieldManagedBy)")
 	require.Contains(t, registry, "managedByMe := lo.Filter(rows, func(candidate json.RawMessage, _ int) bool")
@@ -811,7 +843,7 @@ func TestCatalogEmission(t *testing.T) {
 	require.Contains(t, registry, "return lo.FilterMap(s.Fields, func(f FieldDescriptor, _ int) (string, bool) { return f.Name, f.SourceManaged })")
 	require.Contains(t, registry, `"github.com/theopenlane/iam/auth"`)
 
-	for _, removed := range []string{"type MatchScope int", "type Ambiguity int", "type MatchTier struct", "type Resolution struct", "type Outcome int", "func (s *Schema) Adopt(", "func (s *Schema) Resolve(", "enrichRow", "fillEmpty(", "matchTierIDs", "matchTiers", "CatalogHandle", "MatchCandidate", "func (s *Schema) Match(", "MatchCatalog", "RelinkAdopted", "relink", "relinkCreated", "FillProvenance", "PointerField string", "VisibilityField string", "KeyField string", "SyncedField string", "TypeEdge string", ".Catalog.Fields", ".Catalog.PointerField", "CatalogPointerField()", "CatalogVisibilityField()", "CatalogSyncedField()", "CatalogKeyField", "lookupScope", "type lookupInput", "Catalog.row", "Catalog.lookup", "Catalog.pointed", "Catalog.visible", "catalogScope", "catalogRowWidget", "reconcileLookup", "alternativeInput", "catalogTypeName", "mergeNamedCatalog", "stampCatalogLink", "dropCatalogStamps", "syncedSnapshot", "refreshedValue", "snapshotEqual", "jsonEquivalent", "likeEscaper", "lookupKeyFor(", "ErrResolveAmbiguous", "ErrAdoptConflict", "ErrCatalogLinkedElsewhere", "Inferred", "Suffix: true", "CatalogSynced", "CatalogTypeEdge"} {
+	for _, removed := range []string{"type MatchScope int", "type Ambiguity int", "type MatchTier struct", "type Resolution struct", "type Outcome int", "func (s *Schema) Adopt(", "func (s *Schema) Resolve(", "fillEmpty(", "matchTierIDs", "matchTiers", "CatalogHandle", "MatchCandidate", "func (s *Schema) Match(", "MatchCatalog", "RelinkAdopted", "relinkCreated", "FillProvenance", "PointerField string", "VisibilityField string", "KeyField string", "SyncedField string", "TypeEdge string", ".Catalog.Fields", ".Catalog.PointerField", "CatalogPointerField()", "CatalogVisibilityField()", "CatalogSyncedField()", "CatalogKeyField", "lookupScope", "type lookupInput", "Catalog.row", "Catalog.lookup", "Catalog.pointed", "Catalog.visible", "catalogScope", "catalogRowWidget", "reconcileLookup", "alternativeInput", "catalogTypeName", "mergeNamedCatalog", "stampCatalogLink", "dropCatalogStamps", "syncedSnapshot", "refreshedValue", "snapshotEqual", "jsonEquivalent", "likeEscaper", "lookupKeyFor(", "ErrResolveAmbiguous", "ErrAdoptConflict", "ErrCatalogLinkedElsewhere", "CatalogSynced", "CatalogTypeEdge"} {
 		require.NotContains(t, registry, removed)
 	}
 
@@ -849,7 +881,8 @@ func TestCatalogEmission(t *testing.T) {
 	require.Contains(t, registry, "SchemaWidget.Catalog.unlink = func(ctx context.Context, client *generated.Client, id string) error")
 	require.Contains(t, registry, "client.Widget.UpdateOneID(id).ClearCatalogID().Exec(ctx)")
 	require.Contains(t, registry, "SchemaWidget.Catalog.unlinkAll = func")
-	require.Contains(t, registry, "client.Widget.Update().Where(widget.CatalogID(catalogID)).ClearCatalogID().Save(ctx)")
+	require.Contains(t, registry, "SchemaWidget.Catalog.unlink(auth.WithOrgInternalCaller(ctx, lookupValue(adopted, SchemaWidget.OwnerField)), client, entityID(adopted))")
+	require.NotContains(t, registry, "ClearCatalogID().Save(ctx)")
 	require.NotContains(t, registry, "SchemaGadget.Catalog")
 
 	require.Contains(t, registry, "func CatalogListeners() []gala.Registration")
@@ -893,6 +926,9 @@ func TestCatalogEmission(t *testing.T) {
 	plain := renderTemplate(t, "entity_registry", plainData)
 	require.NotContains(t, plain, "func (s *Schema) Reconcile(")
 	require.NotContains(t, plain, "iam/auth")
+	require.NotContains(t, plain, "CatalogListeners")
+	require.NotContains(t, plain, "RefreshAdopted")
+	require.NotContains(t, plain, "Unlink(")
 }
 
 // TestReconcileEmission verifies the shared lookup resolution, the catalog merge, fill-only hits, adoption on create and the unconditional refresh
@@ -901,8 +937,9 @@ func TestReconcileEmission(t *testing.T) {
 
 	require.Contains(t, registry, "catalogID := lookupValue(payload, CatalogPointerField)\n\tadopting := catalogID != \"\"")
 	require.Contains(t, registry, "catalogRow, err := s.catalogRow(ctx, client, ref, catalogID)")
-	require.Contains(t, registry, "if payload, err = s.mergeCatalogRow(ctx, ref, payload, catalogRow); err != nil {")
-	require.Contains(t, registry, "row, err := s.resolveLookup(ctx, client, ownerID, payload)")
+	require.Contains(t, registry, "if payload, row, err = s.adoptCatalogRow(ctx, client, ref, ownerID, payload, catalogRow); err != nil {")
+	require.Contains(t, registry, "func (s *Schema) adoptCatalogRow(ctx context.Context, client *generated.Client, ref SchemaRef, ownerID string, payload, catalogRow json.RawMessage) (json.RawMessage, json.RawMessage, error)")
+	require.Contains(t, registry, "existing, _ := lo.Find(copies, func(row json.RawMessage) bool { return lookupValue(row, s.OwnerField) == ownerID })")
 	require.Contains(t, registry, "if row == nil && !adopting {")
 	require.Contains(t, registry, "catalogRow, err := s.resolveLookup(ctx, client, \"\", payload)")
 	require.Contains(t, registry, "if row, err = s.resolveLookup(ctx, client, ownerID, payload); err != nil {")
@@ -920,9 +957,10 @@ func TestReconcileEmission(t *testing.T) {
 	require.Contains(t, registry, "func catalogVisible(row json.RawMessage) bool")
 	require.Contains(t, registry, "if merged[CatalogPointerField], err = json.Marshal(entityID(catalogRow)); err != nil {")
 
-	require.Contains(t, registry, "mutation, save, err := s.Ingest.buildUpdate(ctx, client, row, s.rekeyEdgesForUpdate(dropCatalogPointer(linked)))")
+	require.Contains(t, registry, "rekeyed, throughIDs := splitThroughEdgeIDs(s, s.rekeyEdgesForUpdate(dropCatalogPointer(linked)))")
 	require.Contains(t, registry, "if err := s.fillMutation(ctx, mutation); err != nil {")
-	require.Contains(t, registry, "if ChangeSetFromMutation(mutation).Empty() {")
+	require.Contains(t, registry, "if !ChangeSetFromMutation(mutation).Empty() {")
+	require.Contains(t, registry, "return applyThroughEdgeIDs(ctx, client, s, entityID(row), throughIDs)")
 	require.Contains(t, registry, "if !adopting {\n\t\tlinked = dropCatalogPointer(linked)\n\t}")
 	require.Contains(t, registry, "return s.Create(ctx, client, created)")
 
@@ -936,8 +974,9 @@ func TestReconcileEmission(t *testing.T) {
 	require.Contains(t, registry, "case descriptor.CaseInsensitive && array:")
 	require.Contains(t, registry, "return sql.EqualFold(s.C(field), value)")
 	require.Contains(t, registry, "jsonArrayMatch(field, lo.Map(values, func(value string, _ int) string { return strings.ToLower(value) }))(s)")
-	require.Contains(t, registry, "return lookupPredicate(schema, field, values)")
+	require.NotContains(t, registry, "matchKeyIn")
 	require.Contains(t, registry, `WriteString(") AS v WHERE LOWER(v) IN (").Args(lo.ToAnySlice(values)...).WriteString("))")`)
+	require.Contains(t, registry, "jsonb_array_elements_text(CASE WHEN jsonb_typeof(")
 	require.NotContains(t, registry, "LIKE")
 
 	require.Contains(t, registry, "func lookupKeysFor(s *Schema, payload json.RawMessage) []lookupKey")
@@ -945,11 +984,13 @@ func TestReconcileEmission(t *testing.T) {
 	require.Contains(t, registry, "func lookupFieldMatches(s *Schema, row json.RawMessage, field, value string) bool")
 	require.Contains(t, registry, "candidates := lookupKeysFor(s, payload)")
 	require.Contains(t, registry, "if rows, err = s.lookupRows(ctx, client, ownerID, key, cache); err != nil {")
-	require.Contains(t, registry, "cacheKey := candidates[0].cacheKey(s)")
+	require.Contains(t, registry, "for _, cacheKey := range candidate.cacheKeys(s) {")
+	require.Contains(t, registry, "return lo.UniqBy(rows, entityID), nil")
 
 	require.Contains(t, registry, "if !catalogVisible(row) {\n\t\treturn 0, nil\n\t}")
 	require.Contains(t, registry, "payload, err := catalogPayload(row, s.CatalogFields())")
-	require.Contains(t, registry, "if err := s.Update(ctx, client, entityID(adopted), payload); err != nil {")
+	require.Contains(t, registry, "if err := s.Update(auth.WithOrgInternalCaller(ctx, lookupValue(adopted, s.OwnerField)), client, entityID(adopted), payload); err != nil {")
+	require.NotContains(t, registry, "WithInternalCrossOrgContext")
 
 	require.Contains(t, registry, "func (s *Schema) applyIngestFill(ctx context.Context, client *generated.Client, row json.RawMessage, payload json.RawMessage) (changed bool, managed bool, err error)")
 	require.Contains(t, registry, `if ownerID != "" && lookupValue(row, FieldManagedBy) == "" && lookupValue(payload, FieldManagedBy) != "" {`)
@@ -1024,10 +1065,53 @@ func TestEdgeCatalogPointer(t *testing.T) {
 	})
 }
 
-// TestValidateCatalog verifies a catalog schema must carry both inputs, the visibility and system_owned columns, a nullable owner, copied fields and a lookup alternative
+// TestCatalogEdgeRejections verifies graph collection rejects a second catalog edge, a pointer column not named catalog_id, and a pointer missing from the fields
+func TestCatalogEdgeRejections(t *testing.T) {
+	annotated := gen.Annotations{entx.CatalogEdgeAnnotationName: map[string]any{}}
+
+	collect := func(edges ...*gen.Edge) error {
+		node := &gen.Type{Name: "Widget"}
+
+		for _, edge := range edges {
+			edge.Type = node
+			edge.Unique = true
+			edge.Annotations = annotated
+			edge.Rel.Type = gen.M2O
+		}
+
+		node.Edges = edges
+
+		_, err := collectEntityData(&gen.Graph{Nodes: []*gen.Type{node}, Schemas: []*load.Schema{{Name: "Widget"}}}, &Config{})
+
+		return err
+	}
+
+	t.Run("second catalog edge", func(t *testing.T) {
+		err := collect(
+			&gen.Edge{Name: "catalog", Rel: gen.Relation{Columns: []string{catalogPointerFieldName}}},
+			&gen.Edge{Name: "other_catalog", Rel: gen.Relation{Columns: []string{catalogPointerFieldName}}},
+		)
+		require.ErrorIs(t, err, ErrCatalogEdgeInvalid)
+		require.ErrorContains(t, err, "Widget.other_catalog")
+	})
+
+	t.Run("pointer column not named catalog_id", func(t *testing.T) {
+		err := collect(&gen.Edge{Name: "catalog", Rel: gen.Relation{Columns: []string{"catalog_widget_id"}}})
+		require.ErrorIs(t, err, ErrCatalogEdgeInvalid)
+		require.ErrorContains(t, err, "Widget.catalog")
+	})
+
+	t.Run("pointer field missing from the schema fields", func(t *testing.T) {
+		err := collect(&gen.Edge{Name: "catalog", Rel: gen.Relation{Columns: []string{catalogPointerFieldName}}})
+		require.ErrorIs(t, err, ErrCatalogEdgeInvalid)
+		require.ErrorContains(t, err, "Widget.catalog_id")
+	})
+}
+
+// TestValidateCatalog verifies a catalog schema must carry both inputs, integration mapping, the visibility and system_owned columns, a nullable owner, copied fields and a lookup alternative
 func TestValidateCatalog(t *testing.T) {
 	complete := EntitySchema{
-		Name: "Widget", CatalogPointer: "catalog_id", HasCatalog: true, HasCreate: true, HasUpdate: true,
+		Name: "Widget", CatalogPointer: "catalog_id", HasCatalog: true, HasCreate: true, HasUpdate: true, IntegrationMapped: true,
 		OwnerField: "owner_id", SystemScoped: true, CatalogFields: []string{"name"}, LookupAlternatives: [][]string{{"external_id"}},
 	}
 
@@ -1043,6 +1127,7 @@ func TestValidateCatalog(t *testing.T) {
 	}{
 		{"missing create", "needs create and update inputs", func(s *EntitySchema) { s.HasCreate = false }, true, true},
 		{"missing update", "needs create and update inputs", func(s *EntitySchema) { s.HasUpdate = false }, true, true},
+		{"not integration mapped", "needs integration mapping", func(s *EntitySchema) { s.IntegrationMapped = false }, true, true},
 		{"missing visibility", "needs the externally_visible field", func(*EntitySchema) {}, true, false},
 		{"missing system_owned", "needs the system_owned field", func(*EntitySchema) {}, false, true},
 		{"missing owner", "needs an org owner edge", func(s *EntitySchema) { s.OwnerField = "" }, true, true},
