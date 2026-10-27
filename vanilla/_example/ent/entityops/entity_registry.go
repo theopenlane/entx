@@ -94,6 +94,20 @@ type MatchCandidate struct {
 	Value string
 }
 
+// SourceFilter selects the rows written from one source definition and instance, scoped to the caller's organization
+// by the schema's organization interceptor and hook
+type SourceFilter struct {
+	// DefinitionID is the integration definition the rows were written by
+	DefinitionID string
+	// InstanceID is the source instance the rows were written from
+	InstanceID string
+	// NotUpdatedAfter skips rows updated after this time when set, keeping rows changed since they were written
+	NotUpdatedAfter *time.Time
+}
+
+// RowCleanup runs after a row is deleted, for cleanup the delete hooks do not cover
+type RowCleanup func(ctx context.Context, id string) error
+
 // Schema is the runtime representation of a registered entity schema. It carries the schema
 // identity and its operation closures. Load, Fields, and Edges are universal; the remaining
 // closures are emitted only for schemas whose capabilities can reach them and are nil otherwise
@@ -136,6 +150,9 @@ type Schema struct {
 	MarkRemoved func(ctx context.Context, client *generated.Client, ids []string, at time.Time, runID string) error
 	// FillProvenance fills missing provenance on rows linked to the installation and reports rows written
 	FillProvenance func(ctx context.Context, client *generated.Client, installation *generated.Integration) (int, error)
+	// DeleteBySource deletes the caller's rows matching the source filter, then runs cleanup for each deleted id when set,
+	// and returns the deleted ids, emitted only for owned schemas carrying source provenance
+	DeleteBySource func(ctx context.Context, client *generated.Client, filter SourceFilter, cleanup RowCleanup) ([]string, error)
 	// Load loads a single entity by ID and returns its JSON representation
 	Load func(ctx context.Context, client *generated.Client, entityID string) (json.RawMessage, error)
 	// LoadObject loads the native generated Ent object for consumers that require its interfaces;
@@ -306,7 +323,7 @@ func (s *Schema) handleIngest(ctx context.Context, client *generated.Client, res
 		return err
 	}
 
-	payload = StampProvenance(payload, s, integration, integration.DefinitionID, request.RunID)
+	payload = StampProvenance(payload, s, ProvenanceSource{Integration: integration, DefinitionID: integration.DefinitionID, RunID: request.RunID})
 
 	payload, err = s.Ingest.prepare(ctx, integration, payload)
 	if err != nil {
@@ -684,22 +701,44 @@ const (
 	FieldIntegrationRunID = "integration_run_id"
 )
 
+// ProvenanceSource identifies the writer whose provenance StampProvenance stamps onto an ingest payload
+type ProvenanceSource struct {
+	// Integration is the writing installation, nil for runtime ingest
+	Integration *generated.Integration
+	// DefinitionID is the definition runtime ingest runs under, used when Integration is nil
+	DefinitionID string
+	// OwnerID is the organization runtime ingest writes for, empty to write system-owned rows
+	OwnerID string
+	// SourceInstanceID is the external instance runtime ingest records came from
+	SourceInstanceID string
+	// RunID is the integration run writing the record
+	RunID string
+}
+
 // StampProvenance writes the schema's trusted integration-derived provenance columns and ownership
 // edges onto an ingest payload from the writing installation, overriding anything the mapping
 // emitted for them; it is the sole writer of provenance columns for both the synchronous and the
 // durable ingest paths, so a queued record persists with the same provenance a batched one does;
-// a nil installation stamps only the run id and the definition id, which is how runtime ingest writes system-owned rows
-func StampProvenance(payload json.RawMessage, schema *Schema, integration *generated.Integration, definitionID, runID string) json.RawMessage {
+// a nil installation stamps the run id, definition id, and the runtime owner and source instance when set,
+// and runtime ingest with no owner writes system-owned rows
+func StampProvenance(payload json.RawMessage, schema *Schema, source ProvenanceSource) json.RawMessage {
 	type provenanceValue struct {
 		field string
 		value string
 	}
 
+	integration := source.Integration
+	runID := source.RunID
+
 	values := []provenanceValue{provenanceValue{FieldIntegrationRunID, runID}}
 
 	switch {
 	case integration == nil:
-		values = append(values, provenanceValue{FieldSourceDefinitionID, definitionID})
+		values = append(values,
+			provenanceValue{FieldSourceDefinitionID, source.DefinitionID},
+			provenanceValue{schema.OwnerField, source.OwnerID},
+			provenanceValue{FieldSourceInstanceID, source.SourceInstanceID},
+		)
 	default:
 		values = append(values,
 			provenanceValue{schema.OwnerField, integration.OwnerID},
