@@ -975,7 +975,7 @@ func TestReconcileEmission(t *testing.T) {
 	require.Contains(t, registry, "return sql.EqualFold(s.C(field), value)")
 	require.Contains(t, registry, "jsonArrayMatch(field, lo.Map(values, func(value string, _ int) string { return strings.ToLower(value) }))(s)")
 	require.NotContains(t, registry, "matchKeyIn")
-	require.Contains(t, registry, `WriteString(") AS v WHERE LOWER(v) IN (").Args(lo.ToAnySlice(values)...).WriteString("))")`)
+	require.Contains(t, registry, `WriteString(" ELSE '[]'::jsonb END) AS v WHERE LOWER(v) IN (").Args(lo.ToAnySlice(values)...).WriteString("))")`)
 	require.Contains(t, registry, "jsonb_array_elements_text(CASE WHEN jsonb_typeof(")
 	require.NotContains(t, registry, "LIKE")
 
@@ -993,7 +993,7 @@ func TestReconcileEmission(t *testing.T) {
 	require.NotContains(t, registry, "WithInternalCrossOrgContext")
 
 	require.Contains(t, registry, "func (s *Schema) applyIngestFill(ctx context.Context, client *generated.Client, row json.RawMessage, payload json.RawMessage) (changed bool, managed bool, err error)")
-	require.Contains(t, registry, `if ownerID != "" && lookupValue(row, FieldManagedBy) == "" && lookupValue(payload, FieldManagedBy) != "" {`)
+	require.Contains(t, registry, `if ownerID != "" && lookupValue(row, FieldManagedBy) == "" {`)
 	require.Contains(t, registry, "changed, managed, err = s.applyIngestUpdate(ctx, client, ownerID, candidate, payload)")
 	require.Contains(t, registry, "return !changes.Empty() || len(throughIDs) > 0, false, nil")
 }

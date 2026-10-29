@@ -948,7 +948,7 @@ func (k lookupKey) cacheKeys(s *Schema) []lookupMatchKey {
 // lookupKeysFor returns every lookup alternative the payload fully carries, in declared order; a string-array field contributes one tuple per element
 func lookupKeysFor(s *Schema, payload json.RawMessage) []lookupKey {
 	return lo.FilterMap(s.Lookup, func(alt LookupAlternative, i int) (lookupKey, bool) {
-		tuples := []LookupValues{{}}
+		tuples := []LookupValues{LookupValues{}}
 
 		for _, name := range alt.Fields {
 			field, found := s.FieldByName(name)
