@@ -154,6 +154,10 @@ type EntitySchema struct {
 	HasIntegrationID bool
 	// HasIntegrationRunID reports whether the schema carries an integration_run_id field
 	HasIntegrationRunID bool
+	// HasSourceProvenance reports whether the schema carries the source_definition_id and source_instance_id fields
+	HasSourceProvenance bool
+	// HasUpdatedAt reports whether the schema carries an updated_at field
+	HasUpdatedAt bool
 	// IntegrationRunM2MEdge is the name of the schema's to-many mutable edge to IntegrationRun, if any
 	IntegrationRunM2MEdge string
 	// LookupAlternatives are the schema's ordered composite ingest lookup keys as snake_case field name sets
@@ -279,6 +283,21 @@ const integrationIDFieldName = "integration_id"
 // integrationRunIDFieldName is the provenance column recording the integration run that last wrote a record
 const integrationRunIDFieldName = "integration_run_id"
 
+// sourceDefinitionIDFieldName is the provenance column recording the integration definition a row came from
+const sourceDefinitionIDFieldName = "source_definition_id"
+
+// sourceDefinitionVersionFieldName is the provenance column recording the source definition version
+const sourceDefinitionVersionFieldName = "source_definition_version"
+
+// sourceInstanceIDFieldName is the provenance column recording the source instance a row came from
+const sourceInstanceIDFieldName = "source_instance_id"
+
+// updatedAtFieldName is the audit column recording when a row last changed
+const updatedAtFieldName = "updated_at"
+
+// managedByFieldName is the name of the field that records which installation owns a record
+const managedByFieldName = "managed_by"
+
 // detectIntegrationEdges records the schema's mutable FK and to-many edges to Integration and IntegrationRun
 func detectIntegrationEdges(schema *EntitySchema) {
 	for _, edge := range schema.Edges {
@@ -401,7 +420,7 @@ func validateCatalog(schema EntitySchema) error {
 }
 
 // provenanceFieldNames are the record provenance columns every ingest-capable schema must carry
-var provenanceFieldNames = []string{"source_definition_id", "source_definition_version", "source_instance_id", "managed_by"}
+var provenanceFieldNames = []string{sourceDefinitionIDFieldName, sourceDefinitionVersionFieldName, sourceInstanceIDFieldName, managedByFieldName}
 
 // validateProvenanceFields fails generation when an ingest-capable schema lacks the provenance fields
 func validateProvenanceFields(schema EntitySchema) error {
@@ -713,6 +732,8 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 			SystemScoped:        fieldOptional(schema, ownerField) && hasField(schema, systemOwnedFieldName),
 			HasIntegrationID:    hasField(schema, integrationIDFieldName),
 			HasIntegrationRunID: hasField(schema, integrationRunIDFieldName),
+			HasSourceProvenance: hasField(schema, sourceDefinitionIDFieldName) && hasField(schema, sourceInstanceIDFieldName),
+			HasUpdatedAt:        hasField(schema, updatedAtFieldName),
 		}
 
 		schemaRules, err := schemaTaskRules(schema)

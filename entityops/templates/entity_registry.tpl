@@ -104,6 +104,20 @@ type MatchCandidate struct {
 	Value string
 }
 
+// SourceFilter selects the rows written from one source definition and instance, scoped to the caller's organization
+// by the schema's organization interceptor and hook
+type SourceFilter struct {
+	// DefinitionID is the integration definition the rows were written by
+	DefinitionID string
+	// InstanceID is the source instance the rows were written from
+	InstanceID string
+	// NotUpdatedAfter skips rows updated after this time when set, keeping rows changed since they were written
+	NotUpdatedAfter *time.Time
+}
+
+// RowCleanup runs after a row is deleted, for cleanup the delete hooks do not cover
+type RowCleanup func(ctx context.Context, id string) error
+
 // Schema is the runtime representation of a registered entity schema. It carries the schema
 // identity and its operation closures. Load, Fields, and Edges are universal; the remaining
 // closures are emitted only for schemas whose capabilities can reach them and are nil otherwise
@@ -146,6 +160,9 @@ type Schema struct {
 	MarkRemoved func(ctx context.Context, client *generated.Client, ids []string, at time.Time, runID string) error
 	// FillProvenance fills missing provenance on rows linked to the installation and reports rows written
 	FillProvenance func(ctx context.Context, client *generated.Client, installation *generated.Integration) (int, error)
+	// DeleteBySource deletes the caller's rows matching the source filter, then runs cleanup for each deleted id when set,
+	// and returns the deleted ids, emitted only for owned schemas carrying source provenance
+	DeleteBySource func(ctx context.Context, client *generated.Client, filter SourceFilter, cleanup RowCleanup) ([]string, error)
 	// Load loads a single entity by ID and returns its JSON representation
 	Load func(ctx context.Context, client *generated.Client, entityID string) (json.RawMessage, error)
 	// LoadObject loads the native generated Ent object for consumers that require its interfaces;
@@ -1966,6 +1983,48 @@ func init() {
 		}
 
 		return nil
+	}
+{{- end }}
+{{- end }}
+{{- range $schema := .Schemas }}
+{{- if and $schema.HasSourceProvenance $schema.OwnerField }}
+	Schema{{ $schema.Name }}.DeleteBySource = func(ctx context.Context, client *generated.Client, filter SourceFilter, cleanup RowCleanup) ([]string, error) {
+		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpDelete}
+
+		query := client.{{ $schema.Name }}.Query().
+			Where(
+				{{ $schema.PredicatePackage }}.SourceDefinitionID(filter.DefinitionID),
+				{{ $schema.PredicatePackage }}.SourceInstanceID(filter.InstanceID),
+			)
+{{- if $schema.HasUpdatedAt }}
+
+		if filter.NotUpdatedAfter != nil {
+			query = query.Where({{ $schema.PredicatePackage }}.UpdatedAtLTE(*filter.NotUpdatedAfter))
+		}
+{{- end }}
+
+		ids, err := query.IDs(ctx)
+		if err != nil {
+			return nil, logError(ctx, ref, ErrQueryFailed, err)
+		}
+
+		for _, chunk := range lo.Chunk(ids, ingestQueryChunkSize) {
+			if _, err := client.{{ $schema.Name }}.Delete().Where({{ $schema.PredicatePackage }}.IDIn(chunk...)).Exec(ctx); err != nil {
+				return nil, logError(ctx, ref, ErrDeleteFailed, err)
+			}
+		}
+
+		if cleanup == nil {
+			return ids, nil
+		}
+
+		for _, id := range ids {
+			if err := cleanup(ctx, id); err != nil {
+				return ids, logError(ctx, ref, ErrDeleteFailed, err)
+			}
+		}
+
+		return ids, nil
 	}
 {{- end }}
 {{- end }}

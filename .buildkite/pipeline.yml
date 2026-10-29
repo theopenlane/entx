@@ -86,7 +86,7 @@ steps:
               download: "coverage.out"
               step: "go_test"
           - docker#v5.14.0:
-              image: "sonarsource/sonar-scanner-cli:12.1"
+              image: "sonarsource/sonar-scanner-cli:12.3"
               propagate-environment: true
               propagate-uid-gid: true
               environment:
@@ -105,7 +105,7 @@ steps:
               download: coverage.out
               step: "go_test"
           - docker#v5.14.0:
-              image: "sonarsource/sonar-scanner-cli:12.1"
+              image: "sonarsource/sonar-scanner-cli:12.3"
               propagate-environment: true
               propagate-uid-gid: true
               environment:
