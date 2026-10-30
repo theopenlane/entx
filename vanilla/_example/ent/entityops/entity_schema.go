@@ -104,8 +104,6 @@ type FieldDescriptor struct {
 	MatchKey bool `json:"matchKey,omitempty"`
 	// InputKey is the integration mapping create-input key (lowerCamel); empty for non-mapped fields
 	InputKey string `json:"inputKey,omitempty"`
-	// LookupKey reports whether the field is the ingest upsert lookup column for its schema
-	LookupKey bool `json:"lookupKey,omitempty"`
 	// DisplayKey reports whether the field is the schema's display-name source
 	DisplayKey bool `json:"displayKey,omitempty"`
 	// Clearable reports whether update inputs support explicitly clearing this field

@@ -154,8 +154,6 @@ type Schema struct {
 	SnapshotScope func(ctx context.Context, client *generated.Client, ownerID, definitionID, instanceID, managedBy string) ([]json.RawMessage, error)
 	// MarkRemoved bulk-marks the given ids removed at the given time under the given integration run
 	MarkRemoved func(ctx context.Context, client *generated.Client, ids []string, at time.Time, runID string) error
-	// FillProvenance fills missing provenance on rows linked to the installation and reports rows written
-	FillProvenance func(ctx context.Context, client *generated.Client, installation *generated.Integration) (int, error)
 	// DeleteBySource deletes the caller's rows matching the source filter, then runs cleanup for each deleted id when set,
 	// and returns the deleted ids, emitted only for owned schemas carrying source provenance
 	DeleteBySource func(ctx context.Context, client *generated.Client, filter SourceFilter, cleanup RowCleanup) ([]string, error)
@@ -2521,54 +2519,6 @@ func init() {
 		}
 
 		return ids, nil
-	}
-{{- end }}
-{{- end }}
-{{- range $schema := .Schemas }}
-{{- if and $schema.IntegrationMapped $schema.HasCreate (or $schema.HasIntegrationID $schema.IntegrationM2MEdge) }}
-	Schema{{ $schema.Name }}.FillProvenance = func(ctx context.Context, client *generated.Client, installation *generated.Integration) (int, error) {
-		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpUpdate}
-		instanceID := installation.InstallationMetadata.Display.ExternalID
-
-		predicates := []predicate.{{ $schema.Name }}{
-			{{ $schema.PredicatePackage }}.And(
-{{- if $schema.HasIntegrationID }}
-				{{ $schema.PredicatePackage }}.IntegrationID(installation.ID),
-{{- else }}
-				{{ $schema.PredicatePackage }}.Has{{ $schema.IntegrationM2MEdge | pascal }}With(integration.ID(installation.ID)),
-				{{ $schema.PredicatePackage }}.Not({{ $schema.PredicatePackage }}.Has{{ $schema.IntegrationM2MEdge | pascal }}With(integration.IDNEQ(installation.ID))),
-{{- end }}
-				{{ $schema.PredicatePackage }}.Or({{ $schema.PredicatePackage }}.SourceDefinitionIDIsNil(), {{ $schema.PredicatePackage }}.SourceDefinitionID(""), {{ $schema.PredicatePackage }}.SourceInstanceIDIsNil(), {{ $schema.PredicatePackage }}.SourceInstanceID("")),
-				{{ $schema.PredicatePackage }}.Or({{ $schema.PredicatePackage }}.ManagedByIsNil(), {{ $schema.PredicatePackage }}.ManagedBy(""), {{ $schema.PredicatePackage }}.ManagedBy(installation.ID)),
-			),
-		}
-
-		if instanceID != "" {
-			predicates = append(predicates, {{ $schema.PredicatePackage }}.And(
-				{{ $schema.PredicatePackage }}.ManagedBy(installation.ID),
-				{{ $schema.PredicatePackage }}.Or({{ $schema.PredicatePackage }}.SourceInstanceIDIsNil(), {{ $schema.PredicatePackage }}.SourceInstanceIDNEQ(instanceID)),
-			))
-		}
-
-		update := client.{{ $schema.Name }}.Update().
-			Where({{ $schema.PredicatePackage }}.Or(predicates...)).
-			SetSourceDefinitionID(installation.DefinitionID).
-			SetManagedBy(installation.ID)
-
-		if installation.DefinitionVersion != "" {
-			update = update.SetSourceDefinitionVersion(installation.DefinitionVersion)
-		}
-
-		if instanceID != "" {
-			update = update.SetSourceInstanceID(instanceID)
-		}
-
-		affected, err := update.Save(ctx)
-		if err != nil {
-			return 0, logPersistError(ctx, ref, ErrUpdateFailed, err)
-		}
-
-		return affected, nil
 	}
 {{- end }}
 {{- end }}
