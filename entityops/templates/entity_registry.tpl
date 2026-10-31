@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,8 +41,8 @@ import (
 {{- end }}
 )
 
-// entityRef is a lightweight reference to an entity
-type entityRef struct {
+// EntityRef is a lightweight reference to a matched entity: its id and schema descriptor
+type EntityRef struct {
 	// ID is the entity identifier
 	ID string
 	// Schema is the entity's schema descriptor
@@ -76,32 +77,28 @@ type IngestCapability struct {
 	buildUpdate func(context.Context, *generated.Client, json.RawMessage, json.RawMessage) (ent.Mutation, func(context.Context) error, error)
 }
 
-// CatalogCapability describes the catalog pointer, the visibility and key markers, and the fields copied from a catalog row
+// CatalogPointerField is the column naming the catalog row an adopted row was created from
+const CatalogPointerField = "catalog_id"
+
+// CatalogVisibilityField is the bool column marking a catalog row as visible to organizations
+const CatalogVisibilityField = "externally_visible"
+
+// systemOwnedField is the bool column marking a system-owned row
+const systemOwnedField = "system_owned"
+
+// CatalogCapability holds the per-schema catalog closures
 type CatalogCapability struct {
-	// PointerField is the snake_case foreign-key field naming the catalog row an adopted row came from
-	PointerField string
-	// VisibilityField is the snake_case bool field marking a catalog row as visible to organizations
-	VisibilityField string
-	// KeyField is the snake_case field on adopted rows holding the catalog row's lookup key
-	KeyField string
-	// Fields lists the snake_case fields copied from the catalog row on adopt and refresh
-	Fields []string
-	// adopt finds or creates one organization's adopted row for a catalog row
-	adopt func(ctx context.Context, client *generated.Client, catalogID, ownerID string, overlay json.RawMessage) (string, bool, error)
-	// refresh re-copies the catalog fields onto every adopted row of a catalog row
-	refresh func(ctx context.Context, client *generated.Client, catalogID string) (int, error)
-	// relink points rows carrying a catalog row's key at that row when their pointer is null or stale
-	relink func(ctx context.Context, client *generated.Client, catalogID string) (int, error)
-	// match returns the first visible catalog row matching a candidate in order
-	match func(ctx context.Context, client *generated.Client, candidates []MatchCandidate) (string, bool, error)
-	// visible reports whether the row is a visible system-owned catalog row
-	visible func(ctx context.Context, client *generated.Client, catalogID string) (bool, error)
+	// copies loads every row pointing at a catalog row
+	copies func(ctx context.Context, client *generated.Client, catalogID string) ([]json.RawMessage, error)
+	// unlink clears the catalog pointer on one row
+	unlink func(ctx context.Context, client *generated.Client, id string) error
+	// unlinkAll clears the catalog pointer on every row pointing at a catalog row
+	unlinkAll func(ctx context.Context, client *generated.Client, catalogID string) (int, error)
 }
 
-// MatchCandidate is one field and value to match a catalog row on, tried in the order given
-type MatchCandidate struct {
-	Field string
-	Value string
+// CatalogFields returns the source-managed field names
+func (s *Schema) CatalogFields() []string {
+	return lo.FilterMap(s.Fields, func(f FieldDescriptor, _ int) (string, bool) { return f.Name, f.SourceManaged })
 }
 
 // SourceFilter selects the rows written from one source definition and instance, scoped to the caller's organization
@@ -126,8 +123,7 @@ type Schema struct {
 	// Create creates a new entity from a JSON input and returns the entity ID; emitted only for
 	// integration-mapped and catalog schemas, whose ingest upsert and adopt are the sole callers
 	Create func(ctx context.Context, client *generated.Client, input json.RawMessage) (string, error)
-	// Update applies a typed update input to an entity by ID; emitted only for integration-mapped
-	// and workflow-eligible schemas
+	// Update applies a typed update input by ID; emitted for integration-mapped, workflow-eligible and catalog schemas
 	Update func(ctx context.Context, client *generated.Client, entityID string, input json.RawMessage) error
 	// Query returns all entities of this schema within an organization as JSON; emitted only for
 	// integration-mapped schemas and link-rule targets, whose target selection is the sole caller
@@ -158,8 +154,6 @@ type Schema struct {
 	SnapshotScope func(ctx context.Context, client *generated.Client, ownerID, definitionID, instanceID, managedBy string) ([]json.RawMessage, error)
 	// MarkRemoved bulk-marks the given ids removed at the given time under the given integration run
 	MarkRemoved func(ctx context.Context, client *generated.Client, ids []string, at time.Time, runID string) error
-	// FillProvenance fills missing provenance on rows linked to the installation and reports rows written
-	FillProvenance func(ctx context.Context, client *generated.Client, installation *generated.Integration) (int, error)
 	// DeleteBySource deletes the caller's rows matching the source filter, then runs cleanup for each deleted id when set,
 	// and returns the deleted ids, emitted only for owned schemas carrying source provenance
 	DeleteBySource func(ctx context.Context, client *generated.Client, filter SourceFilter, cleanup RowCleanup) ([]string, error)
@@ -422,10 +416,18 @@ func applyIngestDefaults(schema *Schema, payload json.RawMessage, defaults map[s
 	return prepared, nil
 }
 
-// isDefaultableJSON reports whether a mapped JSON value is absent in the semantic sense used by
-// ingest defaults. False and numeric zero remain explicit caller values.
+// isDefaultableJSON reports whether a JSON value is missing, null, an empty string or an empty container
 func isDefaultableJSON(raw json.RawMessage) bool {
-	return jsonx.IsEmptyRawMessage(raw) || bytes.Equal(bytes.TrimSpace(raw), []byte(`""`))
+	if jsonx.IsEmptyRawMessage(raw) {
+		return true
+	}
+
+	switch string(bytes.TrimSpace(raw)) {
+	case `""`, "[]", "{}":
+		return true
+	}
+
+	return false
 }
 
 // applyClears rewrites explicit null values in a snake_case payload to the generated Clear<Field>
@@ -674,14 +676,20 @@ func coerceTime(value any) (time.Time, error) {
 	}
 }
 
-// matchKeyIn returns a selector predicate matching the given match-key column against any of values,
-// testing JSON string arrays for membership and every other column for equality
-func matchKeyIn(schema *Schema, field string, values []string) func(*sql.Selector) {
+// lookupPredicate builds one column's lookup predicate: equality, array membership, or their case-folded forms for CaseInsensitive fields
+func lookupPredicate(schema *Schema, field string, values []string) func(*sql.Selector) {
 	descriptor, _ := schema.FieldByName(field)
+	array := descriptor.Type == "[]string"
 
 	return func(s *sql.Selector) {
-		switch descriptor.Type {
-		case "[]string":
+		switch {
+		case descriptor.CaseInsensitive && array:
+			jsonArrayMatch(field, lo.Map(values, func(value string, _ int) string { return strings.ToLower(value) }))(s)
+		case descriptor.CaseInsensitive:
+			s.Where(sql.Or(lo.Map(values, func(value string, _ int) *sql.Predicate {
+				return sql.EqualFold(s.C(field), value)
+			})...))
+		case array:
 			s.Where(sql.Or(lo.Map(values, func(value string, _ int) *sql.Predicate {
 				return sqljson.ValueContains(s.C(field), value)
 			})...))
@@ -811,10 +819,27 @@ func stampProvenanceKey(doc map[string]json.RawMessage, key string, value any) b
 	return true
 }
 
-// applyStampedFields sets the stamped provenance keys carried by payload on the mutation by name, for
-// fields the schema's GraphQL input type does not carry
+// applyStampedFields sets payload keys the GraphQL input type does not carry directly on the mutation
 func applyStampedFields(mutation ent.Mutation, payload json.RawMessage, fields ...string) error {
 	for _, field := range fields {
+		raw, ok := jsonx.DecodeObjectKey[json.RawMessage](payload, field)
+		if !ok || jsonx.IsEmptyRawMessage(raw) {
+			continue
+		}
+
+		if bytes.HasPrefix(bytes.TrimSpace(raw), []byte("{")) {
+			decoded, err := jsonx.Decode[map[string]any](raw)
+			if err != nil {
+				return err
+			}
+
+			if err := mutation.SetField(field, decoded); err != nil {
+				return err
+			}
+
+			continue
+		}
+
 		v := lookupValue(payload, field)
 		if v == "" {
 			continue
@@ -870,62 +895,104 @@ func integrationActive(ctx context.Context, client *generated.Client, integratio
 }
 
 // filterByAlternativeFields keeps rows whose lookup alternative field values match one of the key tuples
-func filterByAlternativeFields(rows []json.RawMessage, fields []string, keys []LookupValues) []json.RawMessage {
-	kept := make([]json.RawMessage, 0, len(rows))
-
-	for _, row := range rows {
-		rowValues := make(LookupValues, len(fields))
-		for _, field := range fields {
-			rowValues[field] = lookupValue(row, field)
-		}
-
-		if lo.SomeBy(keys, func(key LookupValues) bool {
-			return lo.EveryBy(fields, func(field string) bool { return rowValues[field] == key[field] })
-		}) {
-			kept = append(kept, row)
-		}
-	}
-
-	return kept
+func filterByAlternativeFields(s *Schema, rows []json.RawMessage, fields []string, keys []LookupValues) []json.RawMessage {
+	return lo.Filter(rows, func(row json.RawMessage, _ int) bool {
+		return lo.SomeBy(keys, func(key LookupValues) bool {
+			return lo.EveryBy(fields, func(field string) bool { return lookupFieldMatches(s, row, field, key[field]) })
+		})
+	})
 }
 
-// lookupKeyFor resolves the first lookup alternative fully present in the payload
-func lookupKeyFor(s *Schema, payload json.RawMessage) (alternative int, values LookupValues, ok bool) {
-	for i, alt := range s.Lookup {
-		candidate := make(LookupValues, len(alt.Fields))
+// lookupFieldMatches reports whether a row's field holds value: string arrays by membership, CaseInsensitive fields folding case
+func lookupFieldMatches(s *Schema, row json.RawMessage, field, value string) bool {
+	descriptor, _ := s.FieldByName(field)
 
-		complete := true
+	equal := func(a, b string) bool { return a == b }
+	if descriptor.CaseInsensitive {
+		equal = strings.EqualFold
+	}
+
+	if descriptor.Type == "[]string" {
+		values, _ := jsonx.DecodeObjectKey[[]string](row, field)
+
+		return lo.ContainsBy(values, func(held string) bool { return equal(held, value) })
+	}
+
+	return equal(lookupValue(row, field), value)
+}
+
+// lookupInputKey returns a field's mapping input key, or its name when unmapped
+func lookupInputKey(field FieldDescriptor) string {
+	if field.InputKey != "" {
+		return field.InputKey
+	}
+
+	return field.Name
+}
+
+// lookupKey is one lookup alternative with every key tuple a payload carries for it
+type lookupKey struct {
+	alternative int
+	values      []LookupValues
+}
+
+// cacheKeys renders every tuple of the lookup key into its prefetch cache key
+func (k lookupKey) cacheKeys(s *Schema) []lookupMatchKey {
+	return lo.Map(k.values, func(tuple LookupValues, _ int) lookupMatchKey {
+		return lookupMatchKey{schema: s.Snake, alternative: k.alternative, keys: EncodeLookupKey(s, s.Lookup[k.alternative], tuple)}
+	})
+}
+
+// lookupKeysFor returns every lookup alternative the payload fully carries, in declared order; a string-array field contributes one tuple per element
+func lookupKeysFor(s *Schema, payload json.RawMessage) []lookupKey {
+	return lo.FilterMap(s.Lookup, func(alt LookupAlternative, i int) (lookupKey, bool) {
+		tuples := []LookupValues{LookupValues{}}
 
 		for _, name := range alt.Fields {
 			field, found := s.FieldByName(name)
 			if !found {
-				complete = false
-				break
+				return lookupKey{}, false
 			}
 
-			value := lookupValue(payload, field.InputKey)
-			if value == "" {
-				complete = false
-				break
+			values := lookupFieldValues(payload, field)
+			if len(values) == 0 {
+				return lookupKey{}, false
 			}
 
-			candidate[name] = value
+			tuples = lo.FlatMap(tuples, func(tuple LookupValues, _ int) []LookupValues {
+				return lo.Map(values, func(value string, _ int) LookupValues { return lo.Assign(tuple, LookupValues{name: value}) })
+			})
 		}
 
-		if complete {
-			return i, candidate, true
-		}
-	}
-
-	return 0, nil, false
+		return lookupKey{alternative: i, values: tuples}, true
+	})
 }
 
-// EncodeLookupKey renders a lookup alternative's key values into the lookup cache key
-func EncodeLookupKey(alternative LookupAlternative, keys LookupValues) string {
-	parts := make([]string, len(alternative.Fields))
-	for i, field := range alternative.Fields {
-		parts[i] = keys[field]
+// lookupFieldValues returns the non-empty values a payload carries for a field, every element of a string array
+func lookupFieldValues(payload json.RawMessage, field FieldDescriptor) []string {
+	if field.Type == "[]string" {
+		decoded, _ := jsonx.DecodeObjectKey[[]string](payload, lookupInputKey(field))
+
+		return NormalizeStrings(decoded)
 	}
+
+	if value := lookupValue(payload, lookupInputKey(field)); value != "" {
+		return []string{value}
+	}
+
+	return nil
+}
+
+// EncodeLookupKey renders a lookup alternative's key values into the lookup cache key, lowering CaseInsensitive fields
+func EncodeLookupKey(schema *Schema, alternative LookupAlternative, keys LookupValues) string {
+	parts := lo.Map(alternative.Fields, func(field string, _ int) string {
+		descriptor, _ := schema.FieldByName(field)
+		if descriptor.CaseInsensitive {
+			return strings.ToLower(keys[field])
+		}
+
+		return keys[field]
+	})
 
 	return strings.Join(parts, "\x1f")
 }
@@ -1064,57 +1131,23 @@ func (s *Schema) Upsert(ctx context.Context, client *generated.Client, ownerID s
 		return "", false, false, logError(ctx, ref, ErrUpsertUnsupported, nil)
 	}
 
-	alternative, keys, hasKey := lookupKeyFor(s, payload)
-
-	var (
-		rows      []json.RawMessage
-		cacheKey  lookupMatchKey
-		cacheable bool
-	)
-
-	switch {
-	case !hasKey:
+	candidates := lookupKeysFor(s, payload)
+	if len(candidates) == 0 {
 		return "", false, false, ErrUpsertKeyMissing
-	default:
-		cacheKey = lookupMatchKey{schema: s.Snake, alternative: alternative, keys: EncodeLookupKey(s.Lookup[alternative], keys)}
+	}
 
-		cache, ok := lookupMatchCacheContextKey.Get(ctx)
-		if !ok {
-			rows, err = s.QueryByLookup(ctx, client, ownerID, alternative, []LookupValues{keys})
-			if err != nil {
-				return "", false, false, err
-			}
+	cache, cacheable := lookupMatchCacheContextKey.Get(ctx)
 
+	var rows []json.RawMessage
+
+	for _, key := range candidates {
+		if rows, err = s.lookupRows(ctx, client, ownerID, key, cache); err != nil {
+			return "", false, false, err
+		}
+
+		if len(rows) > 0 {
 			break
 		}
-
-		cacheable = true
-
-		entry, present := cache[cacheKey]
-		if !present {
-			rows, err = s.QueryByLookup(ctx, client, ownerID, alternative, []LookupValues{keys})
-			if err != nil {
-				return "", false, false, err
-			}
-
-			break
-		}
-
-		for _, createdID := range entry.createdIDs {
-			row, lerr := s.Load(ctx, client, createdID)
-			if lerr != nil {
-				return "", false, false, lerr
-			}
-
-			entry.rows = append(entry.rows, row)
-		}
-
-		if len(entry.createdIDs) > 0 {
-			entry.createdIDs = nil
-			cache[cacheKey] = entry
-		}
-
-		rows = entry.rows
 	}
 
 	candidate, _, foreign, err := selectIngestCandidate(s, rows, payload)
@@ -1134,17 +1167,13 @@ func (s *Schema) Upsert(ctx context.Context, client *generated.Client, ownerID s
 			return "", false, false, err
 		}
 
-		if s.Catalog != nil && ownerID == "" {
-			if err := s.relinkCreated(ctx, client, id); err != nil {
-				return "", false, false, err
-			}
-		}
-
 		if cacheable {
-			if cache, ok := lookupMatchCacheContextKey.Get(ctx); ok {
-				entry := cache[cacheKey]
-				entry.createdIDs = append(entry.createdIDs, id)
-				cache[cacheKey] = entry
+			for _, candidate := range candidates {
+				for _, cacheKey := range candidate.cacheKeys(s) {
+					entry := cache[cacheKey]
+					entry.createdIDs = append(entry.createdIDs, id)
+					cache[cacheKey] = entry
+				}
 			}
 		}
 
@@ -1157,9 +1186,42 @@ func (s *Schema) Upsert(ctx context.Context, client *generated.Client, ownerID s
 		return "", false, false, logError(ctx, ref, ErrUpsertConflict, fmt.Errorf("invalid or cross-organization match for %s", s.Name))
 	}
 
-	changed, managed, err = s.applyIngestUpdate(ctx, client, candidate, payload)
+	changed, managed, err = s.applyIngestUpdate(ctx, client, ownerID, candidate, payload)
 
 	return id, changed, managed, err
+}
+
+// lookupRows returns the rows one lookup key matches, served from the prefetch cache when it holds every tuple of the key
+func (s *Schema) lookupRows(ctx context.Context, client *generated.Client, ownerID string, key lookupKey, cache lookupMatchCache) ([]json.RawMessage, error) {
+	keys := key.cacheKeys(s)
+
+	if !lo.EveryBy(keys, func(k lookupMatchKey) bool { return lo.HasKey(cache, k) }) {
+		return s.QueryByLookup(ctx, client, ownerID, key.alternative, key.values)
+	}
+
+	var rows []json.RawMessage
+
+	for _, k := range keys {
+		entry := cache[k]
+
+		for _, createdID := range entry.createdIDs {
+			row, err := s.Load(ctx, client, createdID)
+			if err != nil {
+				return nil, err
+			}
+
+			entry.rows = append(entry.rows, row)
+		}
+
+		if len(entry.createdIDs) > 0 {
+			entry.createdIDs = nil
+			cache[k] = entry
+		}
+
+		rows = append(rows, entry.rows...)
+	}
+
+	return lo.UniqBy(rows, entityID), nil
 }
 
 // pruneIngestFields drops unchanged and volatile-only assignments from the mutation
@@ -1296,8 +1358,65 @@ func (s *Schema) applyIngestResurrect(row json.RawMessage, payload json.RawMessa
 	return edited
 }
 
-// applyIngestUpdate applies the shared ingest write decision to one resolved row
-func (s *Schema) applyIngestUpdate(ctx context.Context, client *generated.Client, row json.RawMessage, payload json.RawMessage) (changed bool, managed bool, err error) {
+// provenanceFields are the provenance columns a fill never writes
+var provenanceFields = []string{FieldIntegrationID, FieldManagedBy, FieldPlatformID, FieldSourceDefinitionID, FieldSourceDefinitionVersion, FieldSourceInstanceID, FieldIntegrationRunID}
+
+// applyIngestFill fills empty fields and extends string arrays on an unmanaged row; no provenance, clears or claim
+func (s *Schema) applyIngestFill(ctx context.Context, client *generated.Client, row json.RawMessage, payload json.RawMessage) (changed bool, managed bool, err error) {
+	edges := lo.FilterMap([]string{s.IntegrationM2MEdge, s.IntegrationRunM2MEdge}, func(name string, _ int) (string, bool) {
+		edge, ok := s.EdgeByName(name)
+
+		return edge.CreateField, ok && name != ""
+	})
+
+	stripped := jsonx.EditObject(payload, func(doc map[string]json.RawMessage) bool {
+		for _, key := range append(edges, provenanceFields...) {
+			delete(doc, key)
+		}
+
+		for key, value := range doc {
+			if jsonx.IsEmptyRawMessage(value) {
+				delete(doc, key)
+			}
+		}
+
+		return true
+	})
+
+	rekeyed, throughIDs := splitThroughEdgeIDs(s, s.rekeyEdgesForUpdate(stripped))
+
+	mutation, save, err := s.Ingest.buildUpdate(ctx, client, row, rekeyed)
+	if err != nil {
+		return false, false, err
+	}
+
+	if err := s.fillMutation(ctx, mutation); err != nil {
+		return false, false, err
+	}
+
+	changes := ChangeSetFromMutation(mutation)
+
+	if !changes.Empty() {
+		if err := save(ctx); err != nil {
+			return false, false, err
+		}
+	}
+
+	if len(throughIDs) > 0 {
+		if err := applyThroughEdgeIDs(ctx, client, s, entityID(row), throughIDs); err != nil {
+			return false, false, err
+		}
+	}
+
+	return !changes.Empty() || len(throughIDs) > 0, false, nil
+}
+
+// applyIngestUpdate fills an unmanaged organization row and otherwise applies the writing installation's claim
+func (s *Schema) applyIngestUpdate(ctx context.Context, client *generated.Client, ownerID string, row json.RawMessage, payload json.RawMessage) (changed bool, managed bool, err error) {
+	if ownerID != "" && lookupValue(row, FieldManagedBy) == "" {
+		return s.applyIngestFill(ctx, client, row, payload)
+	}
+
 	owned, err := s.applyIngestClaim(ctx, client, row, payload)
 	if err != nil {
 		return false, true, err
@@ -1390,79 +1509,399 @@ func entityID(row json.RawMessage) string {
 	return id
 }
 
-// --- Catalog adoption ---
+{{- if $hasCatalog }}
 
-// Adopt returns the organization's adopted row for the catalog row, creating it from the catalog
-// fields plus overlay when absent; created reports whether a row was created
-func (s *Schema) Adopt(ctx context.Context, client *generated.Client, catalogID, ownerID string, overlay json.RawMessage) (id string, created bool, err error) {
+// --- Catalog reconciliation ---
+
+// Reconcile returns the organization's row for payload: an existing row is enriched, a catalog match is adopted as a new linked copy, otherwise the row is created
+func (s *Schema) Reconcile(ctx context.Context, client *generated.Client, ownerID string, payload json.RawMessage, links ...LinkSpec) (string, error) {
 	if s.Catalog == nil {
-		return "", false, ErrCatalogUnsupported
+		return "", ErrCatalogUnsupported
 	}
 
-	return s.Catalog.adopt(ctx, client, catalogID, ownerID, overlay)
+	ref := SchemaRef{Schema: s.Snake, Operation: refOpReconcile}
+	catalogID := lookupValue(payload, CatalogPointerField)
+	adopting := catalogID != ""
+
+	var row json.RawMessage
+
+	if adopting {
+		catalogRow, err := s.catalogRow(ctx, client, ref, catalogID)
+		if err != nil {
+			return "", err
+		}
+
+		if payload, row, err = s.adoptCatalogRow(ctx, client, ref, ownerID, payload, catalogRow); err != nil {
+			return "", err
+		}
+	}
+
+	if row == nil {
+		var err error
+
+		if row, err = s.resolveLookup(ctx, client, ownerID, payload); err != nil {
+			return "", err
+		}
+	}
+
+	if row == nil && !adopting {
+		catalogRow, err := s.resolveLookup(ctx, client, "", payload)
+		if err != nil {
+			return "", err
+		}
+
+		if catalogRow != nil {
+			adopting = true
+
+			if payload, row, err = s.adoptCatalogRow(ctx, client, ref, ownerID, payload, catalogRow); err != nil {
+				return "", err
+			}
+
+			if row == nil {
+				if row, err = s.resolveLookup(ctx, client, ownerID, payload); err != nil {
+					return "", err
+				}
+			}
+		}
+	}
+
+	if row != nil {
+		return entityID(row), s.reconcileHit(ctx, client, ownerID, row, payload, links)
+	}
+
+	return s.reconcileCreate(ctx, client, ref, ownerID, payload, adopting, links)
 }
 
-// RefreshAdopted re-copies the catalog fields onto every row adopted from the catalog row and returns how many changed
+// adoptCatalogRow merges the catalog row into payload and returns the organization's existing copy of it, nil when none
+func (s *Schema) adoptCatalogRow(ctx context.Context, client *generated.Client, ref SchemaRef, ownerID string, payload, catalogRow json.RawMessage) (json.RawMessage, json.RawMessage, error) {
+	merged, err := s.mergeCatalogRow(ctx, ref, payload, catalogRow)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	copies, err := s.Catalog.copies(ctx, client, entityID(catalogRow))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	existing, _ := lo.Find(copies, func(row json.RawMessage) bool { return lookupValue(row, s.OwnerField) == ownerID })
+
+	return merged, existing, nil
+}
+
+// RefreshAdopted rewrites the catalog row's source-managed fields onto every row pointing at it, each write running as the organization owning the copy, and returns how many rows were written
 func (s *Schema) RefreshAdopted(ctx context.Context, client *generated.Client, catalogID string) (int, error) {
 	if s.Catalog == nil {
 		return 0, ErrCatalogUnsupported
 	}
 
-	return s.Catalog.refresh(ctx, client, catalogID)
-}
+	ref := SchemaRef{Schema: s.Snake, Operation: refOpUpdate, EntityID: catalogID}
 
-// RelinkAdopted points rows carrying the catalog row's key at it when their pointer is null or stale and returns how many moved
-func (s *Schema) RelinkAdopted(ctx context.Context, client *generated.Client, catalogID string) (int, error) {
-	if s.Catalog == nil {
-		return 0, ErrCatalogUnsupported
-	}
-
-	return s.Catalog.relink(ctx, client, catalogID)
-}
-
-// Match returns the id of the first visible catalog row matching a candidate in order
-func (s *Schema) Match(ctx context.Context, client *generated.Client, candidates ...MatchCandidate) (string, bool, error) {
-	if s.Catalog == nil {
-		return "", false, ErrCatalogUnsupported
-	}
-
-	return s.Catalog.match(ctx, client, candidates)
-}
-
-// relinkCreated points adopted rows at a newly created row when it is a visible catalog row
-func (s *Schema) relinkCreated(ctx context.Context, client *generated.Client, id string) error {
-	visible, err := s.Catalog.visible(ctx, client, id)
+	row, err := s.Load(ctx, client, catalogID)
 	if err != nil {
-		return logError(ctx, SchemaRef{Schema: s.Snake, Operation: refOpQuery, EntityID: id}, ErrQueryFailed, err)
+		return 0, err
 	}
 
-	if !visible {
-		return nil
+	if !catalogVisible(row) {
+		return 0, nil
 	}
 
-	_, err = s.Catalog.relink(ctx, client, id)
+	payload, err := catalogPayload(row, s.CatalogFields())
+	if err != nil {
+		return 0, logError(ctx, ref, ErrDecodeFailed, err)
+	}
 
-	return err
+	copies, err := s.Catalog.copies(ctx, client, catalogID)
+	if err != nil {
+		return 0, err
+	}
+
+	for written, adopted := range copies {
+		if err := s.Update(auth.WithOrgInternalCaller(ctx, lookupValue(adopted, s.OwnerField)), client, entityID(adopted), payload); err != nil {
+			return written, err
+		}
+	}
+
+	return len(copies), nil
 }
+
+// Unlink clears the catalog pointer on one row, detaching it from its catalog row
+func (s *Schema) Unlink(ctx context.Context, client *generated.Client, id string) error {
+	if s.Catalog == nil {
+		return ErrCatalogUnsupported
+	}
+
+	return s.Catalog.unlink(ctx, client, id)
+}
+
+// resolveLookup returns the single row the first complete lookup alternative matches in the organization, or among visible catalog rows when ownerID is empty; nil when none matches
+func (s *Schema) resolveLookup(ctx context.Context, client *generated.Client, ownerID string, payload json.RawMessage) (json.RawMessage, error) {
+	catalog := ownerID == ""
+	if catalog {
+		ctx = auth.WithInternalReadCrossOrgContext(ctx)
+	}
+
+	for _, key := range lookupKeysFor(s, payload) {
+		rows, err := s.QueryByLookup(ctx, client, ownerID, key.alternative, key.values)
+		if err != nil {
+			return nil, err
+		}
+
+		if catalog {
+			rows = lo.Filter(rows, func(row json.RawMessage, _ int) bool { return catalogVisible(row) })
+		}
+
+		switch {
+		case len(rows) > 1:
+			return nil, logError(ctx, SchemaRef{Schema: s.Snake, Operation: refOpQuery}, ErrUpsertConflict, fmt.Errorf("%s.%s matched %d rows", s.Snake, strings.Join(s.Lookup[key.alternative].Fields, ","), len(rows)))
+		case len(rows) == 1:
+			return rows[0], nil
+		}
+	}
+
+	return nil, nil
+}
+
+// catalogRow loads the visible system-owned catalog row with the id, failing with ErrCatalogRowNotFound otherwise
+func (s *Schema) catalogRow(ctx context.Context, client *generated.Client, ref SchemaRef, catalogID string) (json.RawMessage, error) {
+	row, err := s.Load(auth.WithInternalReadCrossOrgContext(ctx), client, catalogID)
+
+	switch {
+	case generated.IsNotFound(err), err == nil && !catalogVisible(row):
+		return nil, logError(ctx, ref, ErrCatalogRowNotFound, fmt.Errorf("%s %s", s.Snake, catalogID))
+	case err != nil:
+		return nil, err
+	}
+
+	return row, nil
+}
+
+// catalogVisible reports whether a marshaled row is a visible system-owned catalog row
+func catalogVisible(row json.RawMessage) bool {
+	systemOwned, _ := jsonx.DecodeObjectKey[bool](row, systemOwnedField)
+	visible, _ := jsonx.DecodeObjectKey[bool](row, CatalogVisibilityField)
+
+	return systemOwned && visible
+}
+
+// mergeCatalogRow lays payload over the catalog row's populated source-managed fields and sets the pointer; an empty payload value never overrides
+func (s *Schema) mergeCatalogRow(ctx context.Context, ref SchemaRef, payload, catalogRow json.RawMessage) (json.RawMessage, error) {
+	base, err := catalogPayload(catalogRow, s.CatalogFields())
+	if err != nil {
+		return nil, logError(ctx, ref, ErrDecodeFailed, err)
+	}
+
+	merged, err := jsonx.ToRawMap(base)
+	if err != nil {
+		return nil, logError(ctx, ref, ErrDecodeFailed, err)
+	}
+
+	merged = lo.OmitBy(merged, func(_ string, value json.RawMessage) bool { return jsonx.IsEmptyRawMessage(value) })
+
+	overlay, err := jsonx.ToRawMap(payload)
+	if err != nil {
+		return nil, logError(ctx, ref, ErrDecodeFailed, err)
+	}
+
+	for name, value := range overlay {
+		if _, present := merged[name]; present && isDefaultableJSON(value) {
+			continue
+		}
+
+		merged[name] = value
+	}
+
+	if merged[CatalogPointerField], err = json.Marshal(entityID(catalogRow)); err != nil {
+		return nil, logError(ctx, ref, ErrMarshalFailed, err)
+	}
+
+	encoded, err := json.Marshal(merged)
+	if err != nil {
+		return nil, logError(ctx, ref, ErrMarshalFailed, err)
+	}
+
+	return encoded, nil
+}
+
+// reconcileHit fills the matched row's empty fields from payload and applies the links; the row is never linked
+func (s *Schema) reconcileHit(ctx context.Context, client *generated.Client, ownerID string, row, payload json.RawMessage, links []LinkSpec) error {
+	linked, err := InjectCreateLinks(ctx, client, ownerID, s, payload, links)
+	if err != nil {
+		return err
+	}
+
+	rekeyed, throughIDs := splitThroughEdgeIDs(s, s.rekeyEdgesForUpdate(dropCatalogPointer(linked)))
+
+	mutation, save, err := s.Ingest.buildUpdate(ctx, client, row, rekeyed)
+	if err != nil {
+		return err
+	}
+
+	if err := s.fillMutation(ctx, mutation); err != nil {
+		return err
+	}
+
+	if !ChangeSetFromMutation(mutation).Empty() {
+		if err := save(ctx); err != nil {
+			return err
+		}
+	}
+
+	return applyThroughEdgeIDs(ctx, client, s, entityID(row), throughIDs)
+}
+
+// reconcileCreate creates the organization's row from payload and links; an adoption keeps the catalog pointer
+func (s *Schema) reconcileCreate(ctx context.Context, client *generated.Client, ref SchemaRef, ownerID string, payload json.RawMessage, adopting bool, links []LinkSpec) (string, error) {
+	linked, err := InjectCreateLinks(ctx, client, ownerID, s, payload, links)
+	if err != nil {
+		return "", err
+	}
+
+	if !adopting {
+		linked = dropCatalogPointer(linked)
+	}
+
+	doc, err := jsonx.ToRawMap(linked)
+	if err != nil {
+		return "", logError(ctx, ref, ErrDecodeFailed, err)
+	}
+
+	if doc[s.OwnerField], err = json.Marshal(ownerID); err != nil {
+		return "", logError(ctx, ref, ErrMarshalFailed, err)
+	}
+
+	created, err := json.Marshal(doc)
+	if err != nil {
+		return "", logError(ctx, ref, ErrMarshalFailed, err)
+	}
+
+	return s.Create(ctx, client, created)
+}
+
+// dropCatalogPointer removes the catalog pointer from a payload so a write never links a row
+func dropCatalogPointer(payload json.RawMessage) json.RawMessage {
+	return jsonx.EditObject(payload, func(doc map[string]json.RawMessage) bool {
+		delete(doc, CatalogPointerField)
+
+		return true
+	})
+}
+{{- end }}
+
+// fillMutation keeps only sets that give an empty stored value a non-empty one; arrays union, bools and clears drop
+func (s *Schema) fillMutation(ctx context.Context, mutation ent.Mutation) error {
+	for _, name := range NormalizeStrings(mutation.Fields()) {
+		field, ok := s.FieldByName(name)
+		if !ok || field.Type == "bool" {
+			if err := mutation.ResetField(name); err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		old, err := mutation.OldField(ctx, name)
+		if err != nil {
+			return err
+		}
+
+		proposed, _ := mutation.Field(name)
+
+		if isEmptyValue(old) && !isEmptyValue(proposed) {
+			continue
+		}
+
+		merged, grew := unionStringValues(old, proposed)
+		if !grew {
+			if err := mutation.ResetField(name); err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		if err := mutation.SetField(name, merged); err != nil {
+			return err
+		}
+	}
+
+	for _, name := range mutation.ClearedFields() {
+		if err := mutation.ResetField(name); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// isEmptyValue reports whether a stored value is nil, an empty string, slice or map, a zero number, or a zero time
+func isEmptyValue(value any) bool {
+	v := reflect.ValueOf(value)
+	for v.IsValid() && (v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface) {
+		if v.IsNil() {
+			return true
+		}
+
+		v = v.Elem()
+	}
+
+	if !v.IsValid() {
+		return true
+	}
+
+	switch v.Kind() {
+	case reflect.String:
+		return strings.TrimSpace(v.String()) == ""
+	case reflect.Slice, reflect.Map:
+		return v.Len() == 0
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return v.IsZero()
+	}
+
+	if t, ok := v.Interface().(time.Time); ok {
+		return t.IsZero()
+	}
+
+	typ := reflect.TypeFor[time.Time]()
+	if v.CanConvert(typ) {
+		return v.Convert(typ).Interface().(time.Time).IsZero()
+	}
+
+	return false
+}
+
+// unionStringValues extends a stored string slice with missing proposed elements; grew is false otherwise
+func unionStringValues(old, proposed any) (merged []string, grew bool) {
+	current, ok := old.([]string)
+	if !ok {
+		return nil, false
+	}
+
+	added, ok := proposed.([]string)
+	if !ok {
+		return nil, false
+	}
+
+	missing := lo.Without(lo.Uniq(added), current...)
+	if len(missing) == 0 {
+		return nil, false
+	}
+
+	return append(slices.Clone(current), missing...), true
+}
+
 {{- if $hasCatalog }}
 
-// catalogListenerCaller lets a catalog refresh update adopted rows in every organization
+// catalogListenerCaller lets a catalog listener update adopted rows in every organization
 func catalogListenerCaller(restored *auth.Caller, _ MutationPayload) *auth.Caller {
 	return restored.WithCapabilities(auth.CapInternalOperation)
 }
 
-// catalogRefreshHandler refreshes the adopted rows of a mutated row when it is a visible catalog row
+// catalogRefreshHandler rewrites the adopted rows of a mutated catalog row
 func catalogRefreshHandler(s *Schema) func(Invocation, MutationPayload) error {
 	return func(inv Invocation, _ MutationPayload) error {
-		visible, err := s.Catalog.visible(inv.Context, inv.Client, inv.EntityID)
-		if err != nil {
-			return logError(inv.Context, SchemaRef{Schema: s.Snake, Operation: refOpQuery, EntityID: inv.EntityID}, ErrQueryFailed, err)
-		}
-
-		if !visible {
-			return nil
-		}
-
 		updated, err := s.RefreshAdopted(inv.Context, inv.Client, inv.EntityID)
 		if err != nil {
 			return err
@@ -1474,7 +1913,28 @@ func catalogRefreshHandler(s *Schema) func(Invocation, MutationPayload) error {
 	}
 }
 
-// CatalogListeners refreshes adopted rows when a visible catalog row's source-managed fields change
+// catalogUnlinkHandler detaches every adopted row when a catalog row is soft-deleted or hidden
+func catalogUnlinkHandler(s *Schema) func(Invocation, MutationPayload) error {
+	return func(inv Invocation, payload MutationPayload) error {
+		if payload.Operation != OpSoftDelete {
+			visible, ok := payload.StringValue(CatalogVisibilityField)
+			if !ok || visible != "false" {
+				return nil
+			}
+		}
+
+		unlinked, err := s.Catalog.unlinkAll(inv.Context, inv.Client, inv.EntityID)
+		if err != nil {
+			return err
+		}
+
+		logx.FromContext(inv.Context).Info().Str(FieldSchema, s.Snake).Str(fieldEntityID, inv.EntityID).Int("unlinked", unlinked).Msg("entityops: detached adopted rows from catalog")
+
+		return nil
+	}
+}
+
+// CatalogListeners refreshes adopted rows on catalog field changes and detaches them on hide or soft-delete
 func CatalogListeners() []gala.Registration {
 	return []gala.Registration{
 {{- range $schema := .Schemas }}
@@ -1482,9 +1942,16 @@ func CatalogListeners() []gala.Registration {
 		MutationListener{
 			Schema:     Schema{{ $schema.Name }},
 			Operations: []string{OpUpdate, OpUpdateOne},
-			Fields:     Schema{{ $schema.Name }}.Catalog.Fields,
+			Fields:     []string{ {{- range $i, $f := $schema.CatalogFields }}{{ if $i }}, {{ end }}"{{ $f }}"{{ end }}},
 			Caller:     catalogListenerCaller,
 			Handle:     catalogRefreshHandler(Schema{{ $schema.Name }}),
+		},
+		MutationListener{
+			Schema:     Schema{{ $schema.Name }},
+			Operations: []string{OpUpdate, OpUpdateOne, OpSoftDelete},
+			Fields:     []string{CatalogVisibilityField},
+			Caller:     catalogListenerCaller,
+			Handle:     catalogUnlinkHandler(Schema{{ $schema.Name }}),
 		},
 {{- end }}
 {{- end }}
@@ -1492,20 +1959,16 @@ func CatalogListeners() []gala.Registration {
 }
 {{- end }}
 
-// catalogPayload keeps only the keys copied onto adopted rows from a marshaled catalog row
+// catalogPayload renders the fields copied onto adopted rows from a marshaled catalog row, null for a field the row does not hold
 func catalogPayload(row json.RawMessage, fields []string) (json.RawMessage, error) {
 	document, err := jsonx.ToRawMap(row)
 	if err != nil {
 		return nil, err
 	}
 
-	kept := make(map[string]json.RawMessage, len(fields))
-
-	for _, field := range fields {
-		if value, ok := document[field]; ok {
-			kept[field] = value
-		}
-	}
+	kept := lo.SliceToMap(fields, func(field string) (string, json.RawMessage) {
+		return field, lo.ValueOr(document, field, json.RawMessage("null"))
+	})
 
 	payload, err := json.Marshal(kept)
 	if err != nil {
@@ -1513,6 +1976,15 @@ func catalogPayload(row json.RawMessage, fields []string) (json.RawMessage, erro
 	}
 
 	return payload, nil
+}
+
+// jsonArrayMatch matches a JSON string-array column when any lowered element equals one of values, which arrive lowered; a column holding anything but an array matches nothing
+func jsonArrayMatch(column string, values []string) func(*sql.Selector) {
+	return func(s *sql.Selector) {
+		s.Where(sql.P(func(b *sql.Builder) {
+			b.WriteString("EXISTS (SELECT 1 FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(").Ident(s.C(column)).WriteString(") = 'array' THEN ").Ident(s.C(column)).WriteString(" ELSE '[]'::jsonb END) AS v WHERE LOWER(v) IN (").Args(lo.ToAnySlice(values)...).WriteString("))")
+		}))
+	}
 }
 
 // --- Per-schema registrations ---
@@ -1562,7 +2034,7 @@ var (
 {{- if and .IntegrationMapped .HasCreate .LookupAlternatives }}
 		Lookup: []LookupAlternative{
 {{- range .LookupAlternatives }}
-			{Fields: []string{ {{- range $i, $f := . }}{{ if $i }}, {{ end }}"{{ $f }}"{{ end }} }},
+			{Fields: []string{ {{- range $i, $f := . }}{{ if $i }}, {{ end }}"{{ $f }}"{{ end }}}},
 {{- end }}
 		},
 {{- end }}
@@ -1570,7 +2042,7 @@ var (
 		InstanceScoped: true,
 {{- end }}
 {{- if .HasCatalog }}
-		Catalog: &CatalogCapability{PointerField: "{{ .CatalogPointer }}", VisibilityField: "{{ .CatalogVisibility }}", KeyField: "{{ .CatalogKey }}", Fields: []string{ {{- range $i, $f := .CatalogFields }}{{ if $i }}, {{ end }}"{{ $f }}"{{ end }}}},
+		Catalog: &CatalogCapability{},
 {{- end }}
 {{- if and .HasCreate (or .IntegrationMapped .HasCatalog) }}
 		Create: func(ctx context.Context, client *generated.Client, input json.RawMessage) (string, error) {
@@ -1584,7 +2056,7 @@ var (
 			builder := client.{{ .Name }}.Create().SetInput(decoded)
 {{- if or .StampedCreateFields .HasCatalog }}
 
-			if err := applyStampedFields(builder.Mutation(), input{{ if .HasCatalog }}, "{{ .CatalogPointer }}", "{{ .CatalogKey }}"{{ end }}{{ range .StampedCreateFields }}, Field{{ . }}{{ end }}); err != nil {
+			if err := applyStampedFields(builder.Mutation(), input{{ if .HasCatalog }}, CatalogPointerField{{ end }}{{ range .StampedCreateFields }}, Field{{ . }}{{ end }}); err != nil {
 				return "", logError(ctx, ref, ErrCreateFailed, err)
 			}
 {{- end }}
@@ -1597,7 +2069,7 @@ var (
 			return entity.ID, nil
 		},
 {{- end }}
-{{- if and .HasUpdate (or .IntegrationMapped .WorkflowEligible) }}
+{{- if and .HasUpdate (or .IntegrationMapped .WorkflowEligible .HasCatalog) }}
 		Update: func(ctx context.Context, client *generated.Client, entityID string, input json.RawMessage) error {
 			ref := SchemaRef{Schema: "{{ .Snake }}", Operation: refOpUpdate, EntityID: entityID}
 
@@ -1780,7 +2252,7 @@ func init() {
 {{- else }}
 			Where({{ $schema.PredicatePackage }}.{{ $schema.OwnerField | pascal }}(orgID)).
 {{- end }}
-			Where(predicate.{{ $schema.Name }}(matchKeyIn(Schema{{ $schema.Name }}, field, values))).
+			Where(predicate.{{ $schema.Name }}(lookupPredicate(Schema{{ $schema.Name }}, field, values))).
 			All(ctx)
 		if err != nil {
 			return nil, logError(ctx, ref, ErrQueryFailed, err)
@@ -1913,7 +2385,7 @@ func init() {
 {{- else if $schema.OwnerField }}
 			query = query.Where({{ $schema.PredicatePackage }}.{{ $schema.OwnerField | pascal }}(ownerID))
 {{- end }}
-			query = query.Where(predicate.{{ $schema.Name }}(matchKeyIn(Schema{{ $schema.Name }}, primary, chunk)))
+			query = query.Where(predicate.{{ $schema.Name }}(lookupPredicate(Schema{{ $schema.Name }}, primary, chunk)))
 {{- if $schema.RemovedAtEpisodic }}
 			query = query.Where({{ $schema.PredicatePackage }}.{{ $schema.RemovedAtField | pascal }}IsNil())
 {{- end }}
@@ -1937,7 +2409,7 @@ func init() {
 			}
 		}
 
-		return filterByAlternativeFields(results, fields, keys), nil
+		return filterByAlternativeFields(Schema{{ $schema.Name }}, results, fields, keys), nil
 	}
 {{- end }}
 {{- end }}
@@ -2051,221 +2523,49 @@ func init() {
 {{- end }}
 {{- end }}
 {{- range $schema := .Schemas }}
-{{- if and $schema.IntegrationMapped $schema.HasCreate (or $schema.HasIntegrationID $schema.IntegrationM2MEdge) }}
-	Schema{{ $schema.Name }}.FillProvenance = func(ctx context.Context, client *generated.Client, installation *generated.Integration) (int, error) {
-		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpUpdate}
-		instanceID := installation.InstallationMetadata.Display.ExternalID
-
-		predicates := []predicate.{{ $schema.Name }}{
-			{{ $schema.PredicatePackage }}.And(
-{{- if $schema.HasIntegrationID }}
-				{{ $schema.PredicatePackage }}.IntegrationID(installation.ID),
-{{- else }}
-				{{ $schema.PredicatePackage }}.Has{{ $schema.IntegrationM2MEdge | pascal }}With(integration.ID(installation.ID)),
-				{{ $schema.PredicatePackage }}.Not({{ $schema.PredicatePackage }}.Has{{ $schema.IntegrationM2MEdge | pascal }}With(integration.IDNEQ(installation.ID))),
-{{- end }}
-				{{ $schema.PredicatePackage }}.Or({{ $schema.PredicatePackage }}.SourceDefinitionIDIsNil(), {{ $schema.PredicatePackage }}.SourceDefinitionID(""), {{ $schema.PredicatePackage }}.SourceInstanceIDIsNil(), {{ $schema.PredicatePackage }}.SourceInstanceID("")),
-				{{ $schema.PredicatePackage }}.Or({{ $schema.PredicatePackage }}.ManagedByIsNil(), {{ $schema.PredicatePackage }}.ManagedBy(""), {{ $schema.PredicatePackage }}.ManagedBy(installation.ID)),
-			),
-		}
-
-		if instanceID != "" {
-			predicates = append(predicates, {{ $schema.PredicatePackage }}.And(
-				{{ $schema.PredicatePackage }}.ManagedBy(installation.ID),
-				{{ $schema.PredicatePackage }}.Or({{ $schema.PredicatePackage }}.SourceInstanceIDIsNil(), {{ $schema.PredicatePackage }}.SourceInstanceIDNEQ(instanceID)),
-			))
-		}
-
-		update := client.{{ $schema.Name }}.Update().
-			Where({{ $schema.PredicatePackage }}.Or(predicates...)).
-			SetSourceDefinitionID(installation.DefinitionID).
-			SetManagedBy(installation.ID)
-
-		if installation.DefinitionVersion != "" {
-			update = update.SetSourceDefinitionVersion(installation.DefinitionVersion)
-		}
-
-		if instanceID != "" {
-			update = update.SetSourceInstanceID(instanceID)
-		}
-
-		affected, err := update.Save(ctx)
-		if err != nil {
-			return 0, logPersistError(ctx, ref, ErrUpdateFailed, err)
-		}
-
-		return affected, nil
-	}
-{{- end }}
-{{- end }}
-{{- range $schema := .Schemas }}
 {{- if $schema.HasCatalog }}
 {{- $pkg := $schema.PredicatePackage }}
-{{- $owner := $schema.OwnerField | pascal }}
 {{- $pointer := $schema.CatalogPointer | pascal }}
-{{- $key := $schema.CatalogKey | pascal }}
-	Schema{{ $schema.Name }}.Catalog.adopt = func(ctx context.Context, client *generated.Client, catalogID, ownerID string, overlay json.RawMessage) (string, bool, error) {
-		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpCreate, EntityID: catalogID}
+	Schema{{ $schema.Name }}.Catalog.copies = func(ctx context.Context, client *generated.Client, catalogID string) ([]json.RawMessage, error) {
+		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpQuery, EntityID: catalogID}
 
-		row, key, err := catalogRow{{ $schema.Name }}(ctx, client, ref, catalogID)
+		entities, err := client.{{ $schema.Name }}.Query().Where({{ $pkg }}.{{ $pointer }}(catalogID)).All(ctx)
 		if err != nil {
-			return "", false, err
+			return nil, logError(ctx, ref, ErrQueryFailed, err)
 		}
 
-		id, err := client.{{ $schema.Name }}.Query().Where({{ $pkg }}.{{ $owner }}(ownerID), {{ $pkg }}.{{ $pointer }}(catalogID)).OnlyID(ctx)
-		switch {
-		case err == nil:
-			return id, false, nil
-		case !generated.IsNotFound(err):
-			return "", false, logError(ctx, ref, ErrQueryFailed, err)
-		}
-
-		if key != "" {
-			id, err = client.{{ $schema.Name }}.Query().Where({{ $pkg }}.{{ $owner }}(ownerID), {{ $pkg }}.{{ $key }}(key)).OnlyID(ctx)
-			switch {
-			case err == nil:
-				if err := client.{{ $schema.Name }}.UpdateOneID(id).Set{{ $pointer }}(catalogID).Exec(ctx); err != nil {
-					return "", false, logPersistError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpUpdate, EntityID: id}, ErrUpdateFailed, err)
-				}
-
-				return id, false, nil
-			case !generated.IsNotFound(err):
-				return "", false, logError(ctx, ref, ErrQueryFailed, err)
+		results := make([]json.RawMessage, 0, len(entities))
+		for _, e := range entities {
+			data, err := json.Marshal(e)
+			if err != nil {
+				return nil, logError(ctx, ref, ErrMarshalFailed, err)
 			}
+
+			results = append(results, data)
 		}
 
-		payload, err := catalogPayload(row, Schema{{ $schema.Name }}.Catalog.Fields)
-		if err != nil {
-			return "", false, logError(ctx, ref, ErrMarshalFailed, err)
-		}
-
-		if payload, _, err = jsonx.SetObjectKey(payload, {{ $pkg }}.Field{{ $owner }}, ownerID); err != nil {
-			return "", false, logError(ctx, ref, ErrMarshalFailed, err)
-		}
-
-		if payload, _, err = jsonx.SetObjectKey(payload, Schema{{ $schema.Name }}.Catalog.PointerField, catalogID); err != nil {
-			return "", false, logError(ctx, ref, ErrMarshalFailed, err)
-		}
-
-		if payload, _, err = jsonx.SetObjectKey(payload, Schema{{ $schema.Name }}.Catalog.KeyField, key); err != nil {
-			return "", false, logError(ctx, ref, ErrMarshalFailed, err)
-		}
-
-		if len(overlay) > 0 {
-			if payload, _, err = jsonx.DeepMerge(payload, overlay); err != nil {
-				return "", false, logError(ctx, ref, ErrDecodeFailed, err)
-			}
-		}
-
-		id, err = Schema{{ $schema.Name }}.Create(ctx, client, payload)
-		if err != nil {
-			return "", false, err
-		}
-
-		return id, true, nil
+		return results, nil
 	}
-	Schema{{ $schema.Name }}.Catalog.refresh = func(ctx context.Context, client *generated.Client, catalogID string) (int, error) {
-		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpUpdate, EntityID: catalogID}
+	Schema{{ $schema.Name }}.Catalog.unlink = func(ctx context.Context, client *generated.Client, id string) error {
+		if err := client.{{ $schema.Name }}.UpdateOneID(id).Clear{{ $pointer }}().Exec(ctx); err != nil {
+			return logPersistError(ctx, SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpUpdate, EntityID: id}, ErrUpdateFailed, err)
+		}
 
-		row, _, err := catalogRow{{ $schema.Name }}(ctx, client, ref, catalogID)
+		return nil
+	}
+	Schema{{ $schema.Name }}.Catalog.unlinkAll = func(ctx context.Context, client *generated.Client, catalogID string) (int, error) {
+		copies, err := Schema{{ $schema.Name }}.Catalog.copies(ctx, client, catalogID)
 		if err != nil {
 			return 0, err
 		}
 
-		payload, err := catalogPayload(row, Schema{{ $schema.Name }}.Catalog.Fields)
-		if err != nil {
-			return 0, logError(ctx, ref, ErrMarshalFailed, err)
-		}
-
-		input, err := jsonx.Decode[generated.{{ $schema.UpdateInputType }}](payload)
-		if err != nil {
-			return 0, logError(ctx, ref, ErrDecodeFailed, err)
-		}
-
-		updated, err := client.{{ $schema.Name }}.Update().Where({{ $pkg }}.{{ $pointer }}(catalogID)).SetInput(input).Save(ctx)
-		if err != nil {
-			return 0, logPersistError(ctx, ref, ErrUpdateFailed, err)
-		}
-
-		return updated, nil
-	}
-	Schema{{ $schema.Name }}.Catalog.relink = func(ctx context.Context, client *generated.Client, catalogID string) (int, error) {
-		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpUpdate, EntityID: catalogID}
-
-		_, key, err := catalogRow{{ $schema.Name }}(ctx, client, ref, catalogID)
-		if err != nil {
-			return 0, err
-		}
-
-		if key == "" {
-			return 0, nil
-		}
-
-		pointers, err := client.{{ $schema.Name }}.Query().Where({{ $pkg }}.{{ $key }}(key), {{ $pkg }}.{{ $pointer }}NotNil()).Select({{ $pkg }}.Field{{ $pointer }}).Strings(ctx)
-		if err != nil {
-			return 0, logError(ctx, ref, ErrQueryFailed, err)
-		}
-
-		live, err := client.{{ $schema.Name }}.Query().Where({{ $pkg }}.IDIn(lo.Uniq(pointers)...)).IDs(ctx)
-		if err != nil {
-			return 0, logError(ctx, ref, ErrQueryFailed, err)
-		}
-
-		relinked, err := client.{{ $schema.Name }}.Update().
-			Where({{ $pkg }}.IDNEQ(catalogID), {{ $pkg }}.{{ $key }}(key), {{ $pkg }}.Or({{ $pkg }}.{{ $pointer }}IsNil(), {{ $pkg }}.{{ $pointer }}NotIn(live...))).
-			Set{{ $pointer }}(catalogID).
-			Save(ctx)
-		if err != nil {
-			return 0, logPersistError(ctx, ref, ErrUpdateFailed, err)
-		}
-
-		return relinked, nil
-	}
-	Schema{{ $schema.Name }}.Catalog.match = func(ctx context.Context, client *generated.Client, candidates []MatchCandidate) (string, bool, error) {
-		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpQuery}
-
-		for _, candidate := range candidates {
-			if candidate.Value == "" {
-				continue
-			}
-
-			field, ok := Schema{{ $schema.Name }}.FieldByName(candidate.Field)
-			if !ok {
-				return "", false, logError(ctx, ref, ErrFieldNotFound, fmt.Errorf("%s.%s", "{{ $schema.Snake }}", candidate.Field))
-			}
-
-			var where predicate.{{ $schema.Name }}
-
-			switch field.Name {
-{{- range $schema.ObjectFields }}
-{{- if or (eq .Type "string") (eq .Type "[]string") }}
-			case "{{ .Snake }}":
-{{- if eq .Type "[]string" }}
-				where = predicate.{{ $schema.Name }}(func(s *sql.Selector) {
-					s.Where(sqljson.ValueContains({{ $pkg }}.Field{{ .Name }}, candidate.Value))
-				})
-{{- else }}
-				where = {{ $pkg }}.{{ .Name }}EqualFold(candidate.Value)
-{{- end }}
-{{- end }}
-{{- end }}
-			default:
-				return "", false, logError(ctx, ref, ErrCatalogMatchFieldUnsupported, fmt.Errorf("%s.%s", "{{ $schema.Snake }}", field.Name))
-			}
-
-			id, err := client.{{ $schema.Name }}.Query().Where({{ $pkg }}.SystemOwned(true), {{ $pkg }}.{{ $schema.CatalogVisibility | pascal }}(true), where).FirstID(ctx)
-			switch {
-			case err == nil:
-				return id, true, nil
-			case !generated.IsNotFound(err):
-				return "", false, logError(ctx, ref, ErrQueryFailed, err)
+		for unlinked, adopted := range copies {
+			if err := Schema{{ $schema.Name }}.Catalog.unlink(auth.WithOrgInternalCaller(ctx, lookupValue(adopted, Schema{{ $schema.Name }}.OwnerField)), client, entityID(adopted)); err != nil {
+				return unlinked, err
 			}
 		}
 
-		return "", false, nil
-	}
-	Schema{{ $schema.Name }}.Catalog.visible = func(ctx context.Context, client *generated.Client, catalogID string) (bool, error) {
-		return client.{{ $schema.Name }}.Query().Where({{ $pkg }}.ID(catalogID), {{ $pkg }}.SystemOwned(true), {{ $pkg }}.{{ $schema.CatalogVisibility | pascal }}(true)).Exist(ctx)
+		return len(copies), nil
 	}
 {{- end }}
 {{- end }}
@@ -2312,7 +2612,7 @@ func init() {
 	}
 }
 {{- range $schema := .Schemas }}
-{{- if and $schema.SystemScoped (or $schema.IntegrationMapped $schema.LinkTarget) }}
+{{- if or $schema.HasCatalog (and $schema.SystemScoped (or $schema.IntegrationMapped $schema.LinkTarget)) }}
 
 // ownerScope{{ $schema.Name }} scopes a {{ $schema.Snake }} query to one organization, or to system-owned rows when ownerID is empty
 func ownerScope{{ $schema.Name }}(ownerID string) predicate.{{ $schema.Name }} {
@@ -2324,32 +2624,6 @@ func ownerScope{{ $schema.Name }}(ownerID string) predicate.{{ $schema.Name }} {
 }
 {{- end }}
 {{- end }}
-{{- range $schema := .Schemas }}
-{{- if $schema.HasCatalog }}
-
-// catalogRow{{ $schema.Name }} loads a visible system-owned catalog {{ $schema.Snake }} as JSON with its lookup key, distinguishing hidden rows from missing ones
-func catalogRow{{ $schema.Name }}(ctx context.Context, client *generated.Client, ref SchemaRef, catalogID string) (json.RawMessage, string, error) {
-	row, err := client.{{ $schema.Name }}.Query().Where({{ $schema.PredicatePackage }}.ID(catalogID), {{ $schema.PredicatePackage }}.SystemOwned(true)).Only(ctx)
-
-	switch {
-	case generated.IsNotFound(err):
-		return nil, "", logError(ctx, ref, ErrCatalogRowNotSystemOwned, err)
-	case err != nil:
-		return nil, "", logError(ctx, ref, ErrQueryFailed, err)
-	case !row.{{ $schema.CatalogVisibility | pascal }}:
-		return nil, "", logError(ctx, ref, ErrCatalogRowNotVisible, fmt.Errorf("%s %s is not visible", "{{ $schema.Snake }}", catalogID))
-	}
-
-	raw, err := json.Marshal(row)
-	if err != nil {
-		return nil, "", logError(ctx, ref, ErrMarshalFailed, err)
-	}
-
-	return raw, lookupValue(raw, "{{ $schema.CatalogLookupKey }}"), nil
-}
-{{- end }}
-{{- end }}
-
 // splitThroughEdgeIDs removes through-edge id lists from a create or update payload, returning the
 // cleaned payload and the target ids per edge name. Malformed values are left in place so input
 // validation rejects them instead of being silently discarded
@@ -2468,11 +2742,12 @@ func AllSchemas() []*Schema {
 	return result
 }
 
-// selectTargets queries entities matching a target selector and filters them with a typed CEL
+// SelectTargets queries entities matching a target selector and filters them with a typed CEL
 // evaluator bound to the target schema's native projection — and, when the selector carries
 // SourceContext with a SourceSchema, the source schema's projection as "source" — so selector
-// expressions resolve typed fields rather than evaluating against a map[string]any
-func selectTargets(ctx context.Context, client *generated.Client, orgID string, selector TargetSelector) ([]entityRef, error) {
+// expressions resolve typed fields rather than evaluating against a map[string]any. Link injection
+// and cross-entity workflow actions both resolve their targets through this
+func SelectTargets(ctx context.Context, client *generated.Client, orgID string, selector TargetSelector) ([]EntityRef, error) {
 	schema, ok := LookupSchema(selector.Schema.Name)
 	if !ok {
 		return nil, logError(ctx, SchemaRef{Schema: selector.Schema.Snake, Operation: refOpQuery}, ErrSchemaNotFound, fmt.Errorf("schema %s is not registered", selector.Schema.Name))
@@ -2525,7 +2800,7 @@ func selectTargets(ctx context.Context, client *generated.Client, orgID string, 
 
 	excludeSet := mapx.MapSetFromSlice(selector.ExcludeIDs)
 
-	var results []entityRef
+	var results []EntityRef
 
 	for _, data := range entities {
 		id := entityID(data)
@@ -2559,7 +2834,7 @@ func selectTargets(ctx context.Context, client *generated.Client, orgID string, 
 			}
 		}
 
-		results = append(results, entityRef{ID: id, Schema: schema.SchemaDescriptor})
+		results = append(results, EntityRef{ID: id, Schema: schema.SchemaDescriptor})
 	}
 
 	return results, nil
