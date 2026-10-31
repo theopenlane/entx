@@ -30,8 +30,8 @@ import (
 	"github.com/theopenlane/utils/jsonx"
 )
 
-// entityRef is a lightweight reference to an entity
-type entityRef struct {
+// EntityRef is a lightweight reference to a matched entity: its id and schema descriptor
+type EntityRef struct {
 	// ID is the entity identifier
 	ID string
 	// Schema is the entity's schema descriptor
@@ -1970,11 +1970,12 @@ func AllSchemas() []*Schema {
 	return result
 }
 
-// selectTargets queries entities matching a target selector and filters them with a typed CEL
+// SelectTargets queries entities matching a target selector and filters them with a typed CEL
 // evaluator bound to the target schema's native projection — and, when the selector carries
 // SourceContext with a SourceSchema, the source schema's projection as "source" — so selector
-// expressions resolve typed fields rather than evaluating against a map[string]any
-func selectTargets(ctx context.Context, client *generated.Client, orgID string, selector TargetSelector) ([]entityRef, error) {
+// expressions resolve typed fields rather than evaluating against a map[string]any. Link injection
+// and cross-entity workflow actions both resolve their targets through this
+func SelectTargets(ctx context.Context, client *generated.Client, orgID string, selector TargetSelector) ([]EntityRef, error) {
 	schema, ok := LookupSchema(selector.Schema.Name)
 	if !ok {
 		return nil, logError(ctx, SchemaRef{Schema: selector.Schema.Snake, Operation: refOpQuery}, ErrSchemaNotFound, fmt.Errorf("schema %s is not registered", selector.Schema.Name))
@@ -2027,7 +2028,7 @@ func selectTargets(ctx context.Context, client *generated.Client, orgID string, 
 
 	excludeSet := mapx.MapSetFromSlice(selector.ExcludeIDs)
 
-	var results []entityRef
+	var results []EntityRef
 
 	for _, data := range entities {
 		id := entityID(data)
@@ -2061,7 +2062,7 @@ func selectTargets(ctx context.Context, client *generated.Client, orgID string, 
 			}
 		}
 
-		results = append(results, entityRef{ID: id, Schema: schema.SchemaDescriptor})
+		results = append(results, EntityRef{ID: id, Schema: schema.SchemaDescriptor})
 	}
 
 	return results, nil
