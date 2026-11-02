@@ -85,12 +85,8 @@ var (
 	ErrLookupAlternativeInvalid = errors.New("entityops: lookup alternative invalid")
 	// ErrCatalogUnsupported indicates the schema has no catalog adoption capability
 	ErrCatalogUnsupported = errors.New("entityops: catalog unsupported")
-	// ErrCatalogRowNotSystemOwned indicates the catalog row does not exist or is not system owned
-	ErrCatalogRowNotSystemOwned = errors.New("entityops: catalog row not system owned")
-	// ErrCatalogRowNotVisible indicates the catalog row is system owned but not visible to organizations
-	ErrCatalogRowNotVisible = errors.New("entityops: catalog row not visible")
-	// ErrCatalogMatchFieldUnsupported indicates a match candidate names a field that is not a matchable string or string-array column
-	ErrCatalogMatchFieldUnsupported = errors.New("entityops: catalog match field unsupported")
+	// ErrCatalogRowNotFound indicates no visible system-owned catalog row has the id
+	ErrCatalogRowNotFound = errors.New("entityops: catalog row not found")
 )
 
 // --- Operation constants ---
@@ -112,6 +108,8 @@ const (
 	refOpUpsert = "upsert"
 	// refOpDelete identifies entity delete operations
 	refOpDelete = "delete"
+	// refOpReconcile identifies catalog reconciliation operations
+	refOpReconcile = "reconcile"
 )
 
 // --- Log field keys ---

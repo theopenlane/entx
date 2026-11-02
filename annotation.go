@@ -3,6 +3,7 @@ package entx
 import (
 	"encoding/json"
 
+	"entgo.io/contrib/entgql"
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/entc/load"
 	"entgo.io/ent/schema"
@@ -265,11 +266,8 @@ var FieldSourceManagedAnnotationName = "OPENLANE_FIELD_SOURCE_MANAGED"
 // CatalogEdgeAnnotationName is the annotation name for the self edge pointing at a schema's catalog row
 var CatalogEdgeAnnotationName = "OPENLANE_CATALOG_EDGE"
 
-// CatalogVisibilityFieldAnnotationName is the annotation name for the bool field marking a catalog row as visible to organizations
-var CatalogVisibilityFieldAnnotationName = "OPENLANE_CATALOG_VISIBILITY_FIELD"
-
-// CatalogKeyFieldAnnotationName is the annotation name for the field holding the catalog row's lookup key on adopted rows
-var CatalogKeyFieldAnnotationName = "OPENLANE_CATALOG_KEY_FIELD"
+// CatalogManagedDirectiveName is the GraphQL directive on catalog-copied fields
+const CatalogManagedDirectiveName = "catalogManaged"
 
 // DisplayNameAnnotation marks the single field carrying a schema's display name; at most
 // one field per schema may carry it
@@ -281,17 +279,11 @@ type SnapshotRemovalAnnotation struct {
 	Episodic bool
 }
 
-// FieldSourceManagedAnnotation marks a field whose value is owned by its upstream source and overwritten on refresh or reconcile
+// FieldSourceManagedAnnotation marks a field copied from the catalog row and kept in sync by refresh
 type FieldSourceManagedAnnotation struct{}
 
 // CatalogEdgeAnnotation marks the unique self edge whose foreign key points at the catalog row
 type CatalogEdgeAnnotation struct{}
-
-// CatalogVisibilityFieldAnnotation marks the bool field reporting whether a catalog row is visible to organizations
-type CatalogVisibilityFieldAnnotation struct{}
-
-// CatalogKeyFieldAnnotation marks the field holding the catalog row's lookup key on adopted rows
-type CatalogKeyFieldAnnotation struct{}
 
 // MentionSourceAnnotation marks a rich-text field scanned for mentions; the generator
 // classifies the field by its ent type: JSON fields carry the slate document and string
@@ -425,16 +417,6 @@ func (a FieldSourceManagedAnnotation) Name() string {
 // Name returns the name of the CatalogEdgeAnnotation
 func (a CatalogEdgeAnnotation) Name() string {
 	return CatalogEdgeAnnotationName
-}
-
-// Name returns the name of the CatalogVisibilityFieldAnnotation
-func (a CatalogVisibilityFieldAnnotation) Name() string {
-	return CatalogVisibilityFieldAnnotationName
-}
-
-// Name returns the name of the CatalogKeyFieldAnnotation
-func (a CatalogKeyFieldAnnotation) Name() string {
-	return CatalogKeyFieldAnnotationName
 }
 
 // Name returns the name of the ApprovalStatusAnnotation
@@ -634,44 +616,12 @@ func (b *CatalogEdgeBuilder) MarshalJSON() ([]byte, error) {
 	return json.Marshal(b.annotation)
 }
 
-// CatalogVisibilityFieldBuilder provides a fluent interface for CatalogVisibilityFieldAnnotation
-type CatalogVisibilityFieldBuilder struct {
-	annotation CatalogVisibilityFieldAnnotation
-}
-
-// CatalogVisibilityField marks the bool field reporting whether a catalog row is visible to organizations
-func CatalogVisibilityField() *CatalogVisibilityFieldBuilder {
-	return &CatalogVisibilityFieldBuilder{}
-}
-
-// Name returns the annotation name, implementing the ent Annotation interface
-func (b *CatalogVisibilityFieldBuilder) Name() string {
-	return b.annotation.Name()
-}
-
-// MarshalJSON serializes the builder as the underlying CatalogVisibilityFieldAnnotation
-func (b *CatalogVisibilityFieldBuilder) MarshalJSON() ([]byte, error) {
-	return json.Marshal(b.annotation)
-}
-
-// CatalogKeyFieldBuilder provides a fluent interface for CatalogKeyFieldAnnotation
-type CatalogKeyFieldBuilder struct {
-	annotation CatalogKeyFieldAnnotation
-}
-
-// CatalogKeyField marks the field holding the catalog row's lookup key on adopted rows
-func CatalogKeyField() *CatalogKeyFieldBuilder {
-	return &CatalogKeyFieldBuilder{}
-}
-
-// Name returns the annotation name, implementing the ent Annotation interface
-func (b *CatalogKeyFieldBuilder) Name() string {
-	return b.annotation.Name()
-}
-
-// MarshalJSON serializes the builder as the underlying CatalogKeyFieldAnnotation
-func (b *CatalogKeyFieldBuilder) MarshalJSON() ([]byte, error) {
-	return json.Marshal(b.annotation)
+// CatalogManagedField marks a catalog-copied field and adds the @catalogManaged directive
+func CatalogManagedField() []schema.Annotation {
+	return []schema.Annotation{
+		FieldSourceManaged(),
+		entgql.Directives(entgql.NewDirective(CatalogManagedDirectiveName)),
+	}
 }
 
 // ApprovalStatus marks the enum field carrying a schema's approval status
