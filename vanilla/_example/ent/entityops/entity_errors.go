@@ -27,6 +27,8 @@ var (
 	ErrQueryFailed = errors.New("entityops: query failed")
 	// ErrDeleteFailed indicates an entity delete or its cleanup failed
 	ErrDeleteFailed = errors.New("entityops: delete failed")
+	// ErrSourceFilterRequired indicates a delete by source was asked for without a definition and an instance or key
+	ErrSourceFilterRequired = errors.New("entityops: delete by source requires a definition and an instance or key")
 	// ErrLoadFailed indicates an entity load failed
 	ErrLoadFailed = errors.New("entityops: load failed")
 	// ErrLinkFailed indicates an edge link operation failed

@@ -154,8 +154,12 @@ type EntitySchema struct {
 	HasIntegrationID bool
 	// HasIntegrationRunID reports whether the schema carries an integration_run_id field
 	HasIntegrationRunID bool
-	// HasSourceProvenance reports whether the schema carries the source_definition_id and source_instance_id fields
-	HasSourceProvenance bool
+	// HasSourceDefinitionID reports whether the schema carries a source_definition_id field
+	HasSourceDefinitionID bool
+	// HasSourceInstanceID reports whether the schema carries a source_instance_id field
+	HasSourceInstanceID bool
+	// HasSourceKey reports whether the schema carries a source_key field
+	HasSourceKey bool
 	// HasUpdatedAt reports whether the schema carries an updated_at field
 	HasUpdatedAt bool
 	// IntegrationRunM2MEdge is the name of the schema's to-many mutable edge to IntegrationRun, if any
@@ -285,6 +289,9 @@ const sourceDefinitionVersionFieldName = "source_definition_version"
 
 // sourceInstanceIDFieldName is the provenance column recording the source instance a row came from
 const sourceInstanceIDFieldName = "source_instance_id"
+
+// sourceKeyFieldName is the provenance column grouping the rows runtime ingest wrote from one named source
+const sourceKeyFieldName = "source_key"
 
 // updatedAtFieldName is the audit column recording when a row last changed
 const updatedAtFieldName = "updated_at"
@@ -726,20 +733,22 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 		}
 
 		entitySchema := EntitySchema{
-			Name:                node.Name,
-			Snake:               strcase.SnakeCase(node.Name),
-			Lower:               strings.ToLower(strings.ReplaceAll(strcase.SnakeCase(node.Name), "_", "")),
-			OrgOwned:            orgOwned,
-			HasCreate:           hasCreate,
-			HasUpdate:           hasUpdate,
-			PredicatePackage:    predAlias,
-			PredicateImport:     predImport,
-			OwnerField:          ownerField,
-			SystemScoped:        fieldOptional(schema, ownerField) && hasField(schema, systemOwnedFieldName),
-			HasIntegrationID:    hasField(schema, integrationIDFieldName),
-			HasIntegrationRunID: hasField(schema, integrationRunIDFieldName),
-			HasSourceProvenance: hasField(schema, sourceDefinitionIDFieldName) && hasField(schema, sourceInstanceIDFieldName),
-			HasUpdatedAt:        hasField(schema, updatedAtFieldName),
+			Name:                  node.Name,
+			Snake:                 strcase.SnakeCase(node.Name),
+			Lower:                 strings.ToLower(strings.ReplaceAll(strcase.SnakeCase(node.Name), "_", "")),
+			OrgOwned:              orgOwned,
+			HasCreate:             hasCreate,
+			HasUpdate:             hasUpdate,
+			PredicatePackage:      predAlias,
+			PredicateImport:       predImport,
+			OwnerField:            ownerField,
+			SystemScoped:          fieldOptional(schema, ownerField) && hasField(schema, systemOwnedFieldName),
+			HasIntegrationID:      hasField(schema, integrationIDFieldName),
+			HasIntegrationRunID:   hasField(schema, integrationRunIDFieldName),
+			HasSourceDefinitionID: hasField(schema, sourceDefinitionIDFieldName),
+			HasSourceInstanceID:   hasField(schema, sourceInstanceIDFieldName),
+			HasSourceKey:          hasField(schema, sourceKeyFieldName),
+			HasUpdatedAt:          hasField(schema, updatedAtFieldName),
 		}
 
 		schemaRules, err := schemaTaskRules(schema)

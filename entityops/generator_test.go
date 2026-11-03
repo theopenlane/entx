@@ -537,7 +537,9 @@ func TestIngestPhaseATemplateEmission(t *testing.T) {
 				RemovedAtEpisodic:     true,
 				HasIntegrationRunID:   true,
 				IntegrationRunM2MEdge: "integration_runs",
-				HasSourceProvenance:   true,
+				HasSourceDefinitionID: true,
+				HasSourceInstanceID:   true,
+				HasSourceKey:          true,
 				HasUpdatedAt:          true,
 				ObjectFields: []EntityField{
 					{Name: "ExternalID", Snake: "external_id", Type: "string", IntegrationMapped: true, InputKey: "external_id", LookupKey: true},
@@ -608,7 +610,9 @@ func TestIngestPhaseATemplateEmission(t *testing.T) {
 
 	require.Contains(t, registry, "type SourceFilter struct")
 	require.Contains(t, registry, "SchemaWidget.DeleteBySource = func(ctx context.Context, client *generated.Client, filter SourceFilter, cleanup RowCleanup) ([]string, error)")
-	require.Contains(t, registry, "widget.SourceInstanceID(filter.InstanceID)")
+	require.Contains(t, registry, "return nil, ErrSourceFilterRequired")
+	require.Contains(t, registry, "query = query.Where(widget.SourceInstanceID(filter.InstanceID))")
+	require.Contains(t, registry, "query = query.Where(widget.SourceKey(filter.Key))")
 	require.Contains(t, registry, "query = query.Where(widget.UpdatedAtLTE(*filter.NotUpdatedAfter))")
 	require.Contains(t, registry, "client.Widget.Delete().Where(widget.IDIn(chunk...)).Exec(ctx)")
 
