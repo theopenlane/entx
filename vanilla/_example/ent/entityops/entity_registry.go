@@ -1635,9 +1635,10 @@ func jsonArrayMatch(column string, values []string) func(*sql.Selector) {
 var (
 	SchemaOrgMembership = &Schema{
 		SchemaDescriptor: SchemaDescriptor{
-			Name:  "OrgMembership",
-			Snake: "org_membership",
-			Lower: "orgmembership",
+			Name:   "OrgMembership",
+			Snake:  "org_membership",
+			Lower:  "orgmembership",
+			Plural: "org_memberships",
 		},
 		Load: func(ctx context.Context, client *generated.Client, entityID string) (json.RawMessage, error) {
 			ref := SchemaRef{Schema: "org_membership", Operation: refOpLoad, EntityID: entityID}
@@ -1657,9 +1658,10 @@ var (
 	}
 	SchemaOrganization = &Schema{
 		SchemaDescriptor: SchemaDescriptor{
-			Name:  "Organization",
-			Snake: "organization",
-			Lower: "organization",
+			Name:   "Organization",
+			Snake:  "organization",
+			Lower:  "organization",
+			Plural: "organizations",
 		},
 		Load: func(ctx context.Context, client *generated.Client, entityID string) (json.RawMessage, error) {
 			ref := SchemaRef{Schema: "organization", Operation: refOpLoad, EntityID: entityID}
@@ -1682,6 +1684,7 @@ var (
 			Name:             "WorkflowInstance",
 			Snake:            "workflow_instance",
 			Lower:            "workflowinstance",
+			Plural:           "workflow_instances",
 			WorkflowEligible: true,
 		},
 		ProjectionType:       reflect.TypeFor[WorkflowInstanceProjection](),
@@ -1715,6 +1718,7 @@ var (
 			Name:             "WorkflowObjectRef",
 			Snake:            "workflow_object_ref",
 			Lower:            "workflowobjectref",
+			Plural:           "workflow_object_refs",
 			WorkflowEligible: true,
 		},
 		ProjectionType: reflect.TypeFor[WorkflowObjectRefProjection](),

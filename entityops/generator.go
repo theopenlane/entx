@@ -97,6 +97,8 @@ type EntitySchema struct {
 	Snake string
 	// Lower is the lowercase no-separator form (e.g., "actionplan")
 	Lower string
+	// Plural is the plural snake_case form, the schema's table name (e.g., "action_plans")
+	Plural string
 	// HasCreate indicates a CreateInput type is generated
 	HasCreate bool
 	// HasUpdate indicates an UpdateInput type is generated
@@ -736,6 +738,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 			Name:                  node.Name,
 			Snake:                 strcase.SnakeCase(node.Name),
 			Lower:                 strings.ToLower(strings.ReplaceAll(strcase.SnakeCase(node.Name), "_", "")),
+			Plural:                node.Table(),
 			OrgOwned:              orgOwned,
 			HasCreate:             hasCreate,
 			HasUpdate:             hasUpdate,
