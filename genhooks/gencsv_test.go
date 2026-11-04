@@ -449,7 +449,7 @@ func TestGenerateCSVHelperFileWithoutEntPackage(t *testing.T) {
 	contentStr := string(content)
 	assert.Contains(t, contentStr, "package testpkg")
 	assert.NotContains(t, contentStr, "import (")
-	assert.Contains(t, contentStr, "Input any")
+	assert.Regexp(t, `Input\s+any`, contentStr)
 }
 
 func TestGenerateCSVHelperFileDuplicateDetection(t *testing.T) {
