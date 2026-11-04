@@ -997,7 +997,8 @@ func TestReconcileEmission(t *testing.T) {
 	require.NotContains(t, registry, "WithInternalCrossOrgContext")
 
 	require.Contains(t, registry, "func (s *Schema) applyIngestFill(ctx context.Context, client *generated.Client, row json.RawMessage, payload json.RawMessage) (changed bool, managed bool, err error)")
-	require.Contains(t, registry, `if ownerID != "" && lookupValue(row, FieldManagedBy) == "" {`)
+	require.Contains(t, registry, `if ownerID != "" && lookupValue(row, FieldManagedBy) == "" && !linkedToWriter(row, payload) {`)
+	require.Contains(t, registry, "func linkedToWriter(row json.RawMessage, payload json.RawMessage) bool {")
 	require.Contains(t, registry, "changed, managed, err = s.applyIngestUpdate(ctx, client, ownerID, candidate, payload)")
 	require.Contains(t, registry, "return !changes.Empty() || len(throughIDs) > 0, false, nil")
 }
