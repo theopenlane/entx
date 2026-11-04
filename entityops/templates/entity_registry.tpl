@@ -101,13 +101,15 @@ func (s *Schema) CatalogFields() []string {
 	return lo.FilterMap(s.Fields, func(f FieldDescriptor, _ int) (string, bool) { return f.Name, f.SourceManaged })
 }
 
-// SourceFilter selects the rows written from one source definition and instance, scoped to the caller's organization
-// by the schema's organization interceptor and hook
+// SourceFilter selects the rows written from one source definition, narrowed to a source instance, a source key, or both,
+// scoped to the caller's organization by the schema's organization interceptor and hook
 type SourceFilter struct {
 	// DefinitionID is the integration definition the rows were written by
 	DefinitionID string
-	// InstanceID is the source instance the rows were written from
+	// InstanceID is the source instance an installation wrote the rows from
 	InstanceID string
+	// Key is the source key runtime ingest wrote the rows under
+	Key string
 	// NotUpdatedAfter skips rows updated after this time when set, keeping rows changed since they were written
 	NotUpdatedAfter *time.Time
 }
@@ -717,6 +719,8 @@ const (
 	FieldSourceInstanceID = "source_instance_id"
 	// FieldIntegrationRunID is the provenance column recording the integration run that last wrote a record
 	FieldIntegrationRunID = "integration_run_id"
+	// FieldSourceKey is the provenance column grouping the rows runtime ingest wrote from one named source
+	FieldSourceKey = "source_key"
 )
 
 // ProvenanceSource identifies the writer whose provenance StampProvenance stamps onto an ingest payload
@@ -725,10 +729,8 @@ type ProvenanceSource struct {
 	Integration *generated.Integration
 	// DefinitionID is the definition runtime ingest runs under, used when Integration is nil
 	DefinitionID string
-	// OwnerID is the organization runtime ingest writes for, empty to write system-owned rows
-	OwnerID string
-	// SourceInstanceID is the external instance runtime ingest records came from
-	SourceInstanceID string
+	// SourceKey groups the rows runtime ingest writes from one named source, used when Integration is nil
+	SourceKey string
 	// RunID is the integration run writing the record
 	RunID string
 }
@@ -737,8 +739,7 @@ type ProvenanceSource struct {
 // edges onto an ingest payload from the writing installation, overriding anything the mapping
 // emitted for them; it is the sole writer of provenance columns for both the synchronous and the
 // durable ingest paths, so a queued record persists with the same provenance a batched one does;
-// a nil installation stamps the run id, definition id, and the runtime owner and source instance when set,
-// and runtime ingest with no owner writes system-owned rows
+// a nil installation stamps the run id, definition id, and the source key when set
 func StampProvenance(payload json.RawMessage, schema *Schema, source ProvenanceSource) json.RawMessage {
 	type provenanceValue struct {
 		field string
@@ -754,8 +755,7 @@ func StampProvenance(payload json.RawMessage, schema *Schema, source ProvenanceS
 	case integration == nil:
 		values = append(values,
 			provenanceValue{FieldSourceDefinitionID, source.DefinitionID},
-			provenanceValue{schema.OwnerField, source.OwnerID},
-			provenanceValue{FieldSourceInstanceID, source.SourceInstanceID},
+			provenanceValue{FieldSourceKey, source.SourceKey},
 		)
 	default:
 		values = append(values,
@@ -1359,7 +1359,7 @@ func (s *Schema) applyIngestResurrect(row json.RawMessage, payload json.RawMessa
 }
 
 // provenanceFields are the provenance columns a fill never writes
-var provenanceFields = []string{FieldIntegrationID, FieldManagedBy, FieldPlatformID, FieldSourceDefinitionID, FieldSourceDefinitionVersion, FieldSourceInstanceID, FieldIntegrationRunID}
+var provenanceFields = []string{FieldIntegrationID, FieldManagedBy, FieldPlatformID, FieldSourceDefinitionID, FieldSourceDefinitionVersion, FieldSourceInstanceID, FieldIntegrationRunID, FieldSourceKey}
 
 // applyIngestFill fills empty fields and extends string arrays on an unmanaged row; no provenance, clears or claim
 func (s *Schema) applyIngestFill(ctx context.Context, client *generated.Client, row json.RawMessage, payload json.RawMessage) (changed bool, managed bool, err error) {
@@ -2481,15 +2481,27 @@ func init() {
 {{- end }}
 {{- end }}
 {{- range $schema := .Schemas }}
-{{- if and $schema.HasSourceProvenance $schema.OwnerField }}
+{{- if and $schema.HasSourceDefinitionID (or $schema.HasSourceInstanceID $schema.HasSourceKey) $schema.OwnerField }}
 	Schema{{ $schema.Name }}.DeleteBySource = func(ctx context.Context, client *generated.Client, filter SourceFilter, cleanup RowCleanup) ([]string, error) {
 		ref := SchemaRef{Schema: "{{ $schema.Snake }}", Operation: refOpDelete}
 
-		query := client.{{ $schema.Name }}.Query().
-			Where(
-				{{ $schema.PredicatePackage }}.SourceDefinitionID(filter.DefinitionID),
-				{{ $schema.PredicatePackage }}.SourceInstanceID(filter.InstanceID),
-			)
+		if filter.DefinitionID == "" || (filter.InstanceID == "" && filter.Key == "") {
+			return nil, ErrSourceFilterRequired
+		}
+
+		query := client.{{ $schema.Name }}.Query().Where({{ $schema.PredicatePackage }}.SourceDefinitionID(filter.DefinitionID))
+{{- if $schema.HasSourceInstanceID }}
+
+		if filter.InstanceID != "" {
+			query = query.Where({{ $schema.PredicatePackage }}.SourceInstanceID(filter.InstanceID))
+		}
+{{- end }}
+{{- if $schema.HasSourceKey }}
+
+		if filter.Key != "" {
+			query = query.Where({{ $schema.PredicatePackage }}.SourceKey(filter.Key))
+		}
+{{- end }}
 {{- if $schema.HasUpdatedAt }}
 
 		if filter.NotUpdatedAfter != nil {
