@@ -89,7 +89,7 @@ func TestCapabilityGatedEmission(t *testing.T) {
 		MapxPackage:  "example.com/app/pkg/mapx",
 		Schemas: []EntitySchema{
 			{
-				Name: "Asset", Snake: "asset", Lower: "asset",
+				Name: "Asset", Snake: "asset", Lower: "asset", Plural: "assets",
 				HasCreate: true, HasUpdate: true, OwnerField: "owner_id",
 				CreateInputType: "CreateAssetInput", UpdateInputType: "UpdateAssetInput",
 				PredicatePackage: "asset", PredicateImport: "example.com/app/ent/generated/asset",
@@ -132,6 +132,7 @@ func TestCapabilityGatedEmission(t *testing.T) {
 	registry := render("entity_registry")
 
 	asset := registry[strings.Index(registry, "SchemaAsset = &Schema{"):strings.Index(registry, "SchemaControl = &Schema{")]
+	require.Contains(t, asset, `Plural: "assets",`)
 	require.Contains(t, asset, "Create: func")
 	require.Contains(t, asset, "Update: func")
 	require.Contains(t, asset, "Query: func")

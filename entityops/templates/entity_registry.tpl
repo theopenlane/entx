@@ -1995,7 +1995,8 @@ var (
 		SchemaDescriptor: SchemaDescriptor{
 			Name:   "{{ .Name }}",
 			Snake:  "{{ .Snake }}",
-			Lower:  "{{ .Lower }}",{{ if .WorkflowEligible }}
+			Lower:  "{{ .Lower }}",
+			Plural: "{{ .Plural }}",{{ if .WorkflowEligible }}
 			WorkflowEligible: true,{{ end }}
 		},
 {{- if or .IntegrationMapped .WorkflowEligible .LinkTarget }}
