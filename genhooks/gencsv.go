@@ -1,6 +1,7 @@
 package genhooks
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"html/template"
@@ -15,6 +16,7 @@ import (
 	"github.com/99designs/gqlgen/codegen/templates"
 	"github.com/go-openapi/inflect"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/tools/imports"
 
 	"github.com/theopenlane/entx"
 )
@@ -471,6 +473,21 @@ func generateCSVHelperFile(outputDir string, data CSVSchemaData) error {
 
 	filePath := filepath.Join(outputDir, "csv_generated.go")
 
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		log.Error().Err(err).Msg("failed to execute CSV template")
+
+		return err
+	}
+
+	// run gofmt and goimports on the file contents
+	formatted, err := imports.Process(filePath, buf.Bytes(), nil)
+	if err != nil {
+		log.Error().Err(err).Str("path", filePath).Msg("failed to format CSV helper file")
+
+		return err
+	}
+
 	file, err := os.Create(filepath.Clean(filePath))
 	if err != nil {
 		log.Error().Err(err).Str("path", filePath).Msg("failed to create CSV helper file")
@@ -480,8 +497,8 @@ func generateCSVHelperFile(outputDir string, data CSVSchemaData) error {
 
 	defer file.Close()
 
-	if err := tmpl.Execute(file, data); err != nil {
-		log.Error().Err(err).Msg("failed to execute CSV template")
+	if _, err := file.Write(formatted); err != nil {
+		log.Error().Err(err).Str("path", filePath).Msg("failed to write CSV helper file")
 
 		return err
 	}
