@@ -1,6 +1,7 @@
 package genhooks
 
 import (
+	"go/format"
 	"os"
 	"path/filepath"
 	"testing"
@@ -366,6 +367,50 @@ func TestGenerateCSVHelperFile(t *testing.T) {
 	assert.Contains(t, contentStr, "CSVLookupRegistry")
 }
 
+func TestGenerateCSVHelperFileIsGofmtted(t *testing.T) {
+	tempDir := t.TempDir()
+
+	data := CSVSchemaData{
+		PackageName: "testpkg",
+		EntPackage:  "github.com/example/ent/generated",
+		Schemas: []CSVSchema{
+			{
+				Name:           "Group",
+				HasCreateInput: true,
+			},
+			{
+				Name:           "User",
+				HasCreateInput: true,
+				Fields: []CSVReferenceField{
+					{
+						FieldName:    "group_id",
+						GoFieldName:  "GroupID",
+						CSVColumn:    "GroupName",
+						TargetEntity: "Group",
+						MatchField:   "name",
+					},
+				},
+			},
+		},
+		Lookups: []CSVLookup{
+			{
+				TargetEntity: "Group",
+				MatchField:   "name",
+			},
+		},
+	}
+
+	require.NoError(t, generateCSVHelperFile(tempDir, data))
+
+	content, err := os.ReadFile(filepath.Join(tempDir, "csv_generated.go"))
+	require.NoError(t, err)
+
+	formatted, err := format.Source(content)
+	require.NoError(t, err)
+
+	assert.Equal(t, string(formatted), string(content))
+}
+
 func TestGenerateCSVHelperFileWithoutEntPackage(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -404,7 +449,7 @@ func TestGenerateCSVHelperFileWithoutEntPackage(t *testing.T) {
 	contentStr := string(content)
 	assert.Contains(t, contentStr, "package testpkg")
 	assert.NotContains(t, contentStr, "import (")
-	assert.Contains(t, contentStr, "Input any")
+	assert.Regexp(t, `Input\s+any`, contentStr)
 }
 
 func TestGenerateCSVHelperFileDuplicateDetection(t *testing.T) {
