@@ -2,11 +2,10 @@ env:
   SONAR_HOST: "https://sonarcloud.io"
 
   # build settings, default to what is in buldkite
-  BK_HOME: ${BK_HOME:-/var/lib/buildkite-agent}
-  CACHE_HOME: ${CACHE_HOME:-$BK_HOME/.cache}
-  GOCACHE: ${GOCACHE:-$BK_HOME/.cache/go-build}
+  CACHE_HOME: ${CACHE_HOME:-$CACHE_HOME/.cache}
+  GOCACHE: ${GOCACHE:-$CACHE_HOME/.cache/go-build}
   GOMODCACHE: ${GOMODCACHE:-$BK_HOME/.cache/go/pkg/mod}
-  GOLANGCI_LINT_CACHE: ${GOLANGCI_LINT_CACHE:-$BK_HOME/.cache/golangci-lint}
+  GOLANGCI_LINT_CACHE: ${GOLANGCI_LINT_CACHE:-$CACHE_HOME/.cache/golangci-lint}
   CONFIG_HOME: ${CONFIG_HOME:-/tmp}
   GIT_CONFIG_GLOBAL: ${GIT_CONFIG_GLOBAL:-$CONFIG_HOME/.gitconfig}
   APOLLO_CONFIG_HOME: ${APOLLO_CONFIG_HOME:-$CONFIG_HOME}
