@@ -577,6 +577,7 @@ func TestIngestPhaseATemplateEmission(t *testing.T) {
 	require.Contains(t, registry, "func (s *Schema) applyIngestClaim(")
 	require.Contains(t, registry, "func (s *Schema) applyIngestResurrect(")
 	require.Contains(t, registry, "func defaultIngestPersist(s *Schema) IngestPersist")
+	require.Contains(t, registry, "owner, _ = auth.GetOrganizationIDFromContext(ctx)")
 	require.NotContains(t, registry, "bound bool")
 	require.NotContains(t, registry, "BindIngest")
 	require.NotContains(t, registry, "TypedIngestPersist")

@@ -199,6 +199,11 @@ func defaultIngestPersist(s *Schema) IngestPersist {
 			owner = integration.OwnerID
 		}
 
+		// imports without an installation run as the dispatching organization if its in the context
+		if owner == "" {
+			owner, _ = auth.GetOrganizationIDFromContext(ctx)
+		}
+
 		return s.Upsert(ctx, client, owner, payload)
 	}
 }
