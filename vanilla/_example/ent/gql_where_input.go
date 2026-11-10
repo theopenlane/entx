@@ -8,12 +8,221 @@ import (
 	"time"
 
 	"github.com/theopenlane/entx/vanilla/_example/ent/enums"
+	"github.com/theopenlane/entx/vanilla/_example/ent/note"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/orgmembership"
 	"github.com/theopenlane/entx/vanilla/_example/ent/predicate"
 	"github.com/theopenlane/entx/vanilla/_example/ent/workflowinstance"
 	"github.com/theopenlane/entx/vanilla/_example/ent/workflowobjectref"
 )
+
+// NoteWhereInput represents a where input for filtering Note queries.
+type NoteWhereInput struct {
+	Predicates []predicate.Note  `json:"-"`
+	Not        *NoteWhereInput   `json:"not,omitempty"`
+	Or         []*NoteWhereInput `json:"or,omitempty"`
+	And        []*NoteWhereInput `json:"and,omitempty"`
+
+	// "id" field predicates.
+	ID             *string  `json:"id,omitempty"`
+	IDNEQ          *string  `json:"idNEQ,omitempty"`
+	IDIn           []string `json:"idIn,omitempty"`
+	IDNotIn        []string `json:"idNotIn,omitempty"`
+	IDGT           *string  `json:"idGT,omitempty"`
+	IDGTE          *string  `json:"idGTE,omitempty"`
+	IDLT           *string  `json:"idLT,omitempty"`
+	IDLTE          *string  `json:"idLTE,omitempty"`
+	IDEqualFold    *string  `json:"idEqualFold,omitempty"`
+	IDContainsFold *string  `json:"idContainsFold,omitempty"`
+
+	// "text" field predicates.
+	Text             *string  `json:"text,omitempty"`
+	TextNEQ          *string  `json:"textNEQ,omitempty"`
+	TextIn           []string `json:"textIn,omitempty"`
+	TextNotIn        []string `json:"textNotIn,omitempty"`
+	TextGT           *string  `json:"textGT,omitempty"`
+	TextGTE          *string  `json:"textGTE,omitempty"`
+	TextLT           *string  `json:"textLT,omitempty"`
+	TextLTE          *string  `json:"textLTE,omitempty"`
+	TextContains     *string  `json:"textContains,omitempty"`
+	TextHasPrefix    *string  `json:"textHasPrefix,omitempty"`
+	TextHasSuffix    *string  `json:"textHasSuffix,omitempty"`
+	TextEqualFold    *string  `json:"textEqualFold,omitempty"`
+	TextContainsFold *string  `json:"textContainsFold,omitempty"`
+
+	// "organization" edge predicates.
+	HasOrganization     *bool                     `json:"hasOrganization,omitempty"`
+	HasOrganizationWith []*OrganizationWhereInput `json:"hasOrganizationWith,omitempty"`
+}
+
+// AddPredicates adds custom predicates to the where input to be used during the filtering phase.
+func (i *NoteWhereInput) AddPredicates(predicates ...predicate.Note) {
+	i.Predicates = append(i.Predicates, predicates...)
+}
+
+// Filter applies the NoteWhereInput filter on the NoteQuery builder.
+func (i *NoteWhereInput) Filter(q *NoteQuery) (*NoteQuery, error) {
+	if i == nil {
+		return q, nil
+	}
+	p, err := i.P()
+	if err != nil {
+		if err == ErrEmptyNoteWhereInput {
+			return q, nil
+		}
+		return nil, err
+	}
+	return q.Where(p), nil
+}
+
+// ErrEmptyNoteWhereInput is returned in case the NoteWhereInput is empty.
+var ErrEmptyNoteWhereInput = errors.New("ent: empty predicate NoteWhereInput")
+
+// P returns a predicate for filtering notes.
+// An error is returned if the input is empty or invalid.
+func (i *NoteWhereInput) P() (predicate.Note, error) {
+	var predicates []predicate.Note
+	if i.Not != nil {
+		p, err := i.Not.P()
+		if err != nil {
+			return nil, fmt.Errorf("%w: field 'not'", err)
+		}
+		predicates = append(predicates, note.Not(p))
+	}
+	switch n := len(i.Or); {
+	case n == 1:
+		p, err := i.Or[0].P()
+		if err != nil {
+			return nil, fmt.Errorf("%w: field 'or'", err)
+		}
+		predicates = append(predicates, p)
+	case n > 1:
+		or := make([]predicate.Note, 0, n)
+		for _, w := range i.Or {
+			p, err := w.P()
+			if err != nil {
+				return nil, fmt.Errorf("%w: field 'or'", err)
+			}
+			or = append(or, p)
+		}
+		predicates = append(predicates, note.Or(or...))
+	}
+	switch n := len(i.And); {
+	case n == 1:
+		p, err := i.And[0].P()
+		if err != nil {
+			return nil, fmt.Errorf("%w: field 'and'", err)
+		}
+		predicates = append(predicates, p)
+	case n > 1:
+		and := make([]predicate.Note, 0, n)
+		for _, w := range i.And {
+			p, err := w.P()
+			if err != nil {
+				return nil, fmt.Errorf("%w: field 'and'", err)
+			}
+			and = append(and, p)
+		}
+		predicates = append(predicates, note.And(and...))
+	}
+	predicates = append(predicates, i.Predicates...)
+	if i.ID != nil {
+		predicates = append(predicates, note.IDEQ(*i.ID))
+	}
+	if i.IDNEQ != nil {
+		predicates = append(predicates, note.IDNEQ(*i.IDNEQ))
+	}
+	if len(i.IDIn) > 0 {
+		predicates = append(predicates, note.IDIn(i.IDIn...))
+	}
+	if len(i.IDNotIn) > 0 {
+		predicates = append(predicates, note.IDNotIn(i.IDNotIn...))
+	}
+	if i.IDGT != nil {
+		predicates = append(predicates, note.IDGT(*i.IDGT))
+	}
+	if i.IDGTE != nil {
+		predicates = append(predicates, note.IDGTE(*i.IDGTE))
+	}
+	if i.IDLT != nil {
+		predicates = append(predicates, note.IDLT(*i.IDLT))
+	}
+	if i.IDLTE != nil {
+		predicates = append(predicates, note.IDLTE(*i.IDLTE))
+	}
+	if i.IDEqualFold != nil {
+		predicates = append(predicates, note.IDEqualFold(*i.IDEqualFold))
+	}
+	if i.IDContainsFold != nil {
+		predicates = append(predicates, note.IDContainsFold(*i.IDContainsFold))
+	}
+	if i.Text != nil {
+		predicates = append(predicates, note.TextEQ(*i.Text))
+	}
+	if i.TextNEQ != nil {
+		predicates = append(predicates, note.TextNEQ(*i.TextNEQ))
+	}
+	if len(i.TextIn) > 0 {
+		predicates = append(predicates, note.TextIn(i.TextIn...))
+	}
+	if len(i.TextNotIn) > 0 {
+		predicates = append(predicates, note.TextNotIn(i.TextNotIn...))
+	}
+	if i.TextGT != nil {
+		predicates = append(predicates, note.TextGT(*i.TextGT))
+	}
+	if i.TextGTE != nil {
+		predicates = append(predicates, note.TextGTE(*i.TextGTE))
+	}
+	if i.TextLT != nil {
+		predicates = append(predicates, note.TextLT(*i.TextLT))
+	}
+	if i.TextLTE != nil {
+		predicates = append(predicates, note.TextLTE(*i.TextLTE))
+	}
+	if i.TextContains != nil {
+		predicates = append(predicates, note.TextContains(*i.TextContains))
+	}
+	if i.TextHasPrefix != nil {
+		predicates = append(predicates, note.TextHasPrefix(*i.TextHasPrefix))
+	}
+	if i.TextHasSuffix != nil {
+		predicates = append(predicates, note.TextHasSuffix(*i.TextHasSuffix))
+	}
+	if i.TextEqualFold != nil {
+		predicates = append(predicates, note.TextEqualFold(*i.TextEqualFold))
+	}
+	if i.TextContainsFold != nil {
+		predicates = append(predicates, note.TextContainsFold(*i.TextContainsFold))
+	}
+
+	if i.HasOrganization != nil {
+		p := note.HasOrganization()
+		if !*i.HasOrganization {
+			p = note.Not(p)
+		}
+		predicates = append(predicates, p)
+	}
+	if len(i.HasOrganizationWith) > 0 {
+		with := make([]predicate.Organization, 0, len(i.HasOrganizationWith))
+		for _, w := range i.HasOrganizationWith {
+			p, err := w.P()
+			if err != nil {
+				return nil, fmt.Errorf("%w: field 'HasOrganizationWith'", err)
+			}
+			with = append(with, p)
+		}
+		predicates = append(predicates, note.HasOrganizationWith(with...))
+	}
+	switch len(predicates) {
+	case 0:
+		return nil, ErrEmptyNoteWhereInput
+	case 1:
+		return predicates[0], nil
+	default:
+		return note.And(predicates...), nil
+	}
+}
 
 // OrgMembershipWhereInput represents a where input for filtering OrgMembership queries.
 type OrgMembershipWhereInput struct {
@@ -418,6 +627,10 @@ type OrganizationWhereInput struct {
 	DescriptionNotNil       bool     `json:"descriptionNotNil,omitempty"`
 	DescriptionEqualFold    *string  `json:"descriptionEqualFold,omitempty"`
 	DescriptionContainsFold *string  `json:"descriptionContainsFold,omitempty"`
+
+	// "notes" edge predicates.
+	HasNotes     *bool             `json:"hasNotes,omitempty"`
+	HasNotesWith []*NoteWhereInput `json:"hasNotesWith,omitempty"`
 }
 
 // AddPredicates adds custom predicates to the where input to be used during the filtering phase.
@@ -795,6 +1008,24 @@ func (i *OrganizationWhereInput) P() (predicate.Organization, error) {
 		predicates = append(predicates, organization.DescriptionContainsFold(*i.DescriptionContainsFold))
 	}
 
+	if i.HasNotes != nil {
+		p := organization.HasNotes()
+		if !*i.HasNotes {
+			p = organization.Not(p)
+		}
+		predicates = append(predicates, p)
+	}
+	if len(i.HasNotesWith) > 0 {
+		with := make([]predicate.Note, 0, len(i.HasNotesWith))
+		for _, w := range i.HasNotesWith {
+			p, err := w.P()
+			if err != nil {
+				return nil, fmt.Errorf("%w: field 'HasNotesWith'", err)
+			}
+			with = append(with, p)
+		}
+		predicates = append(predicates, organization.HasNotesWith(with...))
+	}
 	switch len(predicates) {
 	case 0:
 		return nil, ErrEmptyOrganizationWhereInput

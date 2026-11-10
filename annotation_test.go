@@ -77,6 +77,7 @@ func TestCSVRefBuilder(t *testing.T) {
 		expectedColumn     string
 		expectedTarget     string
 		expectedCreate     bool
+		expectedChildField string
 	}{
 		{
 			name: "basic user email lookup",
@@ -130,6 +131,14 @@ func TestCSVRefBuilder(t *testing.T) {
 			expectedMatchField: "email",
 			expectedColumn:     "IdentityHolderEmail",
 		},
+		{
+			name: "comment child create",
+			builder: CSVRef().
+				FromColumn("Comment").
+				CreateChild("text"),
+			expectedColumn:     "Comment",
+			expectedChildField: "text",
+		},
 	}
 
 	for _, tc := range tests {
@@ -139,6 +148,7 @@ func TestCSVRefBuilder(t *testing.T) {
 			assert.Equal(t, tc.expectedColumn, tc.builder.annotation.CSVColumn)
 			assert.Equal(t, tc.expectedTarget, tc.builder.annotation.TargetEntity)
 			assert.Equal(t, tc.expectedCreate, tc.builder.annotation.CreateIfMissing)
+			assert.Equal(t, tc.expectedChildField, tc.builder.annotation.ChildField)
 		})
 	}
 }

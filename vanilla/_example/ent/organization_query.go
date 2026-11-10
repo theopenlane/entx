@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -11,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/theopenlane/entx/vanilla/_example/ent/note"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/predicate"
 )
@@ -18,13 +20,15 @@ import (
 // OrganizationQuery is the builder for querying Organization entities.
 type OrganizationQuery struct {
 	config
-	ctx        *QueryContext
-	order      []organization.OrderOption
-	inters     []Interceptor
-	predicates []predicate.Organization
-	withFKs    bool
-	modifiers  []func(*sql.Selector)
-	loadTotal  []func(context.Context, []*Organization) error
+	ctx            *QueryContext
+	order          []organization.OrderOption
+	inters         []Interceptor
+	predicates     []predicate.Organization
+	withNotes      *NoteQuery
+	withFKs        bool
+	modifiers      []func(*sql.Selector)
+	loadTotal      []func(context.Context, []*Organization) error
+	withNamedNotes map[string]*NoteQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -59,6 +63,28 @@ func (_q *OrganizationQuery) Unique(unique bool) *OrganizationQuery {
 func (_q *OrganizationQuery) Order(o ...organization.OrderOption) *OrganizationQuery {
 	_q.order = append(_q.order, o...)
 	return _q
+}
+
+// QueryNotes chains the current query on the "notes" edge.
+func (_q *OrganizationQuery) QueryNotes() *NoteQuery {
+	query := (&NoteClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, selector),
+			sqlgraph.To(note.Table, note.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.NotesTable, organization.NotesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
 }
 
 // First returns the first Organization entity from the query.
@@ -253,10 +279,22 @@ func (_q *OrganizationQuery) Clone() *OrganizationQuery {
 		order:      append([]organization.OrderOption{}, _q.order...),
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.Organization{}, _q.predicates...),
+		withNotes:  _q.withNotes.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
+}
+
+// WithNotes tells the query-builder to eager-load the nodes that are connected to
+// the "notes" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *OrganizationQuery) WithNotes(opts ...func(*NoteQuery)) *OrganizationQuery {
+	query := (&NoteClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withNotes = query
+	return _q
 }
 
 // GroupBy is used to group vertices by one or more fields/columns.
@@ -335,9 +373,12 @@ func (_q *OrganizationQuery) prepareQuery(ctx context.Context) error {
 
 func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Organization, error) {
 	var (
-		nodes   = []*Organization{}
-		withFKs = _q.withFKs
-		_spec   = _q.querySpec()
+		nodes       = []*Organization{}
+		withFKs     = _q.withFKs
+		_spec       = _q.querySpec()
+		loadedTypes = [1]bool{
+			_q.withNotes != nil,
+		}
 	)
 	if withFKs {
 		_spec.Node.Columns = append(_spec.Node.Columns, organization.ForeignKeys...)
@@ -348,6 +389,7 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	_spec.Assign = func(columns []string, values []any) error {
 		node := &Organization{config: _q.config}
 		nodes = append(nodes, node)
+		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
 	}
 	if len(_q.modifiers) > 0 {
@@ -362,12 +404,58 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
+	if query := _q.withNotes; query != nil {
+		if err := _q.loadNotes(ctx, query, nodes,
+			func(n *Organization) { n.Edges.Notes = []*Note{} },
+			func(n *Organization, e *Note) { n.Edges.Notes = append(n.Edges.Notes, e) }); err != nil {
+			return nil, err
+		}
+	}
+	for name, query := range _q.withNamedNotes {
+		if err := _q.loadNotes(ctx, query, nodes,
+			func(n *Organization) { n.appendNamedNotes(name) },
+			func(n *Organization, e *Note) { n.appendNamedNotes(name, e) }); err != nil {
+			return nil, err
+		}
+	}
 	for i := range _q.loadTotal {
 		if err := _q.loadTotal[i](ctx, nodes); err != nil {
 			return nil, err
 		}
 	}
 	return nodes, nil
+}
+
+func (_q *OrganizationQuery) loadNotes(ctx context.Context, query *NoteQuery, nodes []*Organization, init func(*Organization), assign func(*Organization, *Note)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Organization)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.Note(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(organization.NotesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.organization_notes
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "organization_notes" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "organization_notes" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
 }
 
 func (_q *OrganizationQuery) sqlCount(ctx context.Context) (int, error) {
@@ -452,6 +540,20 @@ func (_q *OrganizationQuery) sqlQuery(ctx context.Context) *sql.Selector {
 		selector.Limit(*limit)
 	}
 	return selector
+}
+
+// WithNamedNotes tells the query-builder to eager-load the nodes that are connected to the "notes"
+// edge with the given name. The optional arguments are used to configure the query builder of the edge.
+func (_q *OrganizationQuery) WithNamedNotes(name string, opts ...func(*NoteQuery)) *OrganizationQuery {
+	query := (&NoteClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	if _q.withNamedNotes == nil {
+		_q.withNamedNotes = make(map[string]*NoteQuery)
+	}
+	_q.withNamedNotes[name] = query
+	return _q
 }
 
 // OrganizationGroupBy is the group-by builder for Organization entities.

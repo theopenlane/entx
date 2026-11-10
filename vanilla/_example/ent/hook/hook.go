@@ -9,6 +9,18 @@ import (
 	"github.com/theopenlane/entx/vanilla/_example/ent"
 )
 
+// The NoteFunc type is an adapter to allow the use of ordinary
+// function as Note mutator.
+type NoteFunc func(context.Context, *ent.NoteMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f NoteFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.NoteMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.NoteMutation", m)
+}
+
 // The OrgMembershipFunc type is an adapter to allow the use of ordinary
 // function as OrgMembership mutator.
 type OrgMembershipFunc func(context.Context, *ent.OrgMembershipMutation) (ent.Value, error)

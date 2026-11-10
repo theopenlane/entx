@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/errcode"
+	"github.com/theopenlane/entx/vanilla/_example/ent/note"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/orgmembership"
 	"github.com/theopenlane/entx/vanilla/_example/ent/workflowinstance"
@@ -99,6 +100,255 @@ func paginateLimit(first, last *int) int {
 		limit = *last + 1
 	}
 	return limit
+}
+
+// NoteEdge is the edge representation of Note.
+type NoteEdge struct {
+	Node   *Note  `json:"node"`
+	Cursor Cursor `json:"cursor"`
+}
+
+// NoteConnection is the connection containing edges to Note.
+type NoteConnection struct {
+	Edges      []*NoteEdge `json:"edges"`
+	PageInfo   PageInfo    `json:"pageInfo"`
+	TotalCount int         `json:"totalCount"`
+}
+
+func (c *NoteConnection) build(nodes []*Note, pager *notePager, after *Cursor, first *int, before *Cursor, last *int) {
+	c.PageInfo.HasNextPage = before != nil
+	c.PageInfo.HasPreviousPage = after != nil
+	if first != nil && *first+1 == len(nodes) {
+		c.PageInfo.HasNextPage = true
+		nodes = nodes[:len(nodes)-1]
+	} else if last != nil && *last+1 == len(nodes) {
+		c.PageInfo.HasPreviousPage = true
+		nodes = nodes[:len(nodes)-1]
+	}
+	var nodeAt func(int) *Note
+	if last != nil {
+		n := len(nodes) - 1
+		nodeAt = func(i int) *Note {
+			return nodes[n-i]
+		}
+	} else {
+		nodeAt = func(i int) *Note {
+			return nodes[i]
+		}
+	}
+	c.Edges = make([]*NoteEdge, len(nodes))
+	for i := range nodes {
+		node := nodeAt(i)
+		c.Edges[i] = &NoteEdge{
+			Node:   node,
+			Cursor: pager.toCursor(node),
+		}
+	}
+	if l := len(c.Edges); l > 0 {
+		c.PageInfo.StartCursor = &c.Edges[0].Cursor
+		c.PageInfo.EndCursor = &c.Edges[l-1].Cursor
+	}
+	if c.TotalCount == 0 {
+		c.TotalCount = len(nodes)
+	}
+}
+
+// NotePaginateOption enables pagination customization.
+type NotePaginateOption func(*notePager) error
+
+// WithNoteOrder configures pagination ordering.
+func WithNoteOrder(order *NoteOrder) NotePaginateOption {
+	if order == nil {
+		order = DefaultNoteOrder
+	}
+	o := *order
+	return func(pager *notePager) error {
+		if err := o.Direction.Validate(); err != nil {
+			return err
+		}
+		if o.Field == nil {
+			o.Field = DefaultNoteOrder.Field
+		}
+		pager.order = &o
+		return nil
+	}
+}
+
+// WithNoteFilter configures pagination filter.
+func WithNoteFilter(filter func(*NoteQuery) (*NoteQuery, error)) NotePaginateOption {
+	return func(pager *notePager) error {
+		if filter == nil {
+			return errors.New("NoteQuery filter cannot be nil")
+		}
+		pager.filter = filter
+		return nil
+	}
+}
+
+type notePager struct {
+	reverse bool
+	order   *NoteOrder
+	filter  func(*NoteQuery) (*NoteQuery, error)
+}
+
+func newNotePager(opts []NotePaginateOption, reverse bool) (*notePager, error) {
+	pager := &notePager{reverse: reverse}
+	for _, opt := range opts {
+		if err := opt(pager); err != nil {
+			return nil, err
+		}
+	}
+	if pager.order == nil {
+		pager.order = DefaultNoteOrder
+	}
+	return pager, nil
+}
+
+func (p *notePager) applyFilter(query *NoteQuery) (*NoteQuery, error) {
+	if p.filter != nil {
+		return p.filter(query)
+	}
+	return query, nil
+}
+
+func (p *notePager) toCursor(_m *Note) Cursor {
+	return p.order.Field.toCursor(_m)
+}
+
+func (p *notePager) applyCursors(query *NoteQuery, after, before *Cursor) (*NoteQuery, error) {
+	direction := p.order.Direction
+	if p.reverse {
+		direction = direction.Reverse()
+	}
+	for _, predicate := range entgql.CursorsPredicate(after, before, DefaultNoteOrder.Field.column, p.order.Field.column, direction) {
+		query = query.Where(predicate)
+	}
+	return query, nil
+}
+
+func (p *notePager) applyOrder(query *NoteQuery) *NoteQuery {
+	direction := p.order.Direction
+	if p.reverse {
+		direction = direction.Reverse()
+	}
+	query = query.Order(p.order.Field.toTerm(direction.OrderTermOption()))
+	if p.order.Field != DefaultNoteOrder.Field {
+		query = query.Order(DefaultNoteOrder.Field.toTerm(direction.OrderTermOption()))
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(p.order.Field.column)
+	}
+	return query
+}
+
+func (p *notePager) orderExpr(query *NoteQuery) sql.Querier {
+	direction := p.order.Direction
+	if p.reverse {
+		direction = direction.Reverse()
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(p.order.Field.column)
+	}
+	return sql.ExprFunc(func(b *sql.Builder) {
+		b.Ident(p.order.Field.column).Pad().WriteString(string(direction))
+		if p.order.Field != DefaultNoteOrder.Field {
+			b.Comma().Ident(DefaultNoteOrder.Field.column).Pad().WriteString(string(direction))
+		}
+	})
+}
+
+// Paginate executes the query and returns a relay based cursor connection to Note.
+func (_m *NoteQuery) Paginate(
+	ctx context.Context, after *Cursor, first *int,
+	before *Cursor, last *int, opts ...NotePaginateOption,
+) (*NoteConnection, error) {
+	if err := validateFirstLast(first, last); err != nil {
+		return nil, err
+	}
+	pager, err := newNotePager(opts, last != nil)
+	if err != nil {
+		return nil, err
+	}
+	if _m, err = pager.applyFilter(_m); err != nil {
+		return nil, err
+	}
+	conn := &NoteConnection{Edges: []*NoteEdge{}}
+	ignoredEdges := !hasCollectedField(ctx, edgesField)
+	if hasCollectedField(ctx, totalCountField) || hasCollectedField(ctx, pageInfoField) {
+		hasPagination := after != nil || first != nil || before != nil || last != nil
+		if hasPagination || ignoredEdges {
+			c := _m.Clone()
+			c.ctx.Fields = nil
+			if conn.TotalCount, err = c.Count(ctx); err != nil {
+				return nil, err
+			}
+			conn.PageInfo.HasNextPage = first != nil && conn.TotalCount > 0
+			conn.PageInfo.HasPreviousPage = last != nil && conn.TotalCount > 0
+		}
+	}
+	if ignoredEdges || (first != nil && *first == 0) || (last != nil && *last == 0) {
+		return conn, nil
+	}
+	if _m, err = pager.applyCursors(_m, after, before); err != nil {
+		return nil, err
+	}
+	limit := paginateLimit(first, last)
+	if limit != 0 {
+		_m.Limit(limit)
+	}
+	if field := collectedField(ctx, edgesField, nodeField); field != nil {
+		if err := _m.collectField(ctx, limit == 1, graphql.GetOperationContext(ctx), *field, []string{edgesField, nodeField}); err != nil {
+			return nil, err
+		}
+	}
+	_m = pager.applyOrder(_m)
+	nodes, err := _m.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	conn.build(nodes, pager, after, first, before, last)
+	return conn, nil
+}
+
+// NoteOrderField defines the ordering field of Note.
+type NoteOrderField struct {
+	// Value extracts the ordering value from the given Note.
+	Value    func(*Note) (ent.Value, error)
+	column   string // field or computed.
+	toTerm   func(...sql.OrderTermOption) note.OrderOption
+	toCursor func(*Note) Cursor
+}
+
+// NoteOrder defines the ordering of Note.
+type NoteOrder struct {
+	Direction OrderDirection  `json:"direction"`
+	Field     *NoteOrderField `json:"field"`
+}
+
+// DefaultNoteOrder is the default ordering of Note.
+var DefaultNoteOrder = &NoteOrder{
+	Direction: entgql.OrderDirectionAsc,
+	Field: &NoteOrderField{
+		Value: func(_m *Note) (ent.Value, error) {
+			return _m.ID, nil
+		},
+		column: note.FieldID,
+		toTerm: note.ByID,
+		toCursor: func(_m *Note) Cursor {
+			return Cursor{ID: _m.ID}
+		},
+	},
+}
+
+// ToEdge converts Note into NoteEdge.
+func (_m *Note) ToEdge(order *NoteOrder) *NoteEdge {
+	if order == nil {
+		order = DefaultNoteOrder
+	}
+	return &NoteEdge{
+		Node:   _m,
+		Cursor: order.Field.toCursor(_m),
+	}
 }
 
 // OrgMembershipEdge is the edge representation of OrgMembership.

@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/theopenlane/entx/vanilla/_example/ent/enums"
+	"github.com/theopenlane/entx/vanilla/_example/ent/note"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/orgmembership"
 	"github.com/theopenlane/entx/vanilla/_example/ent/predicate"
@@ -28,11 +29,411 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
+	TypeNote              = "Note"
 	TypeOrgMembership     = "OrgMembership"
 	TypeOrganization      = "Organization"
 	TypeWorkflowInstance  = "WorkflowInstance"
 	TypeWorkflowObjectRef = "WorkflowObjectRef"
 )
+
+// NoteMutation represents an operation that mutates the Note nodes in the graph.
+type NoteMutation struct {
+	config
+	op                  Op
+	typ                 string
+	id                  *string
+	text                *string
+	clearedFields       map[string]struct{}
+	organization        *string
+	clearedorganization bool
+	done                bool
+	oldValue            func(context.Context) (*Note, error)
+	predicates          []predicate.Note
+}
+
+var _ ent.Mutation = (*NoteMutation)(nil)
+
+// noteOption allows management of the mutation configuration using functional options.
+type noteOption func(*NoteMutation)
+
+// newNoteMutation creates new mutation for the Note entity.
+func newNoteMutation(c config, op Op, opts ...noteOption) *NoteMutation {
+	m := &NoteMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeNote,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withNoteID sets the ID field of the mutation.
+func withNoteID(id string) noteOption {
+	return func(m *NoteMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Note
+		)
+		m.oldValue = func(ctx context.Context) (*Note, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Note.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withNote sets the old Note of the mutation.
+func withNote(node *Note) noteOption {
+	return func(m *NoteMutation) {
+		m.oldValue = func(context.Context) (*Note, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m NoteMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m NoteMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of Note entities.
+func (m *NoteMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *NoteMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *NoteMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Note.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetText sets the "text" field.
+func (m *NoteMutation) SetText(s string) {
+	m.text = &s
+}
+
+// Text returns the value of the "text" field in the mutation.
+func (m *NoteMutation) Text() (r string, exists bool) {
+	v := m.text
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldText returns the old "text" field's value of the Note entity.
+// If the Note object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *NoteMutation) OldText(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldText is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldText requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldText: %w", err)
+	}
+	return oldValue.Text, nil
+}
+
+// ResetText resets all changes to the "text" field.
+func (m *NoteMutation) ResetText() {
+	m.text = nil
+}
+
+// SetOrganizationID sets the "organization" edge to the Organization entity by id.
+func (m *NoteMutation) SetOrganizationID(id string) {
+	m.organization = &id
+}
+
+// ClearOrganization clears the "organization" edge to the Organization entity.
+func (m *NoteMutation) ClearOrganization() {
+	m.clearedorganization = true
+}
+
+// OrganizationCleared reports if the "organization" edge to the Organization entity was cleared.
+func (m *NoteMutation) OrganizationCleared() bool {
+	return m.clearedorganization
+}
+
+// OrganizationID returns the "organization" edge ID in the mutation.
+func (m *NoteMutation) OrganizationID() (id string, exists bool) {
+	if m.organization != nil {
+		return *m.organization, true
+	}
+	return
+}
+
+// OrganizationIDs returns the "organization" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OrganizationID instead. It exists only for internal usage by the builders.
+func (m *NoteMutation) OrganizationIDs() (ids []string) {
+	if id := m.organization; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOrganization resets all changes to the "organization" edge.
+func (m *NoteMutation) ResetOrganization() {
+	m.organization = nil
+	m.clearedorganization = false
+}
+
+// Where appends a list predicates to the NoteMutation builder.
+func (m *NoteMutation) Where(ps ...predicate.Note) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the NoteMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *NoteMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Note, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *NoteMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *NoteMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Note).
+func (m *NoteMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *NoteMutation) Fields() []string {
+	fields := make([]string, 0, 1)
+	if m.text != nil {
+		fields = append(fields, note.FieldText)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *NoteMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case note.FieldText:
+		return m.Text()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *NoteMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case note.FieldText:
+		return m.OldText(ctx)
+	}
+	return nil, fmt.Errorf("unknown Note field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *NoteMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case note.FieldText:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetText(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Note field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *NoteMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *NoteMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *NoteMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown Note numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *NoteMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *NoteMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *NoteMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown Note nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *NoteMutation) ResetField(name string) error {
+	switch name {
+	case note.FieldText:
+		m.ResetText()
+		return nil
+	}
+	return fmt.Errorf("unknown Note field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *NoteMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.organization != nil {
+		edges = append(edges, note.EdgeOrganization)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *NoteMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case note.EdgeOrganization:
+		if id := m.organization; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *NoteMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *NoteMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *NoteMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedorganization {
+		edges = append(edges, note.EdgeOrganization)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *NoteMutation) EdgeCleared(name string) bool {
+	switch name {
+	case note.EdgeOrganization:
+		return m.clearedorganization
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *NoteMutation) ClearEdge(name string) error {
+	switch name {
+	case note.EdgeOrganization:
+		m.ClearOrganization()
+		return nil
+	}
+	return fmt.Errorf("unknown Note unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *NoteMutation) ResetEdge(name string) error {
+	switch name {
+	case note.EdgeOrganization:
+		m.ResetOrganization()
+		return nil
+	}
+	return fmt.Errorf("unknown Note edge %s", name)
+}
 
 // OrgMembershipMutation represents an operation that mutates the OrgMembership nodes in the graph.
 type OrgMembershipMutation struct {
@@ -543,6 +944,9 @@ type OrganizationMutation struct {
 	description   *string
 	preferences   *map[string]interface{}
 	clearedFields map[string]struct{}
+	notes         map[string]struct{}
+	removednotes  map[string]struct{}
+	clearednotes  bool
 	done          bool
 	oldValue      func(context.Context) (*Organization, error)
 	predicates    []predicate.Organization
@@ -1018,6 +1422,60 @@ func (m *OrganizationMutation) ResetPreferences() {
 	delete(m.clearedFields, organization.FieldPreferences)
 }
 
+// AddNoteIDs adds the "notes" edge to the Note entity by ids.
+func (m *OrganizationMutation) AddNoteIDs(ids ...string) {
+	if m.notes == nil {
+		m.notes = make(map[string]struct{})
+	}
+	for i := range ids {
+		m.notes[ids[i]] = struct{}{}
+	}
+}
+
+// ClearNotes clears the "notes" edge to the Note entity.
+func (m *OrganizationMutation) ClearNotes() {
+	m.clearednotes = true
+}
+
+// NotesCleared reports if the "notes" edge to the Note entity was cleared.
+func (m *OrganizationMutation) NotesCleared() bool {
+	return m.clearednotes
+}
+
+// RemoveNoteIDs removes the "notes" edge to the Note entity by IDs.
+func (m *OrganizationMutation) RemoveNoteIDs(ids ...string) {
+	if m.removednotes == nil {
+		m.removednotes = make(map[string]struct{})
+	}
+	for i := range ids {
+		delete(m.notes, ids[i])
+		m.removednotes[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedNotes returns the removed IDs of the "notes" edge to the Note entity.
+func (m *OrganizationMutation) RemovedNotesIDs() (ids []string) {
+	for id := range m.removednotes {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// NotesIDs returns the "notes" edge IDs in the mutation.
+func (m *OrganizationMutation) NotesIDs() (ids []string) {
+	for id := range m.notes {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetNotes resets all changes to the "notes" edge.
+func (m *OrganizationMutation) ResetNotes() {
+	m.notes = nil
+	m.clearednotes = false
+	m.removednotes = nil
+}
+
 // Where appends a list predicates to the OrganizationMutation builder.
 func (m *OrganizationMutation) Where(ps ...predicate.Organization) {
 	m.predicates = append(m.predicates, ps...)
@@ -1309,49 +1767,85 @@ func (m *OrganizationMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *OrganizationMutation) AddedEdges() []string {
-	edges := make([]string, 0, 0)
+	edges := make([]string, 0, 1)
+	if m.notes != nil {
+		edges = append(edges, organization.EdgeNotes)
+	}
 	return edges
 }
 
 // AddedIDs returns all IDs (to other nodes) that were added for the given edge
 // name in this mutation.
 func (m *OrganizationMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case organization.EdgeNotes:
+		ids := make([]ent.Value, 0, len(m.notes))
+		for id := range m.notes {
+			ids = append(ids, id)
+		}
+		return ids
+	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *OrganizationMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 0)
+	edges := make([]string, 0, 1)
+	if m.removednotes != nil {
+		edges = append(edges, organization.EdgeNotes)
+	}
 	return edges
 }
 
 // RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
 // the given name in this mutation.
 func (m *OrganizationMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case organization.EdgeNotes:
+		ids := make([]ent.Value, 0, len(m.removednotes))
+		for id := range m.removednotes {
+			ids = append(ids, id)
+		}
+		return ids
+	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *OrganizationMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 0)
+	edges := make([]string, 0, 1)
+	if m.clearednotes {
+		edges = append(edges, organization.EdgeNotes)
+	}
 	return edges
 }
 
 // EdgeCleared returns a boolean which indicates if the edge with the given name
 // was cleared in this mutation.
 func (m *OrganizationMutation) EdgeCleared(name string) bool {
+	switch name {
+	case organization.EdgeNotes:
+		return m.clearednotes
+	}
 	return false
 }
 
 // ClearEdge clears the value of the edge with the given name. It returns an error
 // if that edge is not defined in the schema.
 func (m *OrganizationMutation) ClearEdge(name string) error {
+	switch name {
+	}
 	return fmt.Errorf("unknown Organization unique edge %s", name)
 }
 
 // ResetEdge resets all changes to the edge with the given name in this mutation.
 // It returns an error if the edge is not defined in the schema.
 func (m *OrganizationMutation) ResetEdge(name string) error {
+	switch name {
+	case organization.EdgeNotes:
+		m.ResetNotes()
+		return nil
+	}
 	return fmt.Errorf("unknown Organization edge %s", name)
 }
 

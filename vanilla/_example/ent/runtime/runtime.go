@@ -5,6 +5,7 @@ package runtime
 import (
 	"time"
 
+	"github.com/theopenlane/entx/vanilla/_example/ent/note"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/schema"
 )
@@ -13,6 +14,12 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	noteFields := schema.Note{}.Fields()
+	_ = noteFields
+	// noteDescText is the schema descriptor for text field.
+	noteDescText := noteFields[1].Descriptor()
+	// note.TextValidator is a validator for the "text" field. It is called by the builders before save.
+	note.TextValidator = noteDescText.Validators[0].(func(string) error)
 	orgmembershipFields := schema.OrgMembership{}.Fields()
 	_ = orgmembershipFields
 	organizationMixin := schema.Organization{}.Mixin()

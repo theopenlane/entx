@@ -8,10 +8,30 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 )
 
+func (_m *Note) Organization(ctx context.Context) (*Organization, error) {
+	result, err := _m.Edges.OrganizationOrErr()
+	if IsNotLoaded(err) {
+		result, err = _m.QueryOrganization().Only(ctx)
+	}
+	return result, MaskNotFound(err)
+}
+
 func (_m *OrgMembership) Organization(ctx context.Context) (*Organization, error) {
 	result, err := _m.Edges.OrganizationOrErr()
 	if IsNotLoaded(err) {
 		result, err = _m.QueryOrganization().Only(ctx)
+	}
+	return result, err
+}
+
+func (_m *Organization) Notes(ctx context.Context) (result []*Note, err error) {
+	if fc := graphql.GetFieldContext(ctx); fc != nil && fc.Field.Alias != "" {
+		result, err = _m.NamedNotes(graphql.GetFieldContext(ctx).Field.Alias)
+	} else {
+		result, err = _m.Edges.NotesOrErr()
+	}
+	if IsNotLoaded(err) {
+		result, err = _m.QueryNotes().All(ctx)
 	}
 	return result, err
 }

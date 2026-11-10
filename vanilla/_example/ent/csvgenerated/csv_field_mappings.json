@@ -1,0 +1,9 @@
+{
+  "Organization": [
+    {
+      "csvColumn": "Note",
+      "targetField": "Note.Text",
+      "isSlice": false
+    }
+  ]
+}

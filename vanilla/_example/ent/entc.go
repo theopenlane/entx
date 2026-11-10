@@ -55,6 +55,11 @@ func main() {
 				genhooks.GenQuery(graphQueryDir, graphSchemaDir),
 				accessExt.Hook(),
 				entityOpsExt.Hook(),
+				genhooks.GenCSVSchema(
+					genhooks.WithCSVOutputDir(entGeneratedDir+"csvgenerated"),
+					genhooks.WithCSVPackageName("csvgenerated"),
+					genhooks.WithCSVEntPackage("github.com/theopenlane/entx/vanilla/_example/ent"),
+				),
 			},
 		},
 		entc.Extensions(

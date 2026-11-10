@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/theopenlane/entx/vanilla/_example/ent/note"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 )
 
@@ -120,6 +121,21 @@ func (_c *OrganizationCreate) SetNillableID(v *string) *OrganizationCreate {
 		_c.SetID(*v)
 	}
 	return _c
+}
+
+// AddNoteIDs adds the "notes" edge to the Note entity by IDs.
+func (_c *OrganizationCreate) AddNoteIDs(ids ...string) *OrganizationCreate {
+	_c.mutation.AddNoteIDs(ids...)
+	return _c
+}
+
+// AddNotes adds the "notes" edges to the Note entity.
+func (_c *OrganizationCreate) AddNotes(v ...*Note) *OrganizationCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddNoteIDs(ids...)
 }
 
 // Mutation returns the OrganizationMutation object of the builder.
@@ -267,6 +283,22 @@ func (_c *OrganizationCreate) createSpec() (*Organization, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.Preferences(); ok {
 		_spec.SetField(organization.FieldPreferences, field.TypeJSON, value)
 		_node.Preferences = value
+	}
+	if nodes := _c.mutation.NotesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.NotesTable,
+			Columns: []string{organization.NotesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(note.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }

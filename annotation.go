@@ -200,6 +200,8 @@ type CSVReferenceAnnotation struct {
 	TargetEntity string
 	// CreateIfMissing allows auto-creation of missing records during CSV import (e.g., platforms)
 	CreateIfMissing bool
+	// ChildField is the string field on the edge's target entity set from the column, creating one linked child per row
+	ChildField string
 }
 
 // IntegrationMappingFieldAnnotation marks a field as part of an integration mapping target.
@@ -912,6 +914,14 @@ func (b *CSVRefBuilder) TargetEntity(entity string) *CSVRefBuilder {
 // only for entities where auto-creation makes sense
 func (b *CSVRefBuilder) CreateIfMissing() *CSVRefBuilder {
 	b.annotation.CreateIfMissing = true
+
+	return b
+}
+
+// CreateChild creates a new record on the annotated edge for each non-empty cell, setting field to the cell value
+// and linking it to the row's entity, e.g. CSVRef().FromColumn("Comment").CreateChild("text") on a comments edge
+func (b *CSVRefBuilder) CreateChild(field string) *CSVRefBuilder {
+	b.annotation.ChildField = field
 
 	return b
 }

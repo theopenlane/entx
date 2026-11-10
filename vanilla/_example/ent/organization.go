@@ -33,9 +33,34 @@ type Organization struct {
 	// An optional description of the organization
 	Description string `json:"description,omitempty"`
 	// free-form organization preferences, including compliance setup answers
-	Preferences                              map[string]interface{} `json:"preferences,omitempty"`
+	Preferences map[string]interface{} `json:"preferences,omitempty"`
+	// Edges holds the relations/edges for other nodes in the graph.
+	// The values are being populated by the OrganizationQuery when eager-loading is set.
+	Edges                                    OrganizationEdges `json:"edges"`
 	workflow_object_ref_linked_organizations *string
 	selectValues                             sql.SelectValues
+}
+
+// OrganizationEdges holds the relations/edges for other nodes in the graph.
+type OrganizationEdges struct {
+	// Notes holds the value of the notes edge.
+	Notes []*Note `json:"notes,omitempty"`
+	// loadedTypes holds the information for reporting if a
+	// type was loaded (or requested) in eager-loading or not.
+	loadedTypes [1]bool
+	// totalCount holds the count of the edges above.
+	totalCount [1]map[string]int
+
+	namedNotes map[string][]*Note
+}
+
+// NotesOrErr returns the Notes value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) NotesOrErr() ([]*Note, error) {
+	if e.loadedTypes[0] {
+		return e.Notes, nil
+	}
+	return nil, &NotLoadedError{edge: "notes"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -142,6 +167,11 @@ func (_m *Organization) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
+// QueryNotes queries the "notes" edge of the Organization entity.
+func (_m *Organization) QueryNotes() *NoteQuery {
+	return NewOrganizationClient(_m.config).QueryNotes(_m)
+}
+
 // Update returns a builder for updating this Organization.
 // Note that you need to call Organization.Unwrap() before calling this method if this Organization
 // was returned from a transaction, and the transaction was committed or rolled back.
@@ -190,6 +220,30 @@ func (_m *Organization) String() string {
 	builder.WriteString(fmt.Sprintf("%v", _m.Preferences))
 	builder.WriteByte(')')
 	return builder.String()
+}
+
+// NamedNotes returns the Notes named value or an error if the edge was not
+// loaded in eager-loading with this name.
+func (_m *Organization) NamedNotes(name string) ([]*Note, error) {
+	if _m.Edges.namedNotes == nil {
+		return nil, &NotLoadedError{edge: name}
+	}
+	nodes, ok := _m.Edges.namedNotes[name]
+	if !ok {
+		return nil, &NotLoadedError{edge: name}
+	}
+	return nodes, nil
+}
+
+func (_m *Organization) appendNamedNotes(name string, edges ...*Note) {
+	if _m.Edges.namedNotes == nil {
+		_m.Edges.namedNotes = make(map[string][]*Note)
+	}
+	if len(edges) == 0 {
+		_m.Edges.namedNotes[name] = []*Note{}
+	} else {
+		_m.Edges.namedNotes[name] = append(_m.Edges.namedNotes[name], edges...)
+	}
 }
 
 // Organizations is a parsable slice of Organization.

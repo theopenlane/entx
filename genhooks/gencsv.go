@@ -16,6 +16,7 @@ import (
 	"github.com/99designs/gqlgen/codegen/templates"
 	"github.com/go-openapi/inflect"
 	"github.com/rs/zerolog/log"
+	"github.com/samber/lo"
 	"golang.org/x/tools/imports"
 
 	"github.com/theopenlane/entx"
@@ -95,6 +96,8 @@ type CSVSchema struct {
 	Name string
 	// Fields contains CSV reference field mappings
 	Fields []CSVReferenceField
+	// Children contains CSV columns that create linked child records
+	Children []CSVChildField
 	// HasCreateInput indicates if the schema has a CreateInput type
 	HasCreateInput bool
 	// HasUpdateInput indicates if the schema has an UpdateInput type
@@ -118,6 +121,20 @@ type CSVReferenceField struct {
 	IsSlice bool
 	// CreateIfMissing indicates if missing records should be created
 	CreateIfMissing bool
+}
+
+// CSVChildField represents a CSV column whose value creates a child record linked to the row's entity
+type CSVChildField struct {
+	// CSVColumn is the friendly CSV header (e.g., Comment)
+	CSVColumn string
+	// ChildEntity is the entity type created for each value (e.g., Note)
+	ChildEntity string
+	// ChildField is the Go field name on the child set from the value (e.g., Text)
+	ChildField string
+	// ValueSetter is the child create builder method setting the value (e.g., SetText)
+	ValueSetter string
+	// ParentSetter is the child create builder method linking the parent (e.g., SetControlID)
+	ParentSetter string
 }
 
 // CSVFieldMappingJSON is a simplified field mapping structure for JSON export.
@@ -197,10 +214,11 @@ func getCSVInputData(g *gen.Graph, c *CSVConfig) CSVSchemaData {
 
 		edgeTargets := buildEdgeTargetMap(node)
 		fields := getCSVReferenceFieldsWithEdges(schema, edgeTargets)
+		children := getCSVChildFields(node)
 
 		// When generateAllWrappers is enabled, include schemas even without CSV reference fields.
 		// This allows all CSV bulk resolvers to benefit from list preprocessing and header prefixing.
-		if len(fields) == 0 && !c.generateAllWrappers {
+		if len(fields) == 0 && len(children) == 0 && !c.generateAllWrappers {
 			continue
 		}
 
@@ -220,9 +238,14 @@ func getCSVInputData(g *gen.Graph, c *CSVConfig) CSVSchemaData {
 			return cmp.Compare(a.CSVColumn, b.CSVColumn)
 		})
 
+		slices.SortFunc(children, func(a, b CSVChildField) int {
+			return cmp.Compare(a.CSVColumn, b.CSVColumn)
+		})
+
 		data.Schemas = append(data.Schemas, CSVSchema{
 			Name:           node.Name,
 			Fields:         fields,
+			Children:       children,
 			HasCreateInput: hasCreate,
 			HasUpdateInput: hasUpdate,
 		})
@@ -441,6 +464,42 @@ func getCSVReferenceFieldsFromEdges(schema *load.Schema) []CSVReferenceField {
 	return fields
 }
 
+// getCSVChildFields extracts child-create columns from edge annotations using CreateChild.
+// The edge's inverse must be unique so each child links to a single parent
+func getCSVChildFields(node *gen.Type) []CSVChildField {
+	var children []CSVChildField
+
+	for _, edge := range node.Edges {
+		ann, ok := entx.GetAnnotation[*entx.CSVReferenceAnnotation](edge)
+		if !ok || ann.ChildField == "" || ann.CSVColumn == "" {
+			continue
+		}
+
+		if edge.Ref == nil || !edge.Ref.Unique {
+			log.Warn().Str("edge", edge.Name).Str("schema", node.Name).Msg("CSV child edge needs a unique inverse edge on the child")
+			continue
+		}
+
+		childField, ok := lo.Find(edge.Type.Fields, func(f *gen.Field) bool {
+			return f.Name == ann.ChildField
+		})
+		if !ok || !childField.IsString() {
+			log.Warn().Str("edge", edge.Name).Str("schema", node.Name).Str("field", ann.ChildField).Msg("CSV child field must be a string field on the child")
+			continue
+		}
+
+		children = append(children, CSVChildField{
+			CSVColumn:    ann.CSVColumn,
+			ChildEntity:  edge.Type.Name,
+			ChildField:   childField.StructField(),
+			ValueSetter:  childField.MutationSet(),
+			ParentSetter: edge.Ref.MutationSet(),
+		})
+	}
+
+	return children
+}
+
 // getCSVReferenceAnnotation retrieves the CSV reference annotation from a field
 func getCSVReferenceAnnotation(field *load.Field) *entx.CSVReferenceAnnotation {
 	ann, ok := entx.GetAnnotation[*entx.CSVReferenceAnnotation](field)
@@ -516,16 +575,23 @@ func generateCSVFieldMappingsJSON(outputDir string, data CSVSchemaData) error {
 	mappings := make(CSVFieldMappingsJSON)
 
 	for _, schema := range data.Schemas {
-		if len(schema.Fields) == 0 {
+		if len(schema.Fields) == 0 && len(schema.Children) == 0 {
 			continue
 		}
 
-		fields := make([]CSVFieldMappingJSON, 0, len(schema.Fields))
+		fields := make([]CSVFieldMappingJSON, 0, len(schema.Fields)+len(schema.Children))
 		for _, f := range schema.Fields {
 			fields = append(fields, CSVFieldMappingJSON{
 				CSVColumn:   f.CSVColumn,
 				TargetField: f.GoFieldName,
 				IsSlice:     f.IsSlice,
+			})
+		}
+
+		for _, c := range schema.Children {
+			fields = append(fields, CSVFieldMappingJSON{
+				CSVColumn:   c.CSVColumn,
+				TargetField: c.ChildEntity + "." + c.ChildField,
 			})
 		}
 

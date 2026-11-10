@@ -9,6 +9,7 @@ import (
 	"entgo.io/contrib/entgql"
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/hashicorp/go-multierror"
+	"github.com/theopenlane/entx/vanilla/_example/ent/note"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/orgmembership"
 	"github.com/theopenlane/entx/vanilla/_example/ent/workflowinstance"
@@ -19,6 +20,11 @@ import (
 type Noder interface {
 	IsNode()
 }
+
+var noteImplementors = []string{"Note", "Node"}
+
+// IsNode implements the Node interface check for GQLGen.
+func (*Note) IsNode() {}
 
 var orgmembershipImplementors = []string{"OrgMembership", "Node"}
 
@@ -98,6 +104,15 @@ func (c *Client) Noder(ctx context.Context, id string, opts ...NodeOption) (_ No
 
 func (c *Client) noder(ctx context.Context, table string, id string) (Noder, error) {
 	switch table {
+	case note.Table:
+		query := c.Note.Query().
+			Where(note.ID(id))
+		if fc := graphql.GetFieldContext(ctx); fc != nil {
+			if err := query.collectField(ctx, true, graphql.GetOperationContext(ctx), fc.Field, nil, noteImplementors...); err != nil {
+				return nil, err
+			}
+		}
+		return query.Only(ctx)
 	case orgmembership.Table:
 		query := c.OrgMembership.Query().
 			Where(orgmembership.ID(id))
@@ -207,6 +222,22 @@ func (c *Client) noders(ctx context.Context, table string, ids []string) ([]Node
 		idmap[id] = append(idmap[id], &noders[i])
 	}
 	switch table {
+	case note.Table:
+		query := c.Note.Query().
+			Where(note.IDIn(ids...))
+		query, err := query.CollectFields(ctx, noteImplementors...)
+		if err != nil {
+			return nil, err
+		}
+		nodes, err := query.All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, node := range nodes {
+			for _, noder := range idmap[node.ID] {
+				*noder = node
+			}
+		}
 	case orgmembership.Table:
 		query := c.OrgMembership.Query().
 			Where(orgmembership.IDIn(ids...))
