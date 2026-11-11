@@ -14,7 +14,7 @@ require (
 	github.com/samber/lo v1.53.0
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.12.1
-	github.com/theopenlane/iam v0.41.3
+	github.com/theopenlane/iam v0.42.0
 	github.com/theopenlane/oscalot v0.1.0
 	github.com/theopenlane/utils v0.7.4
 	github.com/vektah/gqlparser/v2 v2.5.64
