@@ -7,14 +7,14 @@ require (
 	entgo.io/ent v0.14.6
 	github.com/99designs/gqlgen v0.17.98
 	github.com/XSAM/otelsql v0.44.0
-	github.com/brianvoe/gofakeit/v7 v7.18.1
+	github.com/brianvoe/gofakeit/v7 v7.18.2
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/go-openapi/inflect v1.0.1
 	github.com/rs/zerolog v1.35.1
 	github.com/samber/lo v1.53.0
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.12.1
-	github.com/theopenlane/iam v0.40.2
+	github.com/theopenlane/iam v0.41.3
 	github.com/theopenlane/oscalot v0.1.0
 	github.com/theopenlane/utils v0.7.4
 	github.com/vektah/gqlparser/v2 v2.5.64
