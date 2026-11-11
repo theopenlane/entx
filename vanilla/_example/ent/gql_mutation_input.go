@@ -57,6 +57,7 @@ type CreateOrganizationInput struct {
 	Name        string
 	Description *string
 	Preferences map[string]interface{}
+	NoteIDs     []string
 }
 
 // Mutate applies the CreateOrganizationInput on the OrganizationMutation builder.
@@ -67,6 +68,9 @@ func (i *CreateOrganizationInput) Mutate(m *OrganizationMutation) {
 	}
 	if v := i.Preferences; v != nil {
 		m.SetPreferences(v)
+	}
+	if v := i.NoteIDs; len(v) > 0 {
+		m.AddNoteIDs(v...)
 	}
 }
 
@@ -83,6 +87,9 @@ type UpdateOrganizationInput struct {
 	Description      *string
 	ClearPreferences bool
 	Preferences      map[string]interface{}
+	ClearNotes       bool
+	AddNoteIDs       []string
+	RemoveNoteIDs    []string
 }
 
 // Mutate applies the UpdateOrganizationInput on the OrganizationMutation builder.
@@ -101,6 +108,15 @@ func (i *UpdateOrganizationInput) Mutate(m *OrganizationMutation) {
 	}
 	if v := i.Preferences; v != nil {
 		m.SetPreferences(v)
+	}
+	if i.ClearNotes {
+		m.ClearNotes()
+	}
+	if v := i.AddNoteIDs; len(v) > 0 {
+		m.AddNoteIDs(v...)
+	}
+	if v := i.RemoveNoteIDs; len(v) > 0 {
+		m.RemoveNoteIDs(v...)
 	}
 }
 

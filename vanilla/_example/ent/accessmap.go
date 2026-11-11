@@ -12,13 +12,25 @@ type EdgeAccess struct {
 // EdgeAccessMap maps <SchemaName> -> <edgeName> -> metadata.
 // If an edge defines the accessmap.EdgeAccess annotation, its values are used.
 // Otherwise, defaults are used: ObjectType = edge target type, SkipEditCheck = false.
-var EdgeAccessMap = map[string]map[string]EdgeAccess{"org_membership": {"organization": {
+var EdgeAccessMap = map[string]map[string]EdgeAccess{"note": {"organization": {
 	ObjectType:          "organization",
 	SkipEditCheck:       false,
 	CheckViewAccess:     false,
 	HasSystemOwnedField: false,
 },
-}, "organization": {}, "workflow_instance": {}, "workflow_object_ref": {"workflow_instance": {
+}, "org_membership": {"organization": {
+	ObjectType:          "organization",
+	SkipEditCheck:       false,
+	CheckViewAccess:     false,
+	HasSystemOwnedField: false,
+},
+}, "organization": {"notes": {
+	ObjectType:          "note",
+	SkipEditCheck:       false,
+	CheckViewAccess:     false,
+	HasSystemOwnedField: false,
+},
+}, "workflow_instance": {}, "workflow_object_ref": {"workflow_instance": {
 	ObjectType:          "workflow_instance",
 	SkipEditCheck:       false,
 	CheckViewAccess:     false,

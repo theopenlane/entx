@@ -8,6 +8,26 @@ import (
 )
 
 var (
+	// NotesColumns holds the columns for the "notes" table.
+	NotesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "text", Type: field.TypeString, Size: 2147483647},
+		{Name: "organization_notes", Type: field.TypeString, Nullable: true},
+	}
+	// NotesTable holds the schema information for the "notes" table.
+	NotesTable = &schema.Table{
+		Name:       "notes",
+		Columns:    NotesColumns,
+		PrimaryKey: []*schema.Column{NotesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "notes_organizations_notes",
+				Columns:    []*schema.Column{NotesColumns[2]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// OrgMembershipsColumns holds the columns for the "org_memberships" table.
 	OrgMembershipsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -111,6 +131,7 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		NotesTable,
 		OrgMembershipsTable,
 		OrganizationsTable,
 		WorkflowInstancesTable,
@@ -119,6 +140,7 @@ var (
 )
 
 func init() {
+	NotesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	OrgMembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	OrganizationsTable.ForeignKeys[0].RefTable = WorkflowObjectRefsTable
 	WorkflowObjectRefsTable.ForeignKeys[0].RefTable = WorkflowInstancesTable

@@ -38,6 +38,11 @@ var CSVLookupRegistry = map[string]CSVLookupEntry{
 {{- end }}
 }
 
+// CSVChildCreator is implemented by CSV wrappers with columns that create child records linked to the row.
+type CSVChildCreator interface {
+	CreateCSVChildren(ctx context.Context, client *generated.Client, parentID string) error
+}
+
 // GetCSVLookupEntry returns the lookup entry for a target entity and match field.
 func GetCSVLookupEntry(targetEntity, matchField string) (CSVLookupEntry, bool) {
 	key := targetEntity + ":" + matchField
@@ -235,10 +240,20 @@ type {{ $schema.Name }}CSVInput struct {
 	{{ $field.CSVColumn }} string `csv:"{{ $field.CSVColumn }}"`
 {{- end }}
 {{- end }}
+{{- range $child := $schema.Children }}
+	{{ $child.CSVColumn }} string `csv:"{{ $child.CSVColumn }}"`
+{{- end }}
 }
 
 // CSVInputWrapper marks {{ $schema.Name }}CSVInput for CSV header preprocessing.
 func ({{ $schema.Name }}CSVInput) CSVInputWrapper() {}
+{{- if and $.EntPackage $schema.Children }}
+
+// CreateCSVChildren creates the child records named by the CSV child columns on this row.
+func (i {{ $schema.Name }}CSVInput) CreateCSVChildren(ctx context.Context, client *generated.Client, parentID string) error {
+	return create{{ $schema.Name }}CSVChildren(ctx, client, parentID{{ range $child := $schema.Children }}, i.{{ $child.CSVColumn }}{{ end }})
+}
+{{- end }}
 {{- end }}
 {{- if $schema.HasUpdateInput }}
 
@@ -259,9 +274,34 @@ type {{ $schema.Name }}CSVUpdateInput struct {
 	{{ $field.CSVColumn }} string `csv:"{{ $field.CSVColumn }}"`
 {{- end }}
 {{- end }}
+{{- range $child := $schema.Children }}
+	{{ $child.CSVColumn }} string `csv:"{{ $child.CSVColumn }}"`
+{{- end }}
 }
 
 // CSVInputWrapper marks {{ $schema.Name }}CSVUpdateInput for CSV header preprocessing.
 func ({{ $schema.Name }}CSVUpdateInput) CSVInputWrapper() {}
+{{- if and $.EntPackage $schema.Children }}
+
+// CreateCSVChildren creates the child records named by the CSV child columns on this row.
+func (i {{ $schema.Name }}CSVUpdateInput) CreateCSVChildren(ctx context.Context, client *generated.Client, parentID string) error {
+	return create{{ $schema.Name }}CSVChildren(ctx, client, parentID{{ range $child := $schema.Children }}, i.{{ $child.CSVColumn }}{{ end }})
+}
+{{- end }}
+{{- end }}
+{{- if and $.EntPackage $schema.Children }}
+
+// create{{ $schema.Name }}CSVChildren creates one linked child record for each non-empty CSV child column on a {{ $schema.Name }} row.
+func create{{ $schema.Name }}CSVChildren(ctx context.Context, client *generated.Client, parentID string{{ range $child := $schema.Children }}, {{ $child.CSVColumn | toLowerCamel }} string{{ end }}) error {
+{{- range $child := $schema.Children }}
+	if v := strings.TrimSpace({{ $child.CSVColumn | toLowerCamel }}); v != "" {
+		if err := client.{{ $child.ChildEntity }}.Create().{{ $child.ValueSetter }}(v).{{ $child.ParentSetter }}(parentID).Exec(ctx); err != nil {
+			return err
+		}
+	}
+{{- end }}
+
+	return nil
+}
 {{- end }}
 {{- end }}

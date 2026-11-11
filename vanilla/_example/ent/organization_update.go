@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/theopenlane/entx/vanilla/_example/ent/note"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/predicate"
 )
@@ -106,9 +107,45 @@ func (_u *OrganizationUpdate) ClearPreferences() *OrganizationUpdate {
 	return _u
 }
 
+// AddNoteIDs adds the "notes" edge to the Note entity by IDs.
+func (_u *OrganizationUpdate) AddNoteIDs(ids ...string) *OrganizationUpdate {
+	_u.mutation.AddNoteIDs(ids...)
+	return _u
+}
+
+// AddNotes adds the "notes" edges to the Note entity.
+func (_u *OrganizationUpdate) AddNotes(v ...*Note) *OrganizationUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddNoteIDs(ids...)
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (_u *OrganizationUpdate) Mutation() *OrganizationMutation {
 	return _u.mutation
+}
+
+// ClearNotes clears all "notes" edges to the Note entity.
+func (_u *OrganizationUpdate) ClearNotes() *OrganizationUpdate {
+	_u.mutation.ClearNotes()
+	return _u
+}
+
+// RemoveNoteIDs removes the "notes" edge to Note entities by IDs.
+func (_u *OrganizationUpdate) RemoveNoteIDs(ids ...string) *OrganizationUpdate {
+	_u.mutation.RemoveNoteIDs(ids...)
+	return _u
+}
+
+// RemoveNotes removes "notes" edges to Note entities.
+func (_u *OrganizationUpdate) RemoveNotes(v ...*Note) *OrganizationUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveNoteIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -208,6 +245,51 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if _u.mutation.PreferencesCleared() {
 		_spec.ClearField(organization.FieldPreferences, field.TypeJSON)
 	}
+	if _u.mutation.NotesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.NotesTable,
+			Columns: []string{organization.NotesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(note.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedNotesIDs(); len(nodes) > 0 && !_u.mutation.NotesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.NotesTable,
+			Columns: []string{organization.NotesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(note.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.NotesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.NotesTable,
+			Columns: []string{organization.NotesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(note.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{organization.Label}
@@ -306,9 +388,45 @@ func (_u *OrganizationUpdateOne) ClearPreferences() *OrganizationUpdateOne {
 	return _u
 }
 
+// AddNoteIDs adds the "notes" edge to the Note entity by IDs.
+func (_u *OrganizationUpdateOne) AddNoteIDs(ids ...string) *OrganizationUpdateOne {
+	_u.mutation.AddNoteIDs(ids...)
+	return _u
+}
+
+// AddNotes adds the "notes" edges to the Note entity.
+func (_u *OrganizationUpdateOne) AddNotes(v ...*Note) *OrganizationUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddNoteIDs(ids...)
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (_u *OrganizationUpdateOne) Mutation() *OrganizationMutation {
 	return _u.mutation
+}
+
+// ClearNotes clears all "notes" edges to the Note entity.
+func (_u *OrganizationUpdateOne) ClearNotes() *OrganizationUpdateOne {
+	_u.mutation.ClearNotes()
+	return _u
+}
+
+// RemoveNoteIDs removes the "notes" edge to Note entities by IDs.
+func (_u *OrganizationUpdateOne) RemoveNoteIDs(ids ...string) *OrganizationUpdateOne {
+	_u.mutation.RemoveNoteIDs(ids...)
+	return _u
+}
+
+// RemoveNotes removes "notes" edges to Note entities.
+func (_u *OrganizationUpdateOne) RemoveNotes(v ...*Note) *OrganizationUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveNoteIDs(ids...)
 }
 
 // Where appends a list predicates to the OrganizationUpdate builder.
@@ -437,6 +555,51 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 	}
 	if _u.mutation.PreferencesCleared() {
 		_spec.ClearField(organization.FieldPreferences, field.TypeJSON)
+	}
+	if _u.mutation.NotesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.NotesTable,
+			Columns: []string{organization.NotesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(note.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedNotesIDs(); len(nodes) > 0 && !_u.mutation.NotesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.NotesTable,
+			Columns: []string{organization.NotesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(note.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.NotesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.NotesTable,
+			Columns: []string{organization.NotesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(note.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_node = &Organization{config: _u.config}
 	_spec.Assign = _node.assignValues

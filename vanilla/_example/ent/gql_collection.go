@@ -7,11 +7,90 @@ import (
 
 	"entgo.io/contrib/entgql"
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/theopenlane/entx/vanilla/_example/ent/note"
 	"github.com/theopenlane/entx/vanilla/_example/ent/organization"
 	"github.com/theopenlane/entx/vanilla/_example/ent/orgmembership"
 	"github.com/theopenlane/entx/vanilla/_example/ent/workflowinstance"
 	"github.com/theopenlane/entx/vanilla/_example/ent/workflowobjectref"
 )
+
+// CollectFields tells the query-builder to eagerly load connected nodes by resolver context.
+func (_q *NoteQuery) CollectFields(ctx context.Context, satisfies ...string) (*NoteQuery, error) {
+	fc := graphql.GetFieldContext(ctx)
+	if fc == nil {
+		return _q, nil
+	}
+	if err := _q.collectField(ctx, false, graphql.GetOperationContext(ctx), fc.Field, nil, satisfies...); err != nil {
+		return nil, err
+	}
+	return _q, nil
+}
+
+func (_q *NoteQuery) collectField(ctx context.Context, oneNode bool, opCtx *graphql.OperationContext, collected graphql.CollectedField, path []string, satisfies ...string) error {
+	path = append([]string(nil), path...)
+	var (
+		unknownSeen    bool
+		fieldSeen      = make(map[string]struct{}, len(note.Columns))
+		selectedFields = []string{note.FieldID}
+	)
+	for _, field := range graphql.CollectFields(opCtx, collected.Selections, satisfies) {
+		switch field.Name {
+
+		case "organization":
+			var (
+				alias = field.Alias
+				path  = append(path, alias)
+				query = (&OrganizationClient{config: _q.config}).Query()
+			)
+			if err := query.collectField(ctx, oneNode, opCtx, field, path, mayAddCondition(satisfies, organizationImplementors)...); err != nil {
+				return err
+			}
+			_q.withOrganization = query
+		case "text":
+			if _, ok := fieldSeen[note.FieldText]; !ok {
+				selectedFields = append(selectedFields, note.FieldText)
+				fieldSeen[note.FieldText] = struct{}{}
+			}
+		case "id":
+		case "__typename":
+		default:
+			unknownSeen = true
+		}
+	}
+	if !unknownSeen {
+		_q.Select(selectedFields...)
+	}
+	return nil
+}
+
+type notePaginateArgs struct {
+	first, last   *int
+	after, before *Cursor
+	opts          []NotePaginateOption
+}
+
+func newNotePaginateArgs(rv map[string]any) *notePaginateArgs {
+	args := &notePaginateArgs{}
+	if rv == nil {
+		return args
+	}
+	if v := rv[firstField]; v != nil {
+		args.first = v.(*int)
+	}
+	if v := rv[lastField]; v != nil {
+		args.last = v.(*int)
+	}
+	if v := rv[afterField]; v != nil {
+		args.after = v.(*Cursor)
+	}
+	if v := rv[beforeField]; v != nil {
+		args.before = v.(*Cursor)
+	}
+	if v, ok := rv[whereField].(*NoteWhereInput); ok {
+		args.opts = append(args.opts, WithNoteFilter(v.Filter))
+	}
+	return args
+}
 
 // CollectFields tells the query-builder to eagerly load connected nodes by resolver context.
 func (_q *OrgMembershipQuery) CollectFields(ctx context.Context, satisfies ...string) (*OrgMembershipQuery, error) {
@@ -126,6 +205,19 @@ func (_q *OrganizationQuery) collectField(ctx context.Context, oneNode bool, opC
 	)
 	for _, field := range graphql.CollectFields(opCtx, collected.Selections, satisfies) {
 		switch field.Name {
+
+		case "notes":
+			var (
+				alias = field.Alias
+				path  = append(path, alias)
+				query = (&NoteClient{config: _q.config}).Query()
+			)
+			if err := query.collectField(ctx, false, opCtx, field, path, mayAddCondition(satisfies, noteImplementors)...); err != nil {
+				return err
+			}
+			_q.WithNamedNotes(alias, func(wq *NoteQuery) {
+				*wq = *query
+			})
 		case "displayID":
 			if _, ok := fieldSeen[organization.FieldDisplayID]; !ok {
 				selectedFields = append(selectedFields, organization.FieldDisplayID)

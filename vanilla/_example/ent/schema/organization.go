@@ -4,6 +4,7 @@ import (
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent"
 	"entgo.io/ent/schema"
+	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 	"github.com/theopenlane/entx"
@@ -29,6 +30,17 @@ func (Organization) Fields() []ent.Field {
 			Optional().
 			// field level task rule based on the values set on the field
 			Annotations(entx.FieldTaskRule(organizationTaskRules...)),
+	}
+}
+
+// Edges of the Organization
+func (Organization) Edges() []ent.Edge {
+	return []ent.Edge{
+		edge.To("notes", Note.Type).
+			Annotations(
+				// each non-empty Note cell in a CSV import creates a note linked to that row's organization
+				entx.CSVRef().FromColumn("Note").CreateChild("text"),
+			),
 	}
 }
 

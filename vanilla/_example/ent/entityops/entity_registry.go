@@ -1639,6 +1639,29 @@ func jsonArrayMatch(column string, values []string) func(*sql.Selector) {
 // --- Per-schema registrations ---
 
 var (
+	SchemaNote = &Schema{
+		SchemaDescriptor: SchemaDescriptor{
+			Name:   "Note",
+			Snake:  "note",
+			Lower:  "note",
+			Plural: "notes",
+		},
+		Load: func(ctx context.Context, client *generated.Client, entityID string) (json.RawMessage, error) {
+			ref := SchemaRef{Schema: "note", Operation: refOpLoad, EntityID: entityID}
+
+			entity, err := client.Note.Get(ctx, entityID)
+			if err != nil {
+				return nil, logError(ctx, ref, ErrLoadFailed, err)
+			}
+
+			data, err := json.Marshal(entity)
+			if err != nil {
+				return nil, logError(ctx, ref, ErrMarshalFailed, err)
+			}
+
+			return data, nil
+		},
+	}
 	SchemaOrgMembership = &Schema{
 		SchemaDescriptor: SchemaDescriptor{
 			Name:   "OrgMembership",
@@ -1756,6 +1779,9 @@ var (
 
 // init wires cross-schema edge references after all Schema vars are initialized
 func init() {
+	SchemaNote.Fields = []FieldDescriptor{
+		{Name: "text", Label: "Text", Type: "string", MatchKey: true},
+	}
 	SchemaOrgMembership.Fields = []FieldDescriptor{
 		{Name: "organization_id", Label: "OrganizationID", Type: "string", MatchKey: true, SystemControlled: true},
 		{Name: "role", Label: "Role", Type: "enums.Role"},
@@ -1783,6 +1809,17 @@ func init() {
 	SchemaOrganization.TaskRules = []TaskRuleDescriptor{
 		{RuleID: "setup-payment-method"},
 	}
+	SchemaNote.Edges = []EdgeDescriptor{
+		{
+			Name:        "organization",
+			Label:       "Organization",
+			Target:      SchemaOrganization,
+			TargetType:  "Organization",
+			Unique:      true,
+			CreateField: "organization_id",
+			Field:       "organization_notes",
+		},
+	}
 	SchemaOrgMembership.Edges = []EdgeDescriptor{
 		{
 			Name:        "organization",
@@ -1792,6 +1829,16 @@ func init() {
 			Unique:      true,
 			CreateField: "organization_id",
 			Field:       "organization_id",
+		},
+	}
+	SchemaOrganization.Edges = []EdgeDescriptor{
+		{
+			Name:        "notes",
+			Label:       "Notes",
+			Target:      SchemaNote,
+			TargetType:  "Note",
+			CreateField: "note_ids",
+			AddField:    "add_note_ids",
 		},
 	}
 	SchemaWorkflowObjectRef.Edges = []EdgeDescriptor{
@@ -1928,6 +1975,7 @@ func applyThroughEdgeIDs(ctx context.Context, client *generated.Client, s *Schem
 // --- Lookup registry ---
 
 var allSchemas = []*Schema{
+	SchemaNote,
 	SchemaOrgMembership,
 	SchemaOrganization,
 	SchemaWorkflowInstance,

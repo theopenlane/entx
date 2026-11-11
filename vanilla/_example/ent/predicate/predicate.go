@@ -6,6 +6,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// Note is the predicate function for note builders.
+type Note func(*sql.Selector)
+
 // OrgMembership is the predicate function for orgmembership builders.
 type OrgMembership func(*sql.Selector)
 

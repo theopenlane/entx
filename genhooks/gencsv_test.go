@@ -1083,3 +1083,123 @@ func TestGetCSVReferenceFieldsWithEdgesIncludesEdgeAnnotations(t *testing.T) {
 	assert.Equal(t, "Control", controlsField.TargetEntity)
 	assert.True(t, controlsField.IsSlice)
 }
+
+func csvChildTestNode(inverseUnique bool, childFieldType field.Type, ann map[string]any) *gen.Type {
+	note := &gen.Type{
+		Name: "Note",
+		Fields: []*gen.Field{
+			{Name: "text", Type: &field.TypeInfo{Type: childFieldType}},
+		},
+	}
+
+	inverse := &gen.Edge{Name: "control", Type: &gen.Type{Name: "Control"}, Unique: inverseUnique}
+
+	return &gen.Type{
+		Name: "Control",
+		Edges: []*gen.Edge{
+			{
+				Name:        "comments",
+				Type:        note,
+				Ref:         inverse,
+				Annotations: map[string]any{entx.CSVReferenceAnnotationName: ann},
+			},
+		},
+	}
+}
+
+func TestGetCSVChildFields(t *testing.T) {
+	childAnn := map[string]any{"CSVColumn": "Comment", "ChildField": "text"}
+
+	tests := []struct {
+		name     string
+		node     *gen.Type
+		expected []CSVChildField
+	}{
+		{
+			name: "comments edge creates notes",
+			node: csvChildTestNode(true, field.TypeString, childAnn),
+			expected: []CSVChildField{
+				{
+					CSVColumn:    "Comment",
+					ChildEntity:  "Note",
+					ChildField:   "Text",
+					ValueSetter:  "SetText",
+					ParentSetter: "SetControlID",
+				},
+			},
+		},
+		{
+			name: "non-unique inverse edge is skipped",
+			node: csvChildTestNode(false, field.TypeString, childAnn),
+		},
+		{
+			name: "non-string child field is skipped",
+			node: csvChildTestNode(true, field.TypeInt, childAnn),
+		},
+		{
+			name: "missing child field is skipped",
+			node: csvChildTestNode(true, field.TypeString, map[string]any{"CSVColumn": "Comment", "ChildField": "body"}),
+		},
+		{
+			name: "lookup annotation is not a child",
+			node: csvChildTestNode(true, field.TypeString, map[string]any{"CSVColumn": "NoteTexts", "MatchField": "text"}),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, getCSVChildFields(tc.node))
+		})
+	}
+}
+
+func TestGetCSVChildFieldsMissingInverse(t *testing.T) {
+	node := csvChildTestNode(true, field.TypeString, map[string]any{"CSVColumn": "Comment", "ChildField": "text"})
+	node.Edges[0].Ref = nil
+
+	assert.Empty(t, getCSVChildFields(node))
+}
+
+func TestGenerateCSVHelperFileWithChildren(t *testing.T) {
+	tempDir := t.TempDir()
+
+	data := CSVSchemaData{
+		PackageName: "testpkg",
+		EntPackage:  "github.com/example/ent/generated",
+		Schemas: []CSVSchema{
+			{
+				Name:           "Control",
+				HasCreateInput: true,
+				HasUpdateInput: true,
+				Children: []CSVChildField{
+					{
+						CSVColumn:    "Comment",
+						ChildEntity:  "Note",
+						ChildField:   "Text",
+						ValueSetter:  "SetText",
+						ParentSetter: "SetControlID",
+					},
+				},
+			},
+		},
+	}
+
+	require.NoError(t, generateCSVHelperFile(tempDir, data))
+
+	content, err := os.ReadFile(filepath.Join(tempDir, "csv_generated.go"))
+	require.NoError(t, err)
+
+	contentStr := string(content)
+	assert.Contains(t, contentStr, "type CSVChildCreator interface")
+	assert.Contains(t, contentStr, "Comment string `csv:\"Comment\"`")
+	assert.Contains(t, contentStr, "func (i ControlCSVInput) CreateCSVChildren(ctx context.Context, client *generated.Client, parentID string) error")
+	assert.Contains(t, contentStr, "func (i ControlCSVUpdateInput) CreateCSVChildren(ctx context.Context, client *generated.Client, parentID string) error")
+	assert.Contains(t, contentStr, "return createControlCSVChildren(ctx, client, parentID, i.Comment)")
+	assert.Contains(t, contentStr, "client.Note.Create().SetText(v).SetControlID(parentID).Exec(ctx)")
+
+	mappings, err := os.ReadFile(filepath.Join(tempDir, "csv_field_mappings.json"))
+	require.NoError(t, err)
+
+	assert.Contains(t, string(mappings), `"csvColumn": "Comment"`)
+	assert.Contains(t, string(mappings), `"targetField": "Note.Text"`)
+}
