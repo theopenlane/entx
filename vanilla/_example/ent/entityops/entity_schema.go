@@ -241,6 +241,9 @@ type EdgeDescriptor struct {
 	// LinkThrough creates the join entity rows binding the source to each target, skipping pairs
 	// that already exist; nil for plain edges
 	LinkThrough func(ctx context.Context, client *generated.Client, sourceID string, targetIDs []string) error `json:"-"`
+	// LinkedIDs returns the target ids the source is already linked to over this to-many edge, so re-ingest
+	// can drop links that already exist instead of reporting them as a change, nil for unique edges
+	LinkedIDs func(ctx context.Context, client *generated.Client, sourceID string) ([]string, error) `json:"-"`
 	// WorkflowEligible reports whether the edge may drive workflow conditions and triggers
 	WorkflowEligible bool `json:"workflowEligible,omitempty"`
 }
