@@ -1496,8 +1496,9 @@ func (s *Schema) rekeyEdgesForUpdate(payload json.RawMessage) json.RawMessage {
 }
 
 // dropLinkedEdgeIDs removes the link ids the row already has from a rekeyed update payload, dropping an edge key
-// left with no new ids, so re-sending existing links on every re-ingest is not reported as a change. An edge whose
-// current links cannot be read keeps its ids, since adding a link that exists is harmless
+// left with no new ids, so re-sending existing links on every re-ingest is not reported as a change. When the current
+// links cannot be read, a many-to-many or through edge keeps its ids since re-adding those links is a no-op, while a
+// one-to-many edge drops its key since re-adding an existing one-to-many link fails the save with a constraint error
 func (s *Schema) dropLinkedEdgeIDs(ctx context.Context, client *generated.Client, sourceID string, payload json.RawMessage) json.RawMessage {
 	if sourceID == "" {
 		return payload
@@ -1520,9 +1521,17 @@ func (s *Schema) dropLinkedEdgeIDs(ctx context.Context, client *generated.Client
 			continue
 		}
 
-		linked, err := edge.LinkedIDs(ctx, client, sourceID)
+		linked, err := edge.LinkedIDs(ctx, client, sourceID, ids)
 		if err != nil {
-			logx.FromContext(ctx).Debug().Err(err).Str(FieldSchema, s.Snake).Str("edge", edge.Name).Msg("entityops: could not read existing links, keeping them on the update")
+			if edge.ManyToMany || edge.Through {
+				logx.FromContext(ctx).Warn().Err(err).Str(FieldSchema, s.Snake).Str("edge", edge.Name).Msg("entityops: could not read existing links, re-adding them on the update")
+
+				continue
+			}
+
+			logx.FromContext(ctx).Warn().Err(err).Str(FieldSchema, s.Snake).Str("edge", edge.Name).Msg("entityops: could not read existing links, skipping the edge on the update")
+
+			remaining[key] = nil
 
 			continue
 		}
@@ -2291,26 +2300,21 @@ func init() {
 
 				return nil
 			},
-			LinkedIDs: func(ctx context.Context, client *generated.Client, sourceID string) ([]string, error) {
-				rows, err := client.{{ .ThroughType }}.Query().
-					Where({{ .ThroughType | lower }}.{{ .ThroughSourceField }}(sourceID)).
-					All(ctx)
-				if err != nil {
-					return nil, err
-				}
-
-				ids := make([]string, 0, len(rows))
-				for _, row := range rows {
-					ids = append(ids, row.{{ .ThroughTargetField }})
-				}
-
-				return ids, nil
+			LinkedIDs: func(ctx context.Context, client *generated.Client, sourceID string, targetIDs []string) ([]string, error) {
+				return client.{{ .ThroughType }}.Query().
+					Where({{ .ThroughType | lower }}.{{ .ThroughSourceField }}(sourceID), {{ .ThroughType | lower }}.{{ .ThroughTargetField }}In(targetIDs...)).
+					Select({{ .ThroughType | lower }}.Field{{ .ThroughTargetField }}).
+					Strings(ctx)
 			},
 {{- else if and (not .Unique) (not .Immutable) }}
-			LinkedIDs: func(ctx context.Context, client *generated.Client, sourceID string) ([]string, error) {
+{{- if .ManyToMany }}
+			ManyToMany: true,
+{{- end }}
+			LinkedIDs: func(ctx context.Context, client *generated.Client, sourceID string, targetIDs []string) ([]string, error) {
 				return client.{{ $schema.Name }}.Query().
 					Where(predicate.{{ $schema.Name }}(sql.FieldEQ("id", sourceID))).
 					Query{{ .Name | pascal }}().
+					Where(predicate.{{ .TargetSchema }}(sql.FieldIn("id", targetIDs...))).
 					IDs(ctx)
 			},
 {{- end }}

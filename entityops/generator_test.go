@@ -963,7 +963,7 @@ func TestReconcileEmission(t *testing.T) {
 	require.Contains(t, registry, "func catalogVisible(row json.RawMessage) bool")
 	require.Contains(t, registry, "if merged[CatalogPointerField], err = json.Marshal(entityID(catalogRow)); err != nil {")
 
-	require.Contains(t, registry, "rekeyed, throughIDs := splitThroughEdgeIDs(s, s.rekeyEdgesForUpdate(dropCatalogPointer(linked)))")
+	require.Contains(t, registry, "rekeyed, throughIDs := splitThroughEdgeIDs(s, s.dropLinkedEdgeIDs(ctx, client, entityID(row), s.rekeyEdgesForUpdate(dropCatalogPointer(linked))))")
 	require.Contains(t, registry, "if err := s.fillMutation(ctx, mutation); err != nil {")
 	require.Contains(t, registry, "if !ChangeSetFromMutation(mutation).Empty() {")
 	require.Contains(t, registry, "return applyThroughEdgeIDs(ctx, client, s, entityID(row), throughIDs)")

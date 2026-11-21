@@ -1487,8 +1487,9 @@ func (s *Schema) rekeyEdgesForUpdate(payload json.RawMessage) json.RawMessage {
 }
 
 // dropLinkedEdgeIDs removes the link ids the row already has from a rekeyed update payload, dropping an edge key
-// left with no new ids, so re-sending existing links on every re-ingest is not reported as a change. An edge whose
-// current links cannot be read keeps its ids, since adding a link that exists is harmless
+// left with no new ids, so re-sending existing links on every re-ingest is not reported as a change. When the current
+// links cannot be read, a many-to-many or through edge keeps its ids since re-adding those links is a no-op, while a
+// one-to-many edge drops its key since re-adding an existing one-to-many link fails the save with a constraint error
 func (s *Schema) dropLinkedEdgeIDs(ctx context.Context, client *generated.Client, sourceID string, payload json.RawMessage) json.RawMessage {
 	if sourceID == "" {
 		return payload
@@ -1511,9 +1512,17 @@ func (s *Schema) dropLinkedEdgeIDs(ctx context.Context, client *generated.Client
 			continue
 		}
 
-		linked, err := edge.LinkedIDs(ctx, client, sourceID)
+		linked, err := edge.LinkedIDs(ctx, client, sourceID, ids)
 		if err != nil {
-			logx.FromContext(ctx).Debug().Err(err).Str("schema", s.Name).Str("edge", edge.Name).Msg("could not read existing links, keeping them on the update")
+			if edge.ManyToMany || edge.Through {
+				logx.FromContext(ctx).Warn().Err(err).Str(FieldSchema, s.Snake).Str("edge", edge.Name).Msg("entityops: could not read existing links, re-adding them on the update")
+
+				continue
+			}
+
+			logx.FromContext(ctx).Warn().Err(err).Str(FieldSchema, s.Snake).Str("edge", edge.Name).Msg("entityops: could not read existing links, skipping the edge on the update")
+
+			remaining[key] = nil
 
 			continue
 		}
@@ -1899,10 +1908,11 @@ func init() {
 			TargetType:  "Note",
 			CreateField: "note_ids",
 			AddField:    "add_note_ids",
-			LinkedIDs: func(ctx context.Context, client *generated.Client, sourceID string) ([]string, error) {
+			LinkedIDs: func(ctx context.Context, client *generated.Client, sourceID string, targetIDs []string) ([]string, error) {
 				return client.Organization.Query().
 					Where(predicate.Organization(sql.FieldEQ("id", sourceID))).
 					QueryNotes().
+					Where(predicate.Note(sql.FieldIn("id", targetIDs...))).
 					IDs(ctx)
 			},
 		},
@@ -1915,10 +1925,11 @@ func init() {
 			TargetType:  "Organization",
 			CreateField: "linked_organization_ids",
 			AddField:    "add_linked_organization_ids",
-			LinkedIDs: func(ctx context.Context, client *generated.Client, sourceID string) ([]string, error) {
+			LinkedIDs: func(ctx context.Context, client *generated.Client, sourceID string, targetIDs []string) ([]string, error) {
 				return client.WorkflowObjectRef.Query().
 					Where(predicate.WorkflowObjectRef(sql.FieldEQ("id", sourceID))).
 					QueryLinkedOrganizations().
+					Where(predicate.Organization(sql.FieldIn("id", targetIDs...))).
 					IDs(ctx)
 			},
 		},

@@ -248,6 +248,9 @@ type EntityEdge struct {
 	Unique bool
 	// Immutable reports whether the edge is set only at create time; it gates update-input keys
 	Immutable bool
+	// ManyToMany reports whether the edge is a many-to-many relation, where re-adding an existing link is a no-op;
+	// re-adding an existing one-to-many link fails with a constraint error
+	ManyToMany bool
 	// WorkflowEligible reports whether the edge may drive workflow conditions and triggers
 	WorkflowEligible bool
 	// Field is the foreign-key storage column on this schema's table for unique owning edges
@@ -859,6 +862,7 @@ func collectEntityData(g *gen.Graph, c *Config) (EntityData, error) { //nolint:g
 				TargetInRegistry: targetInRegistry,
 				Unique:           edge.Unique,
 				Immutable:        edge.Immutable,
+				ManyToMany:       edge.Rel.Type == gen.M2M,
 				WorkflowEligible: workflowEligible,
 				Field:            fkColumn,
 			}
