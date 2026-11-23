@@ -25,6 +25,7 @@ import (
 	"github.com/theopenlane/utils/contextx"
 
 	generated "github.com/theopenlane/entx/vanilla/_example/ent"
+	"github.com/theopenlane/entx/vanilla/_example/ent/predicate"
 	"github.com/theopenlane/entx/vanilla/_example/pkg/celx"
 	"github.com/theopenlane/entx/vanilla/_example/pkg/gala"
 	"github.com/theopenlane/logx"
@@ -1378,7 +1379,7 @@ func (s *Schema) applyIngestFill(ctx context.Context, client *generated.Client, 
 		return true
 	})
 
-	rekeyed, throughIDs := splitThroughEdgeIDs(s, s.rekeyEdgesForUpdate(stripped))
+	rekeyed, throughIDs := splitThroughEdgeIDs(s, s.dropLinkedEdgeIDs(ctx, client, entityID(row), s.rekeyEdgesForUpdate(stripped)))
 
 	mutation, save, err := s.Ingest.buildUpdate(ctx, client, row, rekeyed)
 	if err != nil {
@@ -1423,7 +1424,7 @@ func (s *Schema) applyIngestUpdate(ctx context.Context, client *generated.Client
 
 	payload = s.applyIngestResurrect(row, payload)
 
-	rekeyed, throughIDs := splitThroughEdgeIDs(s, s.rekeyEdgesForUpdate(payload))
+	rekeyed, throughIDs := splitThroughEdgeIDs(s, s.dropLinkedEdgeIDs(ctx, client, entityID(row), s.rekeyEdgesForUpdate(payload)))
 
 	mutation, save, err := s.Ingest.buildUpdate(ctx, client, row, rekeyed)
 	if err != nil {
@@ -1482,6 +1483,74 @@ func (s *Schema) rekeyEdgesForUpdate(payload json.RawMessage) json.RawMessage {
 		}
 
 		return changed
+	})
+}
+
+// dropLinkedEdgeIDs removes the link ids the row already has from a rekeyed update payload, dropping an edge key
+// left with no new ids, so re-sending existing links on every re-ingest is not reported as a change. When the current
+// links cannot be read, a many-to-many or through edge keeps its ids since re-adding those links is a no-op, while a
+// one-to-many edge drops its key since re-adding an existing one-to-many link fails the save with a constraint error
+func (s *Schema) dropLinkedEdgeIDs(ctx context.Context, client *generated.Client, sourceID string, payload json.RawMessage) json.RawMessage {
+	if sourceID == "" {
+		return payload
+	}
+
+	remaining := map[string][]string{}
+
+	for _, edge := range s.Edges {
+		if edge.LinkedIDs == nil {
+			continue
+		}
+
+		key := edge.AddField
+		if edge.Through {
+			key = edge.CreateField
+		}
+
+		ids, ok := jsonx.DecodeObjectKey[[]string](payload, key)
+		if !ok || len(ids) == 0 {
+			continue
+		}
+
+		linked, err := edge.LinkedIDs(ctx, client, sourceID, ids)
+		if err != nil {
+			if edge.ManyToMany || edge.Through {
+				logx.FromContext(ctx).Warn().Err(err).Str(FieldSchema, s.Snake).Str("edge", edge.Name).Msg("entityops: could not read existing links, re-adding them on the update")
+
+				continue
+			}
+
+			logx.FromContext(ctx).Warn().Err(err).Str(FieldSchema, s.Snake).Str("edge", edge.Name).Msg("entityops: could not read existing links, skipping the edge on the update")
+
+			remaining[key] = nil
+
+			continue
+		}
+
+		remaining[key] = lo.Without(ids, linked...)
+	}
+
+	if len(remaining) == 0 {
+		return payload
+	}
+
+	return jsonx.EditObject(payload, func(doc map[string]json.RawMessage) bool {
+		for key, ids := range remaining {
+			if len(ids) == 0 {
+				delete(doc, key)
+
+				continue
+			}
+
+			raw, err := json.Marshal(ids)
+			if err != nil {
+				continue
+			}
+
+			doc[key] = raw
+		}
+
+		return true
 	})
 }
 
@@ -1839,6 +1908,13 @@ func init() {
 			TargetType:  "Note",
 			CreateField: "note_ids",
 			AddField:    "add_note_ids",
+			LinkedIDs: func(ctx context.Context, client *generated.Client, sourceID string, targetIDs []string) ([]string, error) {
+				return client.Organization.Query().
+					Where(predicate.Organization(sql.FieldEQ("id", sourceID))).
+					QueryNotes().
+					Where(predicate.Note(sql.FieldIn("id", targetIDs...))).
+					IDs(ctx)
+			},
 		},
 	}
 	SchemaWorkflowObjectRef.Edges = []EdgeDescriptor{
@@ -1849,6 +1925,13 @@ func init() {
 			TargetType:  "Organization",
 			CreateField: "linked_organization_ids",
 			AddField:    "add_linked_organization_ids",
+			LinkedIDs: func(ctx context.Context, client *generated.Client, sourceID string, targetIDs []string) ([]string, error) {
+				return client.WorkflowObjectRef.Query().
+					Where(predicate.WorkflowObjectRef(sql.FieldEQ("id", sourceID))).
+					QueryLinkedOrganizations().
+					Where(predicate.Organization(sql.FieldIn("id", targetIDs...))).
+					IDs(ctx)
+			},
 		},
 		{
 			Name:             "organization",
