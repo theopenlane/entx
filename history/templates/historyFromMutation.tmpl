@@ -26,7 +26,7 @@
 		{{ if $history }}
 		{{ else }}
 			{{ $mutator := printf "%sMutation" $n.Name }}
-			{{- $include := or ( not $n.Annotations.History ) (eq $n.Annotations.History.Exclude false) }}
+			{{- $include := or ( not $n.Annotations.History ) (not $n.Annotations.History.exclude) }}
 			{{- if $include }}
 				{{- if $.Annotations.HistoryConfig.Skipper }}
 				func (m *{{ $mutator }}) skipper(ctx context.Context) bool {

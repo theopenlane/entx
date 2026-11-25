@@ -26,7 +26,7 @@ import (
 		{{ $history := hasSuffix $name "History" }}
 		{{ if $history }}
 		{{ else }}
-			{{- $include := or ( not $n.Annotations.History ) (eq $n.Annotations.History.Exclude false) }}
+			{{- $include := or ( not $n.Annotations.History ) (not $n.Annotations.History.exclude) }}
 			{{- if $include }}
 				func ({{ $n.Receiver }} *{{ $n.Name }}) History() *{{ $n.QueryName }}  {
 					historyClient := New{{ $n.Name }}HistoryClient({{ $n.Receiver }}.config)
