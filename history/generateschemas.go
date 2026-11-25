@@ -145,6 +145,16 @@ func getTemplateInfo(schema *load.Schema, config *Config, idType string) (*templ
 		historyPkg = pkg
 	}
 
+	annotations, err := jsonUnmarshalAnnotations(schema.Annotations[annotationName])
+	if err != nil {
+		return nil, err
+	}
+
+	allowedRelation := config.Auth.AllowedRelation
+	if annotations.WithRelation != "" {
+		allowedRelation = annotations.WithRelation
+	}
+
 	info := &templateInfo{
 		TableName:         fmt.Sprintf("%v%s", getSchemaTableName(schema), historyTableSuffix),
 		OriginalTableName: schema.Name,
@@ -154,7 +164,7 @@ func getTemplateInfo(schema *load.Schema, config *Config, idType string) (*templ
 		Query:             config.Query,
 		AuthzPolicy: authzPolicyInfo{
 			Enabled:         config.Auth.Enabled,
-			AllowedRelation: config.Auth.AllowedRelation,
+			AllowedRelation: allowedRelation,
 		},
 		AddPolicy: !config.Auth.FirstRun,
 	}

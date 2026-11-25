@@ -23,6 +23,9 @@ const (
 type Annotations struct {
 	Exclude   bool `json:"exclude,omitempty"`   // Will exclude history tracking for this schema
 	IsHistory bool `json:"isHistory,omitempty"` // DO NOT APPLY TO ANYTHING EXCEPT HISTORY SCHEMAS
+
+	// WithRelation allows history schemas to be overridden with a specific relation FGA check.
+	WithRelation string `json:"withRelation,omitempty"`
 }
 
 // Name of the annotation
