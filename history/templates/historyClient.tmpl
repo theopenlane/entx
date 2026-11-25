@@ -14,7 +14,7 @@ func (c *Client) WithHistory() {
 		{{- $history := hasSuffix $name "History" }}
 		{{- if $history }}
 		{{- else }}
-			{{- $include := or ( not $n.Annotations.History ) (eq $n.Annotations.History.Exclude false) }}
+			{{- $include := or ( not $n.Annotations.History ) (not $n.Annotations.History.exclude) }}
 			{{- if $include }}
 for _, hook := range history.Hooks[*{{ $name }}Mutation]() {
 	c.{{ $name }}.Use(hook)
