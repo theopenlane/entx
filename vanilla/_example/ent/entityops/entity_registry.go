@@ -674,26 +674,40 @@ func coerceTime(value any) (time.Time, error) {
 	}
 }
 
-// lookupPredicate builds one column's lookup predicate: equality, array membership, or their case-folded forms for CaseInsensitive fields
+// lookupPredicate builds one field's lookup predicate, matching its own column or any of its MatchAlternatives columns
 func lookupPredicate(schema *Schema, field string, values []string) func(*sql.Selector) {
+	return func(s *sql.Selector) {
+		s.Where(sql.Or(lo.Map(lookupColumns(schema, field), func(column string, _ int) *sql.Predicate {
+			return columnLookupPredicate(s, schema, column, values)
+		})...))
+	}
+}
+
+// lookupColumns returns the columns a lookup on field matches: the field itself, then its MatchAlternatives columns
+func lookupColumns(schema *Schema, field string) []string {
 	descriptor, _ := schema.FieldByName(field)
+
+	return append([]string{field}, descriptor.MatchAlternatives...)
+}
+
+// columnLookupPredicate matches one column: equality, array membership, or their case-folded forms for CaseInsensitive columns
+func columnLookupPredicate(s *sql.Selector, schema *Schema, column string, values []string) *sql.Predicate {
+	descriptor, _ := schema.FieldByName(column)
 	array := descriptor.Type == "[]string"
 
-	return func(s *sql.Selector) {
-		switch {
-		case descriptor.CaseInsensitive && array:
-			jsonArrayMatch(field, lo.Map(values, func(value string, _ int) string { return strings.ToLower(value) }))(s)
-		case descriptor.CaseInsensitive:
-			s.Where(sql.Or(lo.Map(values, func(value string, _ int) *sql.Predicate {
-				return sql.EqualFold(s.C(field), value)
-			})...))
-		case array:
-			s.Where(sql.Or(lo.Map(values, func(value string, _ int) *sql.Predicate {
-				return sqljson.ValueContains(s.C(field), value)
-			})...))
-		default:
-			s.Where(sql.In(s.C(field), lo.ToAnySlice(values)...))
-		}
+	switch {
+	case descriptor.CaseInsensitive && array:
+		return jsonArrayMatch(s, column, lo.Map(values, func(value string, _ int) string { return strings.ToLower(value) }))
+	case descriptor.CaseInsensitive:
+		return sql.Or(lo.Map(values, func(value string, _ int) *sql.Predicate {
+			return sql.EqualFold(s.C(column), value)
+		})...)
+	case array:
+		return sql.Or(lo.Map(values, func(value string, _ int) *sql.Predicate {
+			return sqljson.ValueContains(s.C(column), value)
+		})...)
+	default:
+		return sql.In(s.C(column), lo.ToAnySlice(values)...)
 	}
 }
 
@@ -899,8 +913,13 @@ func filterByAlternativeFields(s *Schema, rows []json.RawMessage, fields []strin
 	})
 }
 
-// lookupFieldMatches reports whether a row's field holds value: string arrays by membership, CaseInsensitive fields folding case
+// lookupFieldMatches reports whether a row's field, or any of its MatchAlternatives columns, holds value
 func lookupFieldMatches(s *Schema, row json.RawMessage, field, value string) bool {
+	return lo.SomeBy(lookupColumns(s, field), func(column string) bool { return columnFieldMatches(s, row, column, value) })
+}
+
+// columnFieldMatches reports whether a row's column holds value: string arrays by membership, CaseInsensitive columns folding case
+func columnFieldMatches(s *Schema, row json.RawMessage, field, value string) bool {
 	descriptor, _ := s.FieldByName(field)
 
 	equal := func(a, b string) bool { return a == b }
@@ -955,39 +974,79 @@ func lookupKeysFor(s *Schema, payload json.RawMessage) []lookupKey {
 				return lookupKey{}, false
 			}
 
-			tuples = lo.FlatMap(tuples, func(tuple LookupValues, _ int) []LookupValues {
-				return lo.Map(values, func(value string, _ int) LookupValues { return lo.Assign(tuple, LookupValues{name: value}) })
-			})
+			tuples = expandLookupTuples(tuples, name, values)
 		}
 
 		return lookupKey{alternative: i, values: tuples}, true
 	})
 }
 
+// expandLookupTuples crosses every tuple with each value of one lookup field
+func expandLookupTuples(tuples []LookupValues, name string, values []string) []LookupValues {
+	return lo.FlatMap(tuples, func(tuple LookupValues, _ int) []LookupValues {
+		return lo.Map(values, func(value string, _ int) LookupValues { return lo.Assign(tuple, LookupValues{name: value}) })
+	})
+}
+
 // lookupFieldValues returns the non-empty values a payload carries for a field, every element of a string array
 func lookupFieldValues(payload json.RawMessage, field FieldDescriptor) []string {
-	if field.Type == "[]string" {
-		decoded, _ := jsonx.DecodeObjectKey[[]string](payload, lookupInputKey(field))
+	return jsonStringValues(payload, lookupInputKey(field), field.Type == "[]string")
+}
+
+// jsonStringValues returns the non-empty values a JSON object holds under key, every element of a string array
+func jsonStringValues(doc json.RawMessage, key string, array bool) []string {
+	if array {
+		decoded, _ := jsonx.DecodeObjectKey[[]string](doc, key)
 
 		return NormalizeStrings(decoded)
 	}
 
-	if value := lookupValue(payload, lookupInputKey(field)); value != "" {
+	if value := lookupValue(doc, key); value != "" {
 		return []string{value}
 	}
 
 	return nil
 }
 
+// rowMatchValues returns every value a row holds for a lookup field across its column and MatchAlternatives columns, keyed as the field
+func rowMatchValues(s *Schema, row json.RawMessage, field string) []string {
+	descriptor, _ := s.FieldByName(field)
+
+	values := lo.FlatMap(lookupColumns(s, field), func(column string, _ int) []string {
+		columnDescriptor, _ := s.FieldByName(column)
+
+		return jsonStringValues(row, column, columnDescriptor.Type == "[]string")
+	})
+
+	return lo.Uniq(lo.Map(values, func(value string, _ int) string { return lookupCacheValue(descriptor, value) }))
+}
+
+// lookupCacheValue renders one value as a cache key part, lowering CaseInsensitive fields
+func lookupCacheValue(descriptor FieldDescriptor, value string) string {
+	if descriptor.CaseInsensitive {
+		return strings.ToLower(value)
+	}
+
+	return value
+}
+
+// LookupRowKeys renders every lookup cache key a row satisfies for an alternative, one per combination of the values its fields and MatchAlternatives columns hold
+func LookupRowKeys(s *Schema, alternative LookupAlternative, row json.RawMessage) []string {
+	tuples := []LookupValues{LookupValues{}}
+
+	for _, name := range alternative.Fields {
+		tuples = expandLookupTuples(tuples, name, rowMatchValues(s, row, name))
+	}
+
+	return lo.Map(tuples, func(tuple LookupValues, _ int) string { return EncodeLookupKey(s, alternative, tuple) })
+}
+
 // EncodeLookupKey renders a lookup alternative's key values into the lookup cache key, lowering CaseInsensitive fields
 func EncodeLookupKey(schema *Schema, alternative LookupAlternative, keys LookupValues) string {
 	parts := lo.Map(alternative.Fields, func(field string, _ int) string {
 		descriptor, _ := schema.FieldByName(field)
-		if descriptor.CaseInsensitive {
-			return strings.ToLower(keys[field])
-		}
 
-		return keys[field]
+		return lookupCacheValue(descriptor, keys[field])
 	})
 
 	return strings.Join(parts, "\x1f")
@@ -1697,12 +1756,10 @@ func catalogPayload(row json.RawMessage, fields []string) (json.RawMessage, erro
 }
 
 // jsonArrayMatch matches a JSON string-array column when any lowered element equals one of values, which arrive lowered; a column holding anything but an array matches nothing
-func jsonArrayMatch(column string, values []string) func(*sql.Selector) {
-	return func(s *sql.Selector) {
-		s.Where(sql.P(func(b *sql.Builder) {
-			b.WriteString("EXISTS (SELECT 1 FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(").Ident(s.C(column)).WriteString(") = 'array' THEN ").Ident(s.C(column)).WriteString(" ELSE '[]'::jsonb END) AS v WHERE LOWER(v) IN (").Args(lo.ToAnySlice(values)...).WriteString("))")
-		}))
-	}
+func jsonArrayMatch(s *sql.Selector, column string, values []string) *sql.Predicate {
+	return sql.P(func(b *sql.Builder) {
+		b.WriteString("EXISTS (SELECT 1 FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(").Ident(s.C(column)).WriteString(") = 'array' THEN ").Ident(s.C(column)).WriteString(" ELSE '[]'::jsonb END) AS v WHERE LOWER(v) IN (").Args(lo.ToAnySlice(values)...).WriteString("))")
+	})
 }
 
 // --- Per-schema registrations ---

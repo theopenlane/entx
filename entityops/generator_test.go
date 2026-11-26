@@ -978,8 +978,10 @@ func TestReconcileEmission(t *testing.T) {
 
 	require.Contains(t, registry, "func lookupPredicate(schema *Schema, field string, values []string) func(*sql.Selector)")
 	require.Contains(t, registry, "case descriptor.CaseInsensitive && array:")
-	require.Contains(t, registry, "return sql.EqualFold(s.C(field), value)")
-	require.Contains(t, registry, "jsonArrayMatch(field, lo.Map(values, func(value string, _ int) string { return strings.ToLower(value) }))(s)")
+	require.Contains(t, registry, "return sql.EqualFold(s.C(column), value)")
+	require.Contains(t, registry, "return jsonArrayMatch(s, column, lo.Map(values, func(value string, _ int) string { return strings.ToLower(value) }))")
+	require.Contains(t, registry, "return append([]string{field}, descriptor.MatchAlternatives...)")
+	require.Contains(t, registry, "func LookupRowKeys(s *Schema, alternative LookupAlternative, row json.RawMessage) []string")
 	require.NotContains(t, registry, "matchKeyIn")
 	require.Contains(t, registry, `WriteString(" ELSE '[]'::jsonb END) AS v WHERE LOWER(v) IN (").Args(lo.ToAnySlice(values)...).WriteString("))")`)
 	require.Contains(t, registry, "jsonb_array_elements_text(CASE WHEN jsonb_typeof(")
