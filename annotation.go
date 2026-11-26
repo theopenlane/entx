@@ -46,6 +46,9 @@ var WebhookPayloadFieldAnnotationName = "OPENLANE_WEBHOOK_PAYLOAD_FIELD"
 // CaseInsensitiveFieldAnnotationName is the annotation name for case-insensitive ingest change detection
 var CaseInsensitiveFieldAnnotationName = "OPENLANE_CASE_INSENSITIVE_FIELD"
 
+// MatchAlternativeFieldAnnotationName is the annotation name for extra columns a field's ingest lookup matches
+var MatchAlternativeFieldAnnotationName = "OPENLANE_MATCH_ALTERNATIVE_FIELD"
+
 // CSVReferenceAnnotationName is the annotation name for CSV reference field mappings
 var CSVReferenceAnnotationName = "OPENLANE_CSV_REFERENCE"
 
@@ -187,6 +190,12 @@ type WebhookPayloadFieldAnnotation struct {
 type CaseInsensitiveFieldAnnotation struct {
 	// CaseInsensitive compares the field case-insensitively in ingest change detection
 	CaseInsensitive bool
+}
+
+// MatchAlternativeFieldAnnotation lists other columns of the same schema a field's ingest lookup also matches against
+type MatchAlternativeFieldAnnotation struct {
+	// Fields are the snake_case column names matched alongside the annotated field
+	Fields []string
 }
 
 // CSVReferenceAnnotation is an annotation used to map CSV columns to ID fields via lookups
@@ -364,6 +373,11 @@ func (a WebhookPayloadFieldAnnotation) Name() string {
 // Name returns the name of the CaseInsensitiveFieldAnnotation
 func (a CaseInsensitiveFieldAnnotation) Name() string {
 	return CaseInsensitiveFieldAnnotationName
+}
+
+// Name returns the name of the MatchAlternativeFieldAnnotation
+func (a MatchAlternativeFieldAnnotation) Name() string {
+	return MatchAlternativeFieldAnnotationName
 }
 
 // Name returns the name of the CSVReferenceAnnotation
@@ -842,6 +856,13 @@ func FieldCaseInsensitive() *CaseInsensitiveFieldAnnotation {
 	}
 }
 
+// FieldMatchAlternative returns a new MatchAlternativeFieldAnnotation so ingest lookups on the field also match the given columns
+func FieldMatchAlternative(fields ...string) *MatchAlternativeFieldAnnotation {
+	return &MatchAlternativeFieldAnnotation{
+		Fields: fields,
+	}
+}
+
 // CSVRefBuilder provides a fluent interface for building CSVReferenceAnnotation.
 // All lookups are automatically scoped to the organization context from the request.
 // The target entity is inferred from the edge associated with the annotated ID field.
@@ -999,6 +1020,11 @@ func (a *WebhookPayloadFieldAnnotation) Decode(annotation any) error {
 
 // Decode unmarshalls the CaseInsensitiveFieldAnnotation
 func (a *CaseInsensitiveFieldAnnotation) Decode(annotation any) error {
+	return DecodeAnnotation(annotation, a)
+}
+
+// Decode unmarshalls the MatchAlternativeFieldAnnotation
+func (a *MatchAlternativeFieldAnnotation) Decode(annotation any) error {
 	return DecodeAnnotation(annotation, a)
 }
 

@@ -120,6 +120,8 @@ type FieldDescriptor struct {
 	Volatile bool `json:"volatile,omitempty"`
 	// CaseInsensitive compares the field case-insensitively in ingest change detection
 	CaseInsensitive bool `json:"caseInsensitive,omitempty"`
+	// MatchAlternatives lists the other columns a lookup on this field also matches against
+	MatchAlternatives []string `json:"matchAlternatives,omitempty"`
 	// TaskRules are suggested-task rules declared on this field via entx.FieldTaskRule
 	TaskRules []TaskRuleDescriptor `json:"taskRules,omitempty"`
 }

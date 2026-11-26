@@ -232,6 +232,8 @@ type EntityField struct {
 	UpdateInputSkipped bool
 	// CaseInsensitive compares the field case-insensitively in ingest change detection
 	CaseInsensitive bool
+	// MatchAlternatives lists the other columns a lookup on this field also matches against
+	MatchAlternatives []string
 }
 
 // EntityEdge represents one linkable edge on a schema, in either direction
@@ -530,6 +532,16 @@ func fieldCaseInsensitive(field *gen.Field) bool {
 	return ok && ann.CaseInsensitive
 }
 
+// fieldMatchAlternatives returns the other columns a lookup on the field also matches against
+func fieldMatchAlternatives(field *gen.Field) []string {
+	ann, ok := entx.GetAnnotation[*entx.MatchAlternativeFieldAnnotation](field)
+	if !ok {
+		return nil
+	}
+
+	return ann.Fields
+}
+
 // fieldSourceManaged reports whether the field carries entx.FieldSourceManaged
 func fieldSourceManaged(field *gen.Field) bool {
 	_, ok := field.Annotations[entx.FieldSourceManagedAnnotationName]
@@ -651,6 +663,7 @@ func buildEntityField(node *gen.Type, field *gen.Field, integrationFields map[st
 		CreateInputSkipped: createInputSkipped,
 		UpdateInputSkipped: updateInputSkipped,
 		CaseInsensitive:    fieldCaseInsensitive(field),
+		MatchAlternatives:  fieldMatchAlternatives(field),
 	}
 
 	if im, ok := integrationFields[field.Name]; ok {
