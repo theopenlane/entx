@@ -12,7 +12,7 @@ require (
 	github.com/go-openapi/inflect v1.0.1
 	github.com/rs/zerolog v1.35.1
 	github.com/samber/lo v1.53.0
-	github.com/stoewer/go-strcase v1.3.1
+	github.com/stoewer/go-strcase v1.4.0
 	github.com/stretchr/testify v1.12.1
 	github.com/theopenlane/iam v0.42.2
 	github.com/theopenlane/oscalot v0.1.0
