@@ -14,7 +14,7 @@ require (
 	github.com/samber/lo v1.53.0
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.12.1
-	github.com/theopenlane/iam v0.42.2
+	github.com/theopenlane/iam v0.42.3
 	github.com/theopenlane/oscalot v0.1.0
 	github.com/theopenlane/utils v0.7.4
 	github.com/vektah/gqlparser/v2 v2.5.64
@@ -40,7 +40,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/hashicorp/hcl/v2 v2.25.0 // indirect
-	github.com/labstack/echo/v5 v5.4.4 // indirect
+	github.com/labstack/echo/v5 v5.4.5 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/mattn/go-colorable v0.1.16 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
